@@ -1,0 +1,225 @@
+// Permisos por rol. Se aplican en la capa de servicios (can + ensure), nunca solo
+// escondiendo botones. Ver docs/PERMISOS.md.
+import type { LineId, Role, Store, Thread } from '../data/types';
+
+export interface Actor {
+  accountId: string;
+  userId: string;
+  role: Role;
+  /** Línea a la que pertenece la cuenta. Dirección no tiene línea. */
+  line: LineId | null;
+  /** Para la cuenta de un local: su tienda. */
+  storeId?: string;
+  name: string;
+  /** «Ver como…»: puede mirar pero no cambiar nada. */
+  readOnly: boolean;
+}
+
+export type Action =
+  | 'product.read'
+  | 'product.readCost'
+  | 'product.write'
+  | 'inventory.read'
+  | 'inventory.write'
+  | 'store.list'
+  | 'store.read'
+  | 'store.create'
+  | 'store.update'
+  | 'store.approve'
+  | 'contract.read'
+  | 'contract.issue'
+  | 'contract.sign'
+  | 'delivery.read'
+  | 'delivery.request'
+  | 'delivery.prepare'
+  | 'delivery.receive'
+  | 'visit.create'
+  | 'visit.read'
+  | 'sale.report'
+  | 'return.create'
+  | 'reorder.create'
+  | 'reorder.confirm'
+  | 'reorder.read'
+  | 'settlement.read'
+  | 'settlement.create'
+  | 'payment.record'
+  | 'commission.read'
+  | 'commission.pay'
+  | 'accounting.read'
+  | 'reports.read'
+  | 'map.read'
+  | 'message.read'
+  | 'message.send'
+  | 'announcement.create'
+  | 'announcement.read'
+  | 'user.read'
+  | 'user.manage'
+  | 'settings.read'
+  | 'settings.manage'
+  | 'audit.read'
+  | 'direccion.read';
+
+export type Resource =
+  | { type: 'store'; store: Pick<Store, 'id' | 'sellerId'> }
+  | { type: 'seller'; sellerId: string }
+  | { type: 'thread'; thread: Pick<Thread, 'participantIds'> };
+
+const WRITE: ReadonlySet<Action> = new Set<Action>([
+  'product.write',
+  'inventory.write',
+  'store.create',
+  'store.update',
+  'store.approve',
+  'contract.issue',
+  'contract.sign',
+  'delivery.request',
+  'delivery.prepare',
+  'delivery.receive',
+  'visit.create',
+  'sale.report',
+  'return.create',
+  'reorder.create',
+  'reorder.confirm',
+  'settlement.create',
+  'payment.record',
+  'commission.pay',
+  'message.send',
+  'announcement.create',
+  'user.manage',
+  'settings.manage',
+]);
+
+export function isWrite(action: Action): boolean {
+  return WRITE.has(action);
+}
+
+const ADMIN_ONLY: ReadonlySet<Action> = new Set<Action>([
+  'product.readCost',
+  'product.write',
+  'inventory.write',
+  'store.approve',
+  'delivery.prepare',
+  'settlement.create',
+  'payment.record',
+  'commission.pay',
+  'accounting.read',
+  'reports.read',
+  'announcement.create',
+  'user.read',
+  'user.manage',
+  'settings.read',
+  'settings.manage',
+  'audit.read',
+]);
+
+/** Lo que cada rol puede hacer sin mirar el recurso. */
+const ROLE_ACTIONS: Record<Exclude<Role, 'admin'>, ReadonlySet<Action>> = {
+  seller: new Set<Action>([
+    'product.read',
+    'inventory.read',
+    'store.list',
+    'store.read',
+    'store.create',
+    'store.update',
+    'contract.read',
+    'contract.issue',
+    'contract.sign',
+    'delivery.read',
+    'delivery.request',
+    'delivery.receive',
+    'visit.create',
+    'visit.read',
+    'sale.report',
+    'return.create',
+    'reorder.create',
+    'reorder.confirm',
+    'reorder.read',
+    'settlement.read',
+    'commission.read',
+    'map.read',
+    'message.read',
+    'message.send',
+    'announcement.read',
+  ]),
+  store: new Set<Action>([
+    'product.read',
+    'inventory.read',
+    'store.read',
+    'contract.read',
+    'delivery.read',
+    'delivery.receive',
+    'visit.read',
+    'sale.report',
+    'reorder.create',
+    'reorder.read',
+    'settlement.read',
+    'message.read',
+    'message.send',
+    'announcement.read',
+  ]),
+  direccion: new Set<Action>(['direccion.read']),
+};
+
+/**
+ * ¿Puede este actor hacer esta acción sobre este recurso?
+ * `line` es la línea de los datos: una cuenta de tabaco nunca toca café, ni al revés.
+ */
+export function can(actor: Actor, action: Action, line: LineId | null, res?: Resource): boolean {
+  if (actor.readOnly && isWrite(action)) return false;
+
+  if (actor.role === 'direccion') return action === 'direccion.read';
+  if (action === 'direccion.read') return false;
+
+  // Separación de líneas: la cuenta tiene que ser de la misma línea que los datos.
+  if (line !== null && actor.line !== line) return false;
+
+  if (actor.role === 'admin') return true;
+  if (ADMIN_ONLY.has(action)) return false;
+  if (!ROLE_ACTIONS[actor.role].has(action)) return false;
+
+  if (!res) return true;
+  switch (res.type) {
+    case 'store':
+      if (actor.role === 'seller') return res.store.sellerId === actor.userId;
+      return res.store.id === actor.storeId;
+    case 'seller':
+      return actor.role === 'seller' && res.sellerId === actor.userId;
+    case 'thread':
+      return res.thread.participantIds.includes(actor.userId);
+  }
+}
+
+export class ForbiddenError extends Error {
+  constructor(message = 'No tienes permiso para hacer esto.') {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
+
+const ACTION_TEXT: Partial<Record<Action, string>> = {
+  'product.readCost': 'ver costos',
+  'product.write': 'cambiar el catálogo',
+  'inventory.write': 'mover inventario del almacén',
+  'store.read': 'ver este local',
+  'store.approve': 'aprobar locales',
+  'delivery.prepare': 'preparar entregas',
+  'settlement.create': 'generar liquidaciones',
+  'payment.record': 'registrar pagos',
+  'commission.read': 'ver estas comisiones',
+  'commission.pay': 'pagar comisiones',
+  'accounting.read': 'ver la contabilidad',
+  'user.manage': 'dar de alta usuarios',
+  'settings.manage': 'cambiar los ajustes',
+  'audit.read': 'ver la auditoría',
+};
+
+export function ensure(actor: Actor, action: Action, line: LineId | null, res?: Resource): void {
+  if (can(actor, action, line, res)) return;
+  if (actor.readOnly && isWrite(action)) {
+    throw new ForbiddenError('Estás en modo «ver como…»: aquí solo se mira, no se cambia nada.');
+  }
+  if (line !== null && actor.line !== line && actor.role !== 'direccion') {
+    throw new ForbiddenError('Esta cuenta es de la otra línea: las cuentas de Tabaco y de Café no se cruzan.');
+  }
+  throw new ForbiddenError(`No tienes permiso para ${ACTION_TEXT[action] ?? 'hacer esto'}.`);
+}

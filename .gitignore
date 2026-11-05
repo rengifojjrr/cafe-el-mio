@@ -1,3 +1,9 @@
 .claude/
 .DS_Store
 __pycache__/
+app-gestion/node_modules
+app-gestion/.npm-cache
+app-gestion/public/marca
+app-gestion/test-results
+app-gestion/playwright-report
+app-gestion/.vite

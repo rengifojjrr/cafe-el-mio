@@ -1,0 +1,278 @@
+/* ==========================================================================
+   Tokens de color del ecosistema. Es el ÚNICO archivo con colores literales:
+   tests/unit/tokens.test.ts falla si aparece un color escrito a mano en otro lado.
+
+   - :root .................. portada y Dirección (neutra oscura)
+   - [data-line="tabaco"] ... carbón, tabaco, oro de anilla, verde humidor y dato
+   - [data-line="cafe"] ..... los colores de la marca Café El Mío
+   - [data-theme="light"] ... modo claro opcional de cada una
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* Portada: neutra, para que las dos líneas sean las protagonistas */
+  --bg: #0b0d10;
+  --bg-glow: rgba(217, 164, 65, 0.07);
+  --bg-glow-2: rgba(247, 177, 27, 0.05);
+  --grid: rgba(255, 255, 255, 0.035);
+  --surface: #14171b;
+  --surface-2: #1c2026;
+  --surface-3: #252a31;
+  --ink: #f1ede6;
+  --muted: #a7a39c;
+  --faint: #6f6c67;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.2);
+  --glass: rgba(22, 25, 30, 0.62);
+  --glass-hi: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --overlay: rgba(5, 6, 8, 0.66);
+
+  --accent: #e9e3d8;
+  --accent-hi: #ffffff;
+  --accent-ink: #0b0d10;
+  --accent-soft: rgba(233, 227, 216, 0.12);
+  --brand: #8f8a82;
+  --data: #e9e3d8;
+  --data-glow: rgba(233, 227, 216, 0.35);
+  --focus: #f7c35f;
+
+  --ok: #6fcf97;
+  --ok-soft: rgba(111, 207, 151, 0.14);
+  --warn: #f2c14e;
+  --warn-soft: rgba(242, 193, 78, 0.14);
+  --danger: #f07167;
+  --danger-soft: rgba(240, 113, 103, 0.14);
+  --info: #7cc4e8;
+  --info-soft: rgba(124, 196, 232, 0.14);
+
+  --chart-1: #d9a441;
+  --chart-2: #f7b11b;
+  --chart-3: #5eead4;
+  --chart-4: #e8cfa4;
+  --chart-5: #8e949c;
+  --chart-grid: rgba(255, 255, 255, 0.08);
+
+  /* Colores fijos de cada línea, para usarlos fuera de su tema (portada, Dirección) */
+  --tabaco-carbon: #0e1013;
+  --tabaco-superficie: #171a1f;
+  --tabaco-tabaco: #7b4b2a;
+  --tabaco-oro: #d9a441;
+  --tabaco-humidor: #1f4d3a;
+  --tabaco-dato: #5eead4;
+  --cafe-tueste: #1f130c;
+  --cafe-tueste-2: #2a1a11;
+  --cafe-tueste-3: #3a2619;
+  --cafe-ambar: #f7b11b;
+  --cafe-ambar-claro: #ffc94d;
+  --cafe-ambar-hondo: #da9208;
+  --cafe-espumita: #e8cfa4;
+  --cafe-leche: #fff8ec;
+
+  /* Capas del tabaco (silueta a escala) */
+  --capa-claro: #d8b98a;
+  --capa-natural: #c1945e;
+  --capa-colorado: #9a5b33;
+  --capa-rosado: #a8553b;
+  --capa-maduro: #4a2c1a;
+  --capa-oscuro: #2e1b12;
+  --capa-candela: #6f7f3c;
+  --capa-veta: rgba(0, 0, 0, 0.18);
+  --capa-brillo: rgba(255, 255, 255, 0.16);
+  --ceniza: #b9b4ad;
+  --anilla: #d9a441;
+  --anilla-hondo: #8f6417;
+  --anilla-tinta: #1a1208;
+
+  /* Estados de un local en el mapa y en las listas */
+  --estado-prospecto: #7cc4e8;
+  --estado-contrato: #f2c14e;
+  --estado-firmado: #c7a6ff;
+  --estado-activo: #6fcf97;
+  --estado-pausado: #8e949c;
+  --estado-cerrado: #f07167;
+
+  /* Tinta de la firma (canvas) y fondo del papel del contrato */
+  --firma-tinta: #10141a;
+  --firma-papel: #fbf9f5;
+  --papel: #fbf9f5;
+  --papel-tinta: #16120e;
+  --papel-suave: #5c554c;
+  --papel-linea: #d9d2c6;
+  --qr-oscuro: #0b0d10;
+  --qr-claro: #ffffff;
+}
+
+/* ---------- Tabaco ---------- */
+[data-line='tabaco'] {
+  --bg: #0e1013;
+  --bg-glow: rgba(217, 164, 65, 0.09);
+  --bg-glow-2: rgba(94, 234, 212, 0.05);
+  --surface: #171a1f;
+  --surface-2: #1e2228;
+  --surface-3: #272c33;
+  --ink: #efe9e1;
+  --muted: #a9a49c;
+  --faint: #6f6b66;
+  --glass: rgba(23, 26, 31, 0.64);
+  --accent: #d9a441;
+  --accent-hi: #e8bb63;
+  --accent-ink: #1a1208;
+  --accent-soft: rgba(217, 164, 65, 0.14);
+  --brand: #7b4b2a;
+  --humidor: #1f4d3a;
+  --humidor-ink: #b9e6cf;
+  --data: #5eead4;
+  --data-glow: rgba(94, 234, 212, 0.4);
+  --focus: #e8bb63;
+  --chart-1: #d9a441;
+  --chart-2: #5eead4;
+  --chart-3: #b07a4f;
+  --chart-4: #3e8e6a;
+  --chart-5: #8e949c;
+}
+
+/* ---------- Café (marca El Mío) ---------- */
+[data-line='cafe'] {
+  --bg: #1f130c;
+  --bg-glow: rgba(247, 177, 27, 0.1);
+  --bg-glow-2: rgba(232, 207, 164, 0.05);
+  --grid: rgba(255, 240, 220, 0.04);
+  --surface: #2a1a11;
+  --surface-2: #3a2619;
+  --surface-3: #4a3222;
+  --ink: #fff8ec;
+  --muted: #d6c3a6;
+  --faint: #8f7a63;
+  --line: rgba(255, 240, 220, 0.14);
+  --line-strong: rgba(255, 240, 220, 0.24);
+  --glass: rgba(42, 26, 17, 0.66);
+  --glass-hi: rgba(255, 248, 236, 0.05);
+  --glass-border: rgba(255, 240, 220, 0.12);
+  --accent: #f7b11b;
+  --accent-hi: #ffc94d;
+  --accent-ink: #22140d;
+  --accent-soft: rgba(247, 177, 27, 0.14);
+  --brand: #da9208;
+  --humidor: #3a2619;
+  --humidor-ink: #e8cfa4;
+  --data: #ffc94d;
+  --data-glow: rgba(255, 201, 77, 0.38);
+  --focus: #ffc94d;
+  --chart-1: #f7b11b;
+  --chart-2: #e8cfa4;
+  --chart-3: #da9208;
+  --chart-4: #b98a5e;
+  --chart-5: #8f7a63;
+  --chart-grid: rgba(255, 240, 220, 0.09);
+}
+
+/* ---------- Modo claro ---------- */
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #eef0f2;
+  --bg-glow: rgba(217, 164, 65, 0.1);
+  --bg-glow-2: rgba(247, 177, 27, 0.06);
+  --grid: rgba(14, 16, 19, 0.045);
+  --surface: #ffffff;
+  --surface-2: #f4f5f7;
+  --surface-3: #e7e9ec;
+  --ink: #15171b;
+  --muted: #565b63;
+  --faint: #8a8f96;
+  --line: rgba(14, 16, 19, 0.12);
+  --line-strong: rgba(14, 16, 19, 0.24);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-hi: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(14, 16, 19, 0.1);
+  --shadow: rgba(14, 16, 19, 0.12);
+  --overlay: rgba(14, 16, 19, 0.4);
+  --accent: #15171b;
+  --accent-hi: #2a2e35;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(14, 16, 19, 0.08);
+  --data: #15171b;
+  --data-glow: rgba(14, 16, 19, 0);
+  --focus: #9a6f1e;
+  --ok: #1e7a46;
+  --ok-soft: rgba(30, 122, 70, 0.12);
+  --warn: #8a6100;
+  --warn-soft: rgba(138, 97, 0, 0.12);
+  --danger: #b42318;
+  --danger-soft: rgba(180, 35, 24, 0.1);
+  --info: #1f6e95;
+  --info-soft: rgba(31, 110, 149, 0.1);
+  --chart-grid: rgba(14, 16, 19, 0.08);
+  --estado-prospecto: #1f6e95;
+  --estado-contrato: #8a6100;
+  --estado-firmado: #6b3fc4;
+  --estado-activo: #1e7a46;
+  --estado-pausado: #5f656d;
+  --estado-cerrado: #b42318;
+}
+
+[data-theme='light'][data-line='tabaco'],
+[data-theme='light'] [data-line='tabaco'] {
+  --bg: #eef0f2;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --surface-3: #e5e7ea;
+  --ink: #0e1013;
+  --muted: #545a62;
+  --faint: #868b92;
+  --line: rgba(14, 16, 19, 0.12);
+  --line-strong: rgba(14, 16, 19, 0.24);
+  --glass: rgba(255, 255, 255, 0.74);
+  --glass-hi: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(14, 16, 19, 0.1);
+  --accent: #7b4b2a;
+  --accent-hi: #8f5a35;
+  --accent-ink: #fff7ee;
+  --accent-soft: rgba(123, 75, 42, 0.1);
+  --brand: #7b4b2a;
+  --humidor: #1f4d3a;
+  --humidor-ink: #e8f5ee;
+  --data: #0f766e;
+  --data-glow: rgba(15, 118, 110, 0);
+  --focus: #9a6f1e;
+  --chart-1: #9a6f1e;
+  --chart-2: #0f766e;
+  --chart-3: #7b4b2a;
+  --chart-4: #1f4d3a;
+  --chart-5: #6b7280;
+}
+
+[data-theme='light'][data-line='cafe'],
+[data-theme='light'] [data-line='cafe'] {
+  --bg: #fff8ec;
+  --grid: rgba(34, 20, 13, 0.05);
+  --surface: #ffffff;
+  --surface-2: #f6ead6;
+  --surface-3: #ecdcc2;
+  --ink: #22140d;
+  --muted: #5d4636;
+  --faint: #8f7a63;
+  --line: rgba(34, 20, 13, 0.14);
+  --line-strong: rgba(34, 20, 13, 0.26);
+  --glass: rgba(255, 255, 255, 0.74);
+  --glass-hi: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(34, 20, 13, 0.12);
+  --accent: #3a2619;
+  --accent-hi: #4a3222;
+  --accent-ink: #fff8ec;
+  --accent-soft: rgba(58, 38, 25, 0.1);
+  --brand: #da9208;
+  --humidor: #e8cfa4;
+  --humidor-ink: #22140d;
+  --data: #8a5a06;
+  --data-glow: rgba(138, 90, 6, 0);
+  --focus: #8a5a06;
+  --chart-1: #da9208;
+  --chart-2: #3a2619;
+  --chart-3: #b98a5e;
+  --chart-4: #8a5a06;
+  --chart-5: #8f7a63;
+  --chart-grid: rgba(34, 20, 13, 0.08);
+}
