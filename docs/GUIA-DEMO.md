@@ -32,6 +32,10 @@
 | Aprobar un local firmado | Administración | Locales → Estanco Gables (tabaco) o Market Playa Norte (café) |
 | Visita con conteo | Vendedor | Un local activo → «Registrar visita» |
 | Pedido del local por confirmar | Vendedor | Inicio («Pendientes») o Pedidos |
+| Pedir un producto en dos toques | Local | Catálogo → «Pedir» en la tarjeta, o la ficha → «Pedir este producto» |
+| Lo que debe el local (incluye lo vendido sin liquidar) | Local | Inicio o Cuentas |
+| Recibir una entrega (firma el dueño o encargado) | Local, o el vendedor pasándole el teléfono | Inicio («Para recibir») o Entregas |
+| Horario de una tienda con días y horas | Vendedor | Registrar tienda o editar un local |
 | Entrega por preparar | Administración | Entregas → «Por preparar» |
 | Antigüedad de lo que se debe y pagos | Administración | Cobros |
 | Comisiones por producto, local y mes | Vendedor | Comisiones |
