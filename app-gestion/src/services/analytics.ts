@@ -365,7 +365,7 @@ export interface MapStore {
 export interface MapData {
   warehouse: { name: string; lat: number; lng: number; units: number };
   stores: MapStore[];
-  sellers: { id: string; name: string; lat: number; lng: number; at: string; storeName: string }[];
+  sellers: { id: string; name: string; lat: number; lng: number; at: string; storeName: string; storeId: string }[];
   maxSales: number;
 }
 
@@ -419,6 +419,7 @@ export async function mapData(ctx: Ctx): Promise<MapData> {
       lng: v.geo?.lng ?? store.lng,
       at: v.at,
       storeName: store.name,
+      storeId: store.id,
     });
   }
   return {
