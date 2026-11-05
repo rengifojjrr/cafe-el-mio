@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const raiz = dirname(dirname(fileURLToPath(import.meta.url)));
-const fuente = await readFile(join(raiz, 'public/marca/fonts/bodoni-moda.woff2'));
+const fuente = await readFile(join(raiz, '..', 'assets', 'fonts', 'bodoni-moda.woff2'));
 const font = `data:font/woff2;base64,${fuente.toString('base64')}`;
 
 function html(size, maskable) {

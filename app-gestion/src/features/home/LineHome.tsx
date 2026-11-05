@@ -27,8 +27,8 @@ import { contractsForStore } from '../../services/contracts';
 import { confirmReorder, listDeliveries, listReorders } from '../../services/consignment';
 import { inventoryAlerts } from '../../services/inventory';
 import { openThread } from '../../services/messages';
-import { listCommissions, listSettlements, summarizeCommissions } from '../../services/money';
-import { listStores, storeConsignment } from '../../services/stores';
+import { listCommissions, summarizeCommissions } from '../../services/money';
+import { listStores, storeConsignment, storeDebt } from '../../services/stores';
 import { MapView, type MapMarker } from '../../ui/map';
 import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Section, Sheet, Stat } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
@@ -359,7 +359,7 @@ function StoreHome() {
   const storeId = actor.storeId ?? '';
   const stores = useAsync(() => listStores(ctx), [ctx]);
   const lines = useAsync(() => storeConsignment(ctx, storeId), [ctx, storeId]);
-  const settlements = useAsync(() => listSettlements(ctx, { storeId }), [ctx, storeId]);
+  const debt = useAsync(() => storeDebt(ctx, storeId), [ctx, storeId]);
   const orders = useAsync(() => listReorders(ctx, { storeId, open: true }), [ctx, storeId]);
   const ready = useAsync(() => listDeliveries(ctx, { storeId, status: 'preparada' }), [ctx, storeId]);
   const contracts = useAsync(() => contractsForStore(ctx, storeId), [ctx, storeId]);
@@ -369,10 +369,17 @@ function StoreHome() {
   const s = view.store;
   const units = (lines.data ?? []).reduce((a, l) => a + l.qty, 0);
   const potential = (lines.data ?? []).reduce((a, l) => a + l.qty * l.storeEarning, 0);
-  const open = (settlements.data ?? []).filter((x) => x.balance > 0);
-  const owed = open.reduce((a, x) => a + x.balance, 0);
-  const nextDue = open.map((x) => x.dueOn).sort()[0];
-  const overdue = open.some((x) => x.overdue);
+  // Lo que debe es todo lo vendido: lo liquidado sin pagar y lo que todavía no se liquidó.
+  const owed = debt.data?.total ?? 0;
+  const nextDue = debt.data?.nextDueOn;
+  const overdue = (debt.data?.overdue ?? 0) > 0;
+  const owedHint = overdue
+    ? `${fmtMoney(debt.data!.overdue)} vencidos`
+    : nextDue
+      ? `Vence el ${fmtDate(nextDue)}`
+      : debt.data?.nextSettlementOn
+        ? `Se liquida el ${fmtDate(debt.data.nextSettlementOn)}`
+        : 'Al día';
   const contract = contracts.data?.find((c) => c.status === 'firmado');
 
   const writeSeller = () =>
@@ -399,7 +406,7 @@ function StoreHome() {
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="En consignación" value={units} hint="Es de la empresa hasta que lo vendas" icon={Package} />
         <Stat label="Ganarías si lo vendes todo" value={potential} format="money" hint="Al PVP sugerido" icon={Wallet} />
-        <Stat label="Lo que debes" value={owed} format="money" tone={overdue ? 'danger' : owed > 0 ? 'warn' : 'ok'} hint={nextDue ? `${overdue ? 'Vencido. ' : ''}Vence el ${fmtDate(nextDue)}` : 'Al día'} to={p('cuentas')} />
+        <Stat label="Lo que debes" value={owed} format="money" tone={overdue ? 'danger' : owed > 0 ? 'warn' : 'ok'} hint={owedHint} to={p('cuentas')} />
         <Stat label="Pedidos en curso" value={orders.data?.length ?? 0} icon={ClipboardList} to={p('pedidos')} />
       </div>
 

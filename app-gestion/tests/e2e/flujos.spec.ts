@@ -26,6 +26,7 @@ test('registrar tienda → contrato y firma → colocar producto (tabaco)', asyn
   await expect(page.getByText(/Punto elegido:/)).toBeVisible();
   await page.getByLabel('Nombre del encargado').fill('Encargado de Prueba');
   await page.getByLabel('Teléfono').fill('(305) 555-0177');
+  await expect(page.getByText(/Queda así: Lun–Sáb 9 a\. m\.–8 p\. m\./)).toBeVisible();
   await page.getByLabel('Número del permiso').fill('TP-E2E-1234');
   await page.getByRole('button', { name: 'Registrar tienda' }).last().click();
   await toast(page, /prospecto/);
@@ -58,7 +59,9 @@ test('registrar tienda → contrato y firma → colocar producto (tabaco)', asyn
   await enterAs(page, 'tabaco:seller');
   await go(page, '/tabaco/entregas');
   await page.getByRole('article').filter({ hasText: name }).getByRole('button', { name: 'Recibir con firma' }).click();
+  await expect(page.getByRole('dialog').getByLabel('Nombre del dueño o encargado del local')).toHaveValue('Encargado de Prueba');
   await sign(page, page.getByRole('dialog').locator('canvas'));
+  await page.getByText('Recibí todo lo de esta lista, en buen estado').click();
   await page.getByRole('button', { name: 'Firmar y recibir' }).click();
   await toast(page, /Entregado/);
 
@@ -92,6 +95,7 @@ test('el local pide → el vendedor confirma → administración entrega (café)
   await go(page, '/cafe');
   await page.getByRole('button', { name: 'Recibir con firma' }).first().click();
   await sign(page, page.getByRole('dialog').locator('canvas'));
+  await page.getByText('Recibí todo lo de esta lista, en buen estado').click();
   await page.getByRole('button', { name: 'Firmar y recibir' }).click();
   await toast(page, /Entregado/);
   await go(page, '/cafe/pedidos');
@@ -169,4 +173,31 @@ test('restablecer la demo vuelve a cargar los datos de ejemplo', async ({ page }
   await page.getByRole('button', { name: 'Sí, restablecer' }).click();
   await toast(page, /datos de ejemplo cargados/);
   await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('12')).toBeVisible();
+});
+
+test('el local pide desde la ficha del producto: cuánto y listo', async ({ page }) => {
+  await enterAs(page, 'tabaco:store');
+  await go(page, '/tabaco/catalogo/t-prd_0001');
+  await page.getByRole('button', { name: 'Pedir este producto' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Pedir Biscayne Robusto' });
+  await expect(dialog.getByText('¿Cuánto quieres?')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Agregar una caja de Biscayne Robusto' }).click();
+  await dialog.getByRole('button', { name: 'Enviar pedido' }).click();
+  await toast(page, /Pedido P-\d{4} enviado: 40 tabacos/);
+  await expect(page).toHaveURL(/catalogo\/t-prd_0001/);
+});
+
+test('lo que debe el local incluye lo vendido sin liquidar', async ({ page }) => {
+  const money = (t: string) => Number(t.replace(/[^0-9.]/g, ''));
+  await enterAs(page, 'tabaco:store');
+  await go(page, '/tabaco/cuentas');
+  const total = page.getByText(/debe$/).locator('xpath=following-sibling::p[1]');
+  const before = money(await total.innerText());
+  await go(page, '/tabaco');
+  await page.getByRole('button', { name: 'Reportar ventas' }).first().click();
+  await page.getByRole('dialog').getByRole('button', { name: /^Agregar una unidad de Biscayne Robusto$/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /Reportar ventas \(/ }).click();
+  await toast(page, /Ventas reportadas/);
+  await go(page, '/tabaco/cuentas');
+  await expect.poll(async () => money(await total.innerText())).toBeCloseTo(before + 5.5, 2);
 });

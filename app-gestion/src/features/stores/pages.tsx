@@ -42,6 +42,7 @@ import {
   setFacadePhoto,
   setStoreStatus,
   storeConsignment,
+  storeDebt,
   updateStore,
   type StoreView,
 } from '../../services/stores';
@@ -64,6 +65,7 @@ import {
   TextArea,
   TextInput,
 } from '../../ui/kit';
+import { HoursPicker } from '../../ui/hours';
 import { PhotoPicker, useStoredPhoto } from '../../ui/media';
 import { errorText, useAction, useToast } from '../../ui/toast';
 import { PermitPill, StoreStatusPill } from '../common';
@@ -155,7 +157,10 @@ function StoreRow({ v }: { v: StoreView }) {
   const { p, actor, ctx } = useLine();
   const s = v.store;
   return (
-    <Link to={p(`locales/${s.id}`)} className="glass grid gap-2 p-4 transition-colors hover:border-line-strong md:grid-cols-[1.5fr_1fr_1fr_auto] md:items-center">
+    <Link
+      to={p(`locales/${s.id}`)}
+      className="glass grid gap-2 p-4 transition-colors hover:border-line-strong md:grid-cols-[minmax(0,1fr)_230px_250px_140px] md:items-center md:gap-4"
+    >
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-2 font-bold text-ink">
           {s.name}
@@ -166,22 +171,24 @@ function StoreRow({ v }: { v: StoreView }) {
           {actor.role === 'admin' ? ` · ${v.sellerName}` : ''}
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 md:justify-center">
         <StoreStatusPill status={s.status} />
         <PermitPill state={v.permit && v.permit !== 'vigente' ? v.permit : null} />
       </div>
-      <div className="grid grid-cols-2 gap-x-3 text-sm md:block">
-        <span className="text-muted">En consignación </span>
-        <span className="font-semibold tabular">{v.consignmentUnits} u. · {fmtMoney(v.consignmentValue)}</span>
-        {v.balanceDue > 0 ? (
-          <>
-            <span className="text-muted md:block">Debe </span>
-            <span className={`font-semibold tabular ${v.overdue ? 'text-danger' : 'text-ink'}`}>
-              {fmtMoney(v.balanceDue)}
-              {v.overdue ? ' · vencido' : ''}
-            </span>
-          </>
-        ) : null}
+      <div className="grid gap-0.5 text-sm md:text-right">
+        <p>
+          <span className="text-muted">En consignación </span>
+          <span className="font-semibold tabular">
+            {v.consignmentUnits} u. · {fmtMoney(v.consignmentValue)}
+          </span>
+        </p>
+        <p>
+          <span className="text-muted">Debe </span>
+          <span className={`font-semibold tabular ${v.overdue ? 'text-danger' : v.owedTotal > 0 ? 'text-ink' : 'text-muted'}`}>
+            {fmtMoney(v.owedTotal)}
+            {v.overdue ? ' · vencido' : ''}
+          </span>
+        </p>
       </div>
       <p className="text-sm text-muted md:text-right">{v.lastVisitAt ? `Visita ${fmtAgo(v.lastVisitAt, ctx.now())}` : 'Sin visitas'}</p>
     </Link>
@@ -364,7 +371,7 @@ function StoreForm({ initial }: { initial?: Store }) {
             <TextInput label="Nombre del encargado" value={f.managerName} onChange={(e) => set('managerName', e.target.value)} autoComplete="name" required />
             <TextInput label="Teléfono" type="tel" inputMode="tel" value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="(305) 555-0123" required />
             <TextInput label="Correo" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} placeholder="opcional" />
-            <TextInput label="Horario" value={f.hours} onChange={(e) => set('hours', e.target.value)} placeholder="Lun–Sáb 9:00–20:00" />
+            <HoursPicker value={f.hours} onChange={(text) => set('hours', text)} />
           </Card>
           {config.requiresTobaccoPermit ? (
             <Card className="grid gap-4 p-4 sm:p-5">
@@ -418,6 +425,7 @@ export function StoreDetailPage() {
   const visits = useAsync(() => storeVisits(ctx, id), [ctx, id]);
   const settlements = useAsync(() => listSettlements(ctx, { storeId: id }), [ctx, id]);
   const reorders = useAsync(() => listReorders(ctx, { storeId: id, open: true }), [ctx, id]);
+  const debt = useAsync(() => storeDebt(ctx, id), [ctx, id]);
   const photo = useStoredPhoto(store.data?.facadePhotoId, () => getStorePhoto(ctx, id));
   const [tab, setTab] = useState<DetailTab>('consignacion');
   const [requestOpen, setRequestOpen] = useState(false);
@@ -437,8 +445,8 @@ export function StoreDetailPage() {
   const permit = config.requiresTobaccoPermit ? permitState(s, now) : null;
   const check = consignmentCheck(line, s, now);
   const units = (consignment.data ?? []).reduce((a, c) => a + c.qty, 0);
-  const owed = (settlements.data ?? []).reduce((a, x) => a + x.balance, 0);
-  const overdue = (settlements.data ?? []).some((x) => x.overdue);
+  const owed = debt.data?.total ?? 0;
+  const overdue = (debt.data?.overdue ?? 0) > 0;
 
   const prepareContract = () =>
     void run(async () => {
@@ -571,6 +579,7 @@ export function StoreDetailPage() {
             <div className="glass p-3">
               <p className="text-sm text-muted">Debe</p>
               <p className={`text-xl font-bold tabular ${overdue ? 'text-danger' : 'text-ink'}`}>{fmtMoney(owed)}</p>
+              {debt.data && debt.data.unsettled > 0 ? <p className="text-xs text-muted tabular">{fmtMoney(debt.data.unsettled)} sin liquidar</p> : null}
             </div>
             <div className="glass p-3">
               <p className="text-sm text-muted">Última visita</p>

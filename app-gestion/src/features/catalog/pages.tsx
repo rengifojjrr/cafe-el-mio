@@ -33,6 +33,7 @@ import {
 import { PhotoPicker, ProductThumb, useStoredPhoto } from '../../ui/media';
 import { useAction } from '../../ui/toast';
 import { attrText } from '../common';
+import { QuickOrderSheet } from '../consignment/components';
 
 function arrivalText(n: NextArrival | undefined, now: Date): string {
   if (!n) return 'Sin llegada programada';
@@ -47,6 +48,7 @@ export function CatalogPage() {
   const [q, setQ] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [onlyLow, setOnlyLow] = useState(false);
+  const [ordering, setOrdering] = useState<ProductView | null>(null);
   const { data, error, loading } = useAsync(() => listProducts(ctx, { includeInactive: showInactive }), [ctx, showInactive]);
   const now = ctx.now();
 
@@ -107,25 +109,27 @@ export function CatalogPage() {
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {list.map((v) => (
           <li key={v.product.id}>
-            <ProductCard view={v} now={now} />
+            <ProductCard view={v} now={now} onOrder={() => setOrdering(v)} />
           </li>
         ))}
       </ul>
+      <QuickOrderSheet view={ordering} onClose={() => setOrdering(null)} />
     </>
   );
 }
 
-function ProductCard({ view, now }: { view: ProductView; now: Date }) {
+function ProductCard({ view, now, onOrder }: { view: ProductView; now: Date; onOrder: () => void }) {
   const { ctx, actor, config, p, line } = useLine();
   const pr = view.product;
   const s = view.stock;
   const summary = config.productFields.filter((f) => config.summaryFields.includes(f.key));
   return (
-    <Link to={p(`catalogo/${pr.id}`)} className="glass flex h-full flex-col overflow-hidden transition-colors hover:border-line-strong">
-      <div className={line === 'tabaco' ? 'h-20 px-3 pt-3' : 'h-40 bg-surface-2 p-3'}>
+    <div className="glass relative flex h-full flex-col overflow-hidden transition-colors hover:border-line-strong">
+      <Link to={p(`catalogo/${pr.id}`)} className="absolute inset-0 z-0 rounded-[20px]" aria-label={`Ver ${pr.name}`} />
+      <div className={line === 'tabaco' ? 'pointer-events-none h-20 px-3 pt-3' : 'pointer-events-none h-40 bg-surface-2 p-3'}>
         <ProductThumb product={pr} loadPhoto={(id) => getPhoto(ctx, id)} />
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-4 pt-3">
+      <div className="pointer-events-none flex flex-1 flex-col gap-2 p-4 pt-3 [&_button]:pointer-events-auto">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 className="font-bold leading-tight text-ink">{pr.name}</h2>
@@ -171,7 +175,7 @@ function ProductCard({ view, now }: { view: ProductView; now: Date }) {
           </p>
           {actor.role !== 'store' ? (
             <p className="flex justify-between gap-2">
-              <span className="text-muted">En consignación</span>
+              <span className="text-muted">{actor.role === 'seller' ? 'En tus locales' : 'En consignación'}</span>
               <span className="tabular">
                 {s.consignment} <span className="text-faint">en {s.storesHolding} locales</span>
               </span>
@@ -182,8 +186,13 @@ function ProductCard({ view, now }: { view: ProductView; now: Date }) {
             <span className="truncate">{arrivalText(s.nextArrival, now)}</span>
           </p>
         </div>
+        {actor.role === 'store' && !actor.readOnly ? (
+          <Button variant="primary" icon={ShoppingBag} className="relative z-10 mt-2 w-full" onClick={onOrder}>
+            Pedir
+          </Button>
+        ) : null}
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -196,6 +205,7 @@ export function ProductDetailPage() {
   const { run, busy } = useAction();
   const { data: v, error, loading } = useAsync(() => getProduct(ctx, id), [ctx, id]);
   const lots = useAsync(() => (actor.role === 'admin' ? listLots(ctx) : Promise.resolve([])), [ctx, actor.role]);
+  const [ordering, setOrdering] = useState(false);
   if (loading && !v) return <Loading rows={4} />;
   if (error) return <ErrorBox error={error} />;
   if (!v) return null;
@@ -216,9 +226,9 @@ export function ProductDetailPage() {
         actions={
           <>
             {actor.role === 'store' && !actor.readOnly ? (
-              <LinkButton to={`${p('pedir')}?producto=${pr.id}`} variant="primary" icon={ShoppingBag}>
+              <Button variant="primary" icon={ShoppingBag} onClick={() => setOrdering(true)}>
                 Pedir este producto
-              </LinkButton>
+              </Button>
             ) : null}
             {canEdit ? (
               <>
@@ -257,7 +267,11 @@ export function ProductDetailPage() {
         <div className="grid content-start gap-3">
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Disponible en almacén" value={s.available} tone={s.lowStock ? 'warn' : 'data'} hint={s.reserved ? `${s.reserved} apartados para entregas` : `Aviso en ${pr.lowStockThreshold}`} />
-            <Stat label="En consignación" value={s.consignment} hint={`En ${s.storesHolding} locales`} />
+            <Stat
+              label={actor.role === 'store' ? 'Tienes en tu local' : actor.role === 'seller' ? 'En tus locales' : 'En consignación'}
+              value={s.consignment}
+              hint={actor.role === 'store' ? 'En consignación' : `En ${s.storesHolding} locales`}
+            />
           </div>
           <Card className="p-4">
             <p className="flex items-center gap-2 font-semibold text-ink">
@@ -382,6 +396,7 @@ export function ProductDetailPage() {
           </Button>
         </div>
       ) : null}
+      {ordering ? <QuickOrderSheet view={v} onClose={() => setOrdering(false)} /> : null}
     </>
   );
 }

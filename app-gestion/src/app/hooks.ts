@@ -74,7 +74,8 @@ export function useCountUp(value: number, duration = 700): number {
     const origin = from.current;
     let raf = 0;
     const step = (t: number) => {
-      const p = Math.min(1, (t - start) / duration);
+      // El primer cuadro puede traer una marca de tiempo anterior a «start»: se limita a [0, 1].
+      const p = Math.max(0, Math.min(1, (t - start) / duration));
       const eased = 1 - Math.pow(1 - p, 3);
       setShown(origin + (value - origin) * eased);
       if (p < 1) raf = requestAnimationFrame(step);

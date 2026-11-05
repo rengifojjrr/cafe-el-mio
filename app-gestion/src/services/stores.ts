@@ -6,7 +6,7 @@ import { WAREHOUSE, storeLoc } from '../domain/ledger';
 import { settlementBalance, storeEarning } from '../domain/money-rules';
 import { can } from '../domain/permissions';
 import { round2 } from '../lib/money';
-import { addDays, daysBetween } from '../lib/time';
+import { addDays, addDaysToDate, daysBetween, toIsoDate } from '../lib/time';
 import { type Ctx, ForbiddenError, NotFoundError, ValidationError, audit, guard, mutate, notify, nowIso } from './context';
 import { loadInventory } from './inventory';
 
@@ -27,7 +27,12 @@ export interface StoreView {
   consignmentUnits: number;
   /** Valor de lo que tiene en consignación, a precio al local. */
   consignmentValue: number;
+  /** Lo liquidado que falta pagar. */
   balanceDue: number;
+  /** Lo vendido que todavía no entró en una liquidación (igual se debe). */
+  unsettled: number;
+  /** Todo lo que debe el local: liquidado sin pagar + vendido sin liquidar. */
+  owedTotal: number;
   overdue: boolean;
   lastVisitAt?: string;
   sales30: number;
@@ -91,6 +96,7 @@ export async function listStores(ctx: Ctx): Promise<StoreView[]> {
       const mySettlements = settlements.filter((s) => s.storeId === store.id);
       const balanceDue = round2(mySettlements.reduce((a, s) => a + settlementBalance(s), 0));
       const overdue = mySettlements.some((s) => settlementBalance(s) > 0 && daysBetween(s.dueOn, now) > 0);
+      const unsettled = round2(reports.filter((r) => r.storeId === store.id && !r.settlementId).reduce((a, r) => a + r.total, 0));
       const lastVisit = visits.filter((v) => v.storeId === store.id).sort((a, b) => b.at.localeCompare(a.at))[0];
       const sales30 = round2(
         reports.filter((r) => r.storeId === store.id && r.at >= since).reduce((a, r) => a + r.total, 0),
@@ -105,6 +111,8 @@ export async function listStores(ctx: Ctx): Promise<StoreView[]> {
         consignmentUnits: units,
         consignmentValue: round2(value),
         balanceDue,
+        unsettled,
+        owedTotal: round2(balanceDue + unsettled),
         overdue,
         lastVisitAt: lastVisit?.at,
         sales30,
@@ -359,4 +367,45 @@ export async function listZones(ctx: Ctx) {
 export async function warehouseStockUnits(ctx: Ctx): Promise<number> {
   const snap = await loadInventory(ctx);
   return [...snap.balances.byProduct(WAREHOUSE).values()].reduce((a, b) => a + b, 0);
+}
+
+export interface StoreDebt {
+  /** Liquidado y sin pagar. */
+  settled: number;
+  /** Vendido y todavía sin liquidar: se debe igual, pero aún no vence. */
+  unsettled: number;
+  total: number;
+  overdue: number;
+  /** Próximo vencimiento de lo liquidado. */
+  nextDueOn?: string;
+  /** Cuándo se liquida lo vendido que falta. */
+  nextSettlementOn?: string;
+}
+
+/** Lo que debe un local, completo: lo liquidado sin pagar más lo vendido sin liquidar. */
+export async function storeDebt(ctx: Ctx, storeId: string): Promise<StoreDebt> {
+  const store = await loadStoreForActor(ctx, storeId);
+  guard(ctx, 'settlement.read', { type: 'store', store });
+  const [settlements, reports, settings] = await Promise.all([
+    ctx.repo.settlements.where('storeId', storeId),
+    ctx.repo.salesReports.where('storeId', storeId),
+    ctx.repo.settings.get('settings'),
+  ]);
+  const now = ctx.now();
+  const open = settlements.filter((s) => settlementBalance(s) > 0);
+  const settled = round2(open.reduce((a, s) => a + settlementBalance(s), 0));
+  const pending = reports.filter((r) => !r.settlementId);
+  const unsettled = round2(pending.reduce((a, r) => a + r.total, 0));
+  const overdue = round2(open.filter((s) => daysBetween(s.dueOn, now) > 0).reduce((a, s) => a + settlementBalance(s), 0));
+  const last = [...settlements].sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))[0];
+  const base = last?.issuedAt ?? pending.map((r) => r.at).sort()[0];
+  const every = settings?.settlementEveryDays ?? 15;
+  return {
+    settled,
+    unsettled,
+    total: round2(settled + unsettled),
+    overdue,
+    nextDueOn: open.map((s) => s.dueOn).sort()[0],
+    nextSettlementOn: pending.length && base ? addDaysToDate(toIsoDate(base), every) : undefined,
+  };
 }

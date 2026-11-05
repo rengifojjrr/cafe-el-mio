@@ -38,17 +38,11 @@
   --color-papel-tinta: var(--papel-tinta);
   --color-papel-suave: var(--papel-suave);
   --color-papel-linea: var(--papel-linea);
-  --font-display: 'Bodoni Moda', 'Bodoni 72', Didot, Georgia, serif;
+  /* Títulos y texto en Figtree (la letra de la marca). Bodoni Moda se leía mal en tamaños grandes. */
+  --font-display: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-sans: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-@font-face {
-  font-family: 'Bodoni Moda';
-  src: url('/marca/fonts/bodoni-moda.woff2') format('woff2');
-  font-weight: 400 900;
-  font-style: normal;
-  font-display: swap;
-}
 @font-face {
   font-family: 'Figtree';
   src: url('/marca/fonts/figtree.woff2') format('woff2');
@@ -131,10 +125,6 @@
 }
 
 @layer components {
-  .font-display {
-    font-family: var(--font-display);
-    letter-spacing: -0.01em;
-  }
   .tabular {
     font-variant-numeric: tabular-nums;
   }
@@ -616,4 +606,12 @@
   background: var(--cafe-tueste);
   padding: 5px 9px;
   border-radius: 10px;
+}
+
+/* Títulos: Figtree con peso alto y letras un poco más juntas. Va fuera de las capas para
+   ganarle al peso que traiga cada componente (font-semibold) sin tocar cada pantalla. */
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 760;
+  letter-spacing: -0.024em;
 }

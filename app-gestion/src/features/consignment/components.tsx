@@ -11,8 +11,10 @@ import { fmtDate, fmtDateTime, fmtRelativeDays } from '../../lib/time';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { listProducts } from '../../services/catalog';
+import type { ProductView } from '../../services/catalog';
 import {
   DELIVERY_STATUS_LABEL,
+  createReorder,
   prepareDelivery,
   receiveDelivery,
   recordReturn,
@@ -99,7 +101,7 @@ export function DeliveryCard({ d, showStore }: { d: DeliveryView; showStore?: bo
         <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-papel px-3 py-2 text-papel-tinta">
           <img src={d.receivedSignature.image} alt={`Firma de ${d.receivedSignature.name}`} className="h-10 w-auto" />
           <p className="text-sm">
-            Recibió <b>{d.receivedSignature.name}</b> · {fmtDateTime(d.receivedSignature.signedAt)}
+            Firmó por el local <b>{d.receivedSignature.name}</b> · {fmtDateTime(d.receivedSignature.signedAt)}
           </p>
         </div>
       ) : null}
@@ -154,6 +156,7 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
   const store = useAsync(() => loadStoreForActor(ctx, d.storeId), [ctx, d.storeId]);
   const [name, setName] = useState<string | null>(null);
   const [sig, setSig] = useState<string | null>(null);
+  const [allGood, setAllGood] = useState(false);
   const [withGeo, setWithGeo] = useState(true);
   const who = name ?? store.data?.managerName ?? '';
   return (
@@ -166,11 +169,14 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
             const geo = withGeo ? await askLocation() : undefined;
             await receiveDelivery(ctx, d.id, { name: who, image: sig ?? '', geo });
             onClose();
-          }, `Entregado: ${units} unidades en consignación en ${d.storeName}.`);
+          }, `Entregado: ${units} unidades en consignación en ${d.storeName}. Firmó ${who}.`);
         }}
       >
-        <p className="text-muted">
-          {actor.role === 'store' ? 'Revisa lo que llegó y firma la nota de entrega.' : 'El encargado del local revisa lo que llega y firma en tu teléfono.'} Al firmar, sube lo que el local tiene en consignación y baja el almacén.
+        <p className="rounded-2xl bg-accent-soft p-3 text-ink">
+          {actor.role === 'store'
+            ? 'Revisa lo que llegó. Firmas tú, como dueño o encargado del local, que recibiste todo.'
+            : 'Entrégale el teléfono al dueño o encargado del local: él revisa lo que llegó y firma que lo recibió todo. El vendedor no firma aquí.'}{' '}
+          Al firmar, sube lo que el local tiene en consignación y baja el almacén.
         </p>
         <ul className="grid gap-1 rounded-xl bg-surface-2 p-3 text-sm">
           {d.itemsView
@@ -182,15 +188,81 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
               </li>
             ))}
         </ul>
-        <TextInput label="Nombre de quien recibe" value={who} onChange={(e) => setName(e.target.value)} />
-        <SignatureField label="Firma de quien recibe" onChange={setSig} />
+        <TextInput label="Nombre del dueño o encargado del local" value={who} onChange={(e) => setName(e.target.value)} hint={store.data ? `Encargado registrado: ${store.data.managerName}` : undefined} />
+        <SignatureField label="Firma del dueño o encargado del local" onChange={setSig} />
+        <label className="flex items-start gap-3 rounded-2xl bg-surface-2 p-3">
+          <input type="checkbox" className="mt-1 h-5 w-5 flex-none" checked={allGood} onChange={(e) => setAllGood(e.target.checked)} />
+          <span>
+            <span className="font-semibold">Recibí todo lo de esta lista, en buen estado</span>
+            <span className="block text-sm text-muted">La mercancía queda en consignación: sigue siendo de la empresa hasta que se venda.</span>
+          </span>
+        </label>
         <label className="flex min-h-11 items-center gap-3 text-sm">
           <input type="checkbox" className="h-5 w-5" checked={withGeo} onChange={(e) => setWithGeo(e.target.checked)} />
           <MapPin className="h-4 w-4 text-accent" aria-hidden /> Guardar la ubicación de la entrega (si el teléfono la da)
         </label>
-        <Button type="submit" variant="primary" big icon={CheckCircle2} busy={busy} disabled={!sig || who.trim().length < 3}>
+        <Button type="submit" variant="primary" big icon={CheckCircle2} busy={busy} disabled={!sig || !allGood || who.trim().length < 3}>
           Firmar y recibir
         </Button>
+      </form>
+    </Sheet>
+  );
+}
+
+/** Pedir un producto desde su ficha (o su tarjeta): cuánto y listo. Para la cuenta del local. */
+export function QuickOrderSheet({ view, onClose }: { view: ProductView | null; onClose: () => void }) {
+  const { ctx, actor, config, p } = useLine();
+  const { run, busy } = useAction();
+  const [qty, setQty] = useState<number | null>(null);
+  const [note, setNote] = useState('');
+  if (!view) return null;
+  const pr = view.product;
+  const s = view.stock;
+  const value = qty ?? pr.packSize;
+  const now = ctx.now();
+  return (
+    <Sheet open onClose={onClose} title={`Pedir ${pr.name}`}>
+      <form
+        className="grid gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!actor.storeId) return;
+          void run(async () => {
+            const r = await createReorder(ctx, { storeId: actor.storeId!, items: [{ productId: pr.id, qty: value }], note });
+            onClose();
+            return r;
+          }, (r) => `Pedido ${r.code} enviado: ${value} ${value === 1 ? config.unitName.one : config.unitName.many}. Tu vendedor ya tiene el aviso.`);
+        }}
+      >
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-2xl bg-surface-2 p-3">
+            <p className="text-muted">Ganas por unidad</p>
+            <p className="glow text-xl font-bold tabular">{fmtMoney(view.storeEarning)}</p>
+          </div>
+          <div className="rounded-2xl bg-surface-2 p-3">
+            <p className="text-muted">En el almacén</p>
+            <p className={`text-xl font-bold tabular ${s.available > 0 ? 'text-ink' : 'text-warn'}`}>{s.available}</p>
+          </div>
+        </div>
+        {s.available < value && s.nextArrival ? (
+          <p className="text-sm text-warn">
+            Ahora hay {s.available}. Llegan {s.nextArrival.qty} el {fmtDate(s.nextArrival.eta)} ({fmtRelativeDays(s.nextArrival.eta, now)}): lo que falte se entrega cuando llegue.
+          </p>
+        ) : null}
+        <div className="field">
+          <span className="field-label">¿Cuánto quieres?</span>
+          <QtyStepper label={pr.name} pack={pr.packSize} value={value} onChange={setQty} unit={config.unitName.many} />
+          <p className="field-hint">
+            Caja de {pr.packSize} {config.unitName.many}. Ganarías {fmtMoney(value * view.storeEarning)} si lo vendes todo al PVP sugerido.
+          </p>
+        </div>
+        <TextArea label="Nota para tu vendedor (opcional)" value={note} onChange={(e) => setNote(e.target.value)} />
+        <Button type="submit" variant="primary" big icon={Send} busy={busy} disabled={value <= 0 || actor.readOnly}>
+          Enviar pedido
+        </Button>
+        <Link to={p('pedidos')} className="text-center text-sm font-semibold text-muted underline" onClick={onClose}>
+          Ver mis pedidos
+        </Link>
       </form>
     </Sheet>
   );

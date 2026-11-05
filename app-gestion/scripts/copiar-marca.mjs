@@ -10,7 +10,6 @@ const origen = join(raiz, '..', 'assets');
 const destino = join(raiz, 'public', 'marca');
 
 const copias = [
-  ['fonts/bodoni-moda.woff2', 'fonts/bodoni-moda.woff2'],
   ['fonts/figtree.woff2', 'fonts/figtree.woff2'],
   ['img/marca/logo-el-mio.png', 'logo-el-mio.png'],
 ];

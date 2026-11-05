@@ -104,3 +104,23 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
 - **Lighthouse** (móvil, throttling simulado, contra `vite preview`): rendimiento 93, accesibilidad 100, buenas
   prácticas 100. No se pudo medir contra el link publicado porque la red de este contenedor no deja abrir
   `github.io`.
+
+## Ronda 2 (ajustes después de probar la demo)
+
+- **Tipografía:** los títulos pasan de Bodoni Moda a **Figtree** con peso alto (760) y letras un poco más juntas.
+  Bodoni, con trazos muy finos, se leía mal en tamaños grandes sobre fondo oscuro. Figtree ya era la letra del
+  texto y de la marca, así que la app queda con una sola familia.
+- **Lo que debe un local = lo liquidado sin pagar + lo vendido sin liquidar.** Antes solo se mostraba lo liquidado,
+  y el local veía «$0» aunque hubiera vendido. Lo vendido se debe desde que se vende; la liquidación solo fija
+  cuándo vence. Se muestra el total con su desglose (y lo vencido aparte) en «Mis cuentas», en el inicio del
+  local, en la lista y en la ficha de cada local.
+- **La entrega la firma siempre el dueño o encargado del local**, nunca el vendedor: el nombre viene del encargado
+  registrado, la firma dice «del dueño o encargado del local» y hay que marcar «Recibí todo lo de esta lista, en
+  buen estado». Si la firma se hace en el teléfono del vendedor, él le pasa el teléfono.
+- **Pedir desde un producto** abre una hoja con la cantidad (por caja), lo que gana el local y la disponibilidad, y
+  envía el pedido ahí mismo, sin pasar por la lista de todos los productos. También hay un botón «Pedir» en cada
+  tarjeta del catálogo para la cuenta del local.
+- **Horario de la tienda:** se eligen los días y las horas de abrir y cerrar (con atajos) y se guarda como texto
+  legible («Lun–Sáb 9 a. m.–8 p. m. · Dom cerrado»). Un horario viejo escrito a mano se muestra como «Antes
+  decía…» hasta que se elija uno nuevo.
+- **Lista de locales** con columnas fijas: el estado queda centrado y alineado en todas las filas.

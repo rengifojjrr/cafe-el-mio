@@ -77,6 +77,8 @@ function AccountView({ account }: { account: StoreAccount }) {
   const nextDue = [...open].sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0];
   const payments = list.flatMap((s) => s.payments.map((pmt) => ({ ...pmt, code: s.code }))).sort((a, b) => b.at.localeCompare(a.at));
   const overdue = round2(open.filter((s) => s.overdue).reduce((a, s) => a + s.balance, 0));
+  // Lo que debe el local es todo: lo liquidado sin pagar y lo vendido que todavía no se liquidó.
+  const owedTotal = round2(account.balance + account.unsettledSales);
 
   return (
     <>
@@ -85,14 +87,25 @@ function AccountView({ account }: { account: StoreAccount }) {
           <p className="flex items-center gap-2 text-sm font-medium text-muted">
             <Wallet className="h-4 w-4" aria-hidden /> {account.store.name} debe
           </p>
-          <p className={`tabular mt-1 text-[2.4rem] leading-none font-bold ${account.balance > 0 ? 'glow' : 'text-ok'}`}>{fmtMoney(account.balance)}</p>
-          {account.balance > 0 && nextDue ? (
-            <p className="mt-2 text-ink">
-              La próxima vence el <strong>{fmtDate(nextDue.dueOn)}</strong> <span className="text-muted">({fmtRelativeDays(nextDue.dueOn, now)})</span>.
-            </p>
+          <p className={`tabular mt-1 text-[2.4rem] leading-none font-bold ${owedTotal > 0 ? (overdue > 0 ? 'text-danger' : 'glow') : 'text-ok'}`}>{fmtMoney(owedTotal)}</p>
+          {owedTotal > 0 ? (
+            <dl className="mt-3 grid gap-1.5 text-sm">
+              {account.balance > 0 ? (
+                <div className="flex flex-wrap justify-between gap-2">
+                  <dt className="text-muted">Liquidado, por pagar{nextDue ? ` (vence el ${fmtDate(nextDue.dueOn)})` : ''}</dt>
+                  <dd className="font-semibold tabular">{fmtMoney(account.balance)}</dd>
+                </div>
+              ) : null}
+              {account.unsettledSales > 0 ? (
+                <div className="flex flex-wrap justify-between gap-2">
+                  <dt className="text-muted">Vendido, se liquida{account.nextSettlementOn ? ` el ${fmtDate(account.nextSettlementOn)}` : ' pronto'}</dt>
+                  <dd className="font-semibold tabular">{fmtMoney(account.unsettledSales)}</dd>
+                </div>
+              ) : null}
+            </dl>
           ) : (
             <p className="mt-2 flex items-center gap-2 text-ok">
-              <CircleCheck className="h-5 w-5" aria-hidden /> Al día: no hay nada pendiente de pago.
+              <CircleCheck className="h-5 w-5" aria-hidden /> Al día: no debes nada.
             </p>
           )}
           {overdue > 0 ? (
@@ -104,14 +117,18 @@ function AccountView({ account }: { account: StoreAccount }) {
         </Card>
         <Card className="p-5">
           <p className="flex items-center gap-2 text-sm font-medium text-muted">
-            <CalendarClock className="h-4 w-4" aria-hidden /> Vendido sin liquidar todavía
+            <CalendarClock className="h-4 w-4" aria-hidden /> Cómo se cobra
           </p>
-          <p className="tabular mt-1 text-2xl font-bold text-ink">{fmtMoney(account.unsettledSales)}</p>
-          <p className="mt-2 text-sm text-muted">
-            {account.nextSettlementOn
-              ? `Entra en la liquidación del ${fmtDate(account.nextSettlementOn)}. Hasta entonces no se cobra.`
-              : 'Cuando vendas, se liquida cada cierto número de días.'}
+          <p className="mt-2 text-ink">
+            Lo que vendes se debe desde que se vende. Cada cierto número de días se hace la liquidación y desde ahí tienes unos días para pagarla.
           </p>
+          {nextDue ? (
+            <p className="mt-2 text-sm text-muted">
+              Próximo pago: {fmtMoney(nextDue.balance)} el {fmtDate(nextDue.dueOn)} ({fmtRelativeDays(nextDue.dueOn, now)}).
+            </p>
+          ) : account.nextSettlementOn && account.unsettledSales > 0 ? (
+            <p className="mt-2 text-sm text-muted">Próxima liquidación: {fmtDate(account.nextSettlementOn)} ({fmtRelativeDays(account.nextSettlementOn, now)}).</p>
+          ) : null}
         </Card>
       </div>
 

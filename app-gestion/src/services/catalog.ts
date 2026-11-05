@@ -5,7 +5,7 @@ import type { CommissionRule, Photo, Product, User } from '../data/types';
 import { commissionPerUnit, effectiveRule, storeEarning } from '../domain/money-rules';
 import { can } from '../domain/permissions';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
-import { type StockLine, loadInventory, stockLines } from './inventory';
+import { type InventorySnapshot, type StockLine, loadInventory, stockLines } from './inventory';
 
 /** Producto tal como lo ve un rol que no es administración: sin costo. */
 export type PublicProduct = Omit<Product, 'cost' | 'sampleCost'>;
@@ -39,10 +39,31 @@ export async function listProducts(ctx: Ctx, opts?: { includeInactive?: boolean 
   const lines = stockLines(snap, ctx.now(), settings.expiryWarningDays);
   const isAdmin = can(ctx.actor, 'product.readCost', ctx.line);
   const showInactive = isAdmin && opts?.includeInactive;
+  const visible = await visibleStoreIds(ctx);
   return snap.products
     .filter((p) => p.active || showInactive)
     .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-    .map((p) => toView(ctx, p, lines.get(p.id)!, isAdmin, seller));
+    .map((p) => toView(ctx, p, scopeStock(lines.get(p.id)!, snap, visible), isAdmin, seller));
+}
+
+/** Locales cuya consignación puede ver el actor: todos (administración), los suyos (vendedor) o el propio (local). */
+async function visibleStoreIds(ctx: Ctx): Promise<Set<string> | null> {
+  if (ctx.actor.role === 'admin') return null;
+  if (ctx.actor.role === 'seller') return new Set((await ctx.repo.stores.where('sellerId', ctx.actor.userId)).map((s) => s.id));
+  return new Set(ctx.actor.storeId ? [ctx.actor.storeId] : []);
+}
+
+/** «En consignación» solo cuenta los locales que el actor puede ver: nadie ve lo de otras tiendas. */
+function scopeStock(line: StockLine, snap: InventorySnapshot, visible: Set<string> | null): StockLine {
+  if (!visible) return line;
+  let consignment = 0;
+  let storesHolding = 0;
+  for (const [storeId, qty] of snap.balances.storesHolding(line.productId)) {
+    if (!visible.has(storeId) || qty <= 0) continue;
+    consignment += qty;
+    storesHolding += 1;
+  }
+  return { ...line, consignment, storesHolding };
 }
 
 function toView(ctx: Ctx, p: Product, stock: StockLine, isAdmin: boolean, seller?: User): ProductView {
@@ -67,7 +88,7 @@ export async function getProduct(ctx: Ctx, id: string): Promise<ProductView> {
   const isAdmin = can(ctx.actor, 'product.readCost', ctx.line);
   if (!p.active && !isAdmin) throw new NotFoundError('el producto');
   const lines = stockLines(snap, ctx.now(), settings.expiryWarningDays);
-  return toView(ctx, p, lines.get(p.id)!, isAdmin, seller);
+  return toView(ctx, p, scopeStock(lines.get(p.id)!, snap, await visibleStoreIds(ctx)), isAdmin, seller);
 }
 
 const ruleSchema = z.discriminatedUnion('type', [
