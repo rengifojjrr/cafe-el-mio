@@ -34,3 +34,10 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
   Hoy cada navegador tiene su copia; exportar/importar JSON sirve para llevar la demo a otro teléfono.
 - Lista real de vendedores, zonas y locales; fotos reales de los tabacos.
 - Dominio propio (hoy GitHub Pages).
+
+## Para comprobar en el teléfono (no se pudo desde el contenedor)
+
+- Abrir el link publicado, instalarlo y recorrerlo: desde aquí la red no deja abrir `rengifojjrr.github.io`. La
+  compilación publicada es la misma que pasó todas las pruebas contra `vite preview`.
+- Que las teselas del mapa (CARTO) carguen bien con datos móviles; si fallan, la app cambia sola a OpenStreetMap.
+- La búsqueda de direcciones (Nominatim) en el teléfono; si no encuentra, se toca el mapa.

@@ -19,7 +19,7 @@ import type { LineId } from '../../data/types';
 import { lineConfig } from '../../lines/config';
 import { PUBLIC_URL, brandProductPhoto } from '../../lib/assets';
 import { useInstall } from '../../lib/pwa';
-import { lineTeaser } from '../../services/direccion';
+import { lineTeaser } from '../../services/teaser';
 import { enterAs, exportState, getEcosystem, importState, resetDemo, saveEcosystem } from '../../services/session';
 import { AccountPicker } from '../../app/AccountPicker';
 import { useAsync } from '../../app/hooks';

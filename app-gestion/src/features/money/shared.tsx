@@ -37,7 +37,10 @@ export function downloadCsv(filename: string, rows: (string | number)[][]): void
 
 /** Etiqueta de un mes para gráficas; el mes en curso se marca para no leer su caída como baja real. */
 export function monthLabel(key: string, now: Date): string {
-  return key === monthKey(now) ? `${fmtMonth(key).split(' ')[0] ?? key} (en curso)` : fmtMonth(key);
+  // En las gráficas basta el mes («sept»); el año solo si no es el de hoy.
+  const [month = key, year] = fmtMonth(key).split(' ');
+  if (key === monthKey(now)) return `${month} (en curso)`;
+  return year && year !== String(now.getFullYear()) ? `${month} ${year}` : month;
 }
 
 export function csvName(line: string, what: string, now: Date): string {

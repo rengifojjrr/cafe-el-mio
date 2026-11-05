@@ -22,10 +22,16 @@ npm run dev        # http://localhost:5173/cafe-el-mio/gestion/
 ```bash
 npm run lint
 npm run typecheck
-npm test                 # Vitest: dominio, permisos, separación de líneas, tokens
+npm test                 # Vitest: dominio, permisos por rol, separación de líneas, servicios, tokens
 npm run build            # genera ../gestion
-npm run test:e2e         # Playwright contra vite preview (Chrome del sistema)
+npm run test:e2e         # Playwright contra vite preview (Chrome del sistema, 390×844 y 1280×800)
 ```
+
+- `test:e2e` levanta `vite preview` solo (o usa `E2E_BASE_URL=…` para otro servidor). Con `CAPTURAS=1` guarda capturas
+  en `../docs/capturas/`.
+- Playwright usa `channel: 'chrome'`: el Chrome instalado (en el Mac, el de `/Applications`). No descarga navegadores.
+- La primera vez que se abre la app, los datos de ejemplo se arman en un Web Worker (`src/seed/seed.worker.ts`) y la
+  portada se muestra mientras tanto.
 
 ## Estructura
 
@@ -40,6 +46,12 @@ npm run test:e2e         # Playwright contra vite preview (Chrome del sistema)
 | `src/ui/` | Componentes base, silueta del tabaco, mapa. |
 | `src/styles/tokens.css` | **El único archivo con colores.** Una prueba falla si aparece un color en otro lado. |
 | `tests/unit/`, `tests/e2e/` | Vitest y Playwright. |
+
+## Qué falta (para otra sesión)
+
+- Pasar a servidor: plan en `../docs/SUPABASE.md` (la interfaz `src/data/repo.ts` es lo único que cambia).
+- Datos reales y decisiones del negocio: `../docs/PENDIENTES.md`.
+- Avance y cómo probar cada etapa: `../docs/AVANCE.md`. Guía para enseñar la demo: `../docs/GUIA-DEMO.md`.
 
 ## Íconos
 

@@ -610,3 +610,10 @@
   stroke: var(--data);
   opacity: 0.85;
 }
+
+/* El logo de El Mío tiene «CAFÉ» en blanco: en modo claro va sobre una pastilla tostada. */
+[data-theme='light'] .logo-el-mio {
+  background: var(--cafe-tueste);
+  padding: 5px 9px;
+  border-radius: 10px;
+}

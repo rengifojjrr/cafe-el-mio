@@ -1,7 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles/index.css';
-import './lib/time';
 import { App } from './app/App';
 import { captureInstallPrompt } from './lib/pwa';
 import { ensureSeeded } from './services/session';
@@ -26,17 +25,15 @@ function Boot({ message }: { message: string }) {
   );
 }
 
-root.render(<Boot message="Preparando los datos de ejemplo…" />);
+// La app se muestra enseguida; la primera vez, los datos de ejemplo se cargan en segundo plano
+// y las pantallas se actualizan solas cuando terminan.
+root.render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
 
-ensureSeeded()
-  .then(() => {
-    root.render(
-      <StrictMode>
-        <App />
-      </StrictMode>,
-    );
-  })
-  .catch((e: unknown) => {
-    console.error(e);
-    root.render(<Boot message={`No se pudo abrir la base de datos del navegador: ${e instanceof Error ? e.message : String(e)}. Prueba fuera del modo incógnito.`} />);
-  });
+ensureSeeded().catch((e: unknown) => {
+  console.error(e);
+  root.render(<Boot message={`No se pudo abrir la base de datos del navegador: ${e instanceof Error ? e.message : String(e)}. Prueba fuera del modo incógnito.`} />);
+});

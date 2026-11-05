@@ -16,6 +16,9 @@ const coreRepos = new Map<string, CoreRepo>();
 
 /** Prefijo de los nombres de base (solo lo cambian las pruebas). */
 let dbPrefix = '';
+export function getDbPrefix(): string {
+  return dbPrefix;
+}
 export function setDbPrefix(prefix: string): void {
   dbPrefix = prefix;
   lineRepos.clear();

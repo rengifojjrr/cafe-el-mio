@@ -3,7 +3,6 @@ import { createHashRouter, RouterProvider, useRouteError } from 'react-router';
 import { Portada } from '../features/home/Portada';
 import { Loading } from '../ui/kit';
 import { ToastProvider } from '../ui/toast';
-import { LineLayout } from './LineLayout';
 import { RootLayout } from './RootLayout';
 
 function page<T extends Record<string, ComponentType>>(loader: () => Promise<T>, name: keyof T): ReactNode {
@@ -26,6 +25,7 @@ const insight = () => import('../features/insight/pages');
 const comms = () => import('../features/comms/pages');
 const admin = () => import('../features/admin/pages');
 const direccion = () => import('../features/direccion/DireccionPage');
+const LineLayoutLazy = lazy(() => import('./LineLayout').then((m) => ({ default: m.LineLayout })));
 
 function RouteError() {
   const err = useRouteError() as Error | undefined;
@@ -51,7 +51,11 @@ const router = createHashRouter([
       { path: '/direccion', element: page(direccion, 'DireccionPage') },
       {
         path: '/:line',
-        element: <LineLayout />,
+        element: (
+          <Suspense fallback={<div className="mx-auto max-w-5xl p-6"><Loading rows={4} /></div>}>
+            <LineLayoutLazy />
+          </Suspense>
+        ),
         errorElement: <RouteError />,
         children: [
           { index: true, element: page(home, 'LineHome') },

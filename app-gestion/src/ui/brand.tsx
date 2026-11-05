@@ -119,7 +119,7 @@ export function LineMark({ line, size = 'md' }: { line: LineId | 'eco'; size?: '
   if (line === 'cafe') {
     const h = size === 'lg' ? 34 : size === 'sm' ? 20 : 26;
     return (
-      <span className="inline-flex items-center">
+      <span className="logo-el-mio inline-flex items-center">
         <img src={marca('logo-el-mio.png')} alt="Café El Mío" style={{ height: h, width: 'auto' }} width={Math.round((501 / 96) * h)} height={h} />
       </span>
     );

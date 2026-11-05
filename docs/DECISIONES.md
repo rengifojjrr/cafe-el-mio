@@ -85,3 +85,22 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
   `/Applications`.
 - La red del contenedor no deja abrir `rengifojjrr.github.io`, así que la comprobación «en vivo» del link se hace
   desde el teléfono o el Mac (ver `AVANCE.md`).
+
+## Pulido (E7)
+
+- **Semilla en un Web Worker.** La primera visita simula tres meses de historia de las dos líneas. Hecho en la página
+  trababa el hilo principal (Lighthouse móvil: rendimiento 64, 1,8 s de bloqueo). Ahora corre en un worker que
+  escribe en las mismas bases IndexedDB y la portada se muestra al instante: rendimiento 93, bloqueo 60 ms. Si el
+  navegador no tiene workers, se carga en la página como antes. Entrar, listar cuentas y resolver la sesión esperan
+  a que termine esa primera carga.
+- **Carga por partes.** La portada no carga zod, Recharts ni Leaflet: llegan al entrar a una línea o a la pantalla
+  que los usa. Bundle inicial: 150 KB comprimido.
+- **Transacciones.** Un servicio que usa a otro reutiliza la transacción abierta (`Dexie.currentTransaction`):
+  IndexedDB cierra antes de tiempo una transacción anidada (lo encontró la prueba de punta a punta de «pedido del
+  local», no las unitarias con IndexedDB simulado).
+- **Cambiar de cuenta vuelve a montar la línea**, para que ninguna pantalla se quede con el estado que calculó con la
+  cuenta anterior.
+- **Dirección dentro de una línea** usa su propia identidad (`direccion`): no hereda la campana de nadie.
+- **Lighthouse** (móvil, throttling simulado, contra `vite preview`): rendimiento 93, accesibilidad 100, buenas
+  prácticas 100. No se pudo medir contra el link publicado porque la red de este contenedor no deja abrir
+  `github.io`.

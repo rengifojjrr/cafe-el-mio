@@ -118,3 +118,55 @@ test('tabaco sin permiso vigente: no se puede pedir producto', async ({ page }) 
   await expect(page.getByRole('alert').filter({ hasText: /permiso de venta de tabaco/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pedir producto' })).toBeDisabled();
 });
+
+test('liquidar y registrar el pago (tabaco)', async ({ page }, info) => {
+  await enterAs(page, 'tabaco:admin');
+  await go(page, '/tabaco/cobros');
+  await page.getByRole('button', { name: 'Liquidar ahora' }).and(page.locator(':not([disabled])')).first().click();
+  await toast(page, /Liquidación L-\d{4} generada/);
+  const code = (await page.getByRole('status').innerText()).match(/L-\d{4}/)?.[0];
+  expect(code).toBeTruthy();
+  const row = page.getByRole('listitem').filter({ hasText: code! }).filter({ has: page.getByRole('button', { name: 'Registrar pago' }) });
+  await row.getByRole('button', { name: 'Registrar pago' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Registrar pago' });
+  await dialog.getByLabel('Cómo pagó').selectOption('zelle');
+  await dialog.getByLabel('Referencia').fill('ZL-E2E-0001');
+  await capture(page, info, 'E4-registrar-pago');
+  await dialog.getByRole('button', { name: 'Guardar pago' }).click();
+  await toast(page, new RegExp(`Pago registrado en ${code}`));
+  await page.getByRole('tab', { name: /Pagadas/ }).click();
+  await expect(page.getByRole('listitem').filter({ hasText: code! }).first()).toBeVisible();
+});
+
+test('recorrido guiado: 7 pasos de Tabaco, cambiando de cuenta solo', async ({ page }) => {
+  await page.goto('./#/');
+  await page.getByRole('button', { name: 'Recorrido guiado' }).first().click();
+  await page.getByRole('dialog', { name: 'Recorrido guiado' }).getByRole('button').filter({ hasText: /Tabaco/ }).click();
+  const panel = page.getByTestId('recorrido');
+  for (let i = 1; i <= 7; i++) {
+    await expect(panel).toContainText(`paso ${i} de 7`);
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    if (i < 7) await panel.getByRole('button', { name: /Siguiente/ }).click();
+  }
+  await panel.getByRole('button', { name: 'Terminar', exact: true }).click();
+  await expect(panel).toBeHidden();
+});
+
+test('Dirección: las dos líneas lado a lado y una línea en solo mirar', async ({ page }, info) => {
+  await enterAs(page, 'direccion');
+  await expect(page.getByText('Suma informativa').first()).toBeVisible();
+  await capture(page, info, 'E5-direccion-recorrido');
+  await page.getByRole('button', { name: /Abrir Tabaco como Administración/ }).click();
+  await expect(page.getByText(/Solo mirar/).first()).toBeVisible();
+  await go(page, '/tabaco/catalogo');
+  await expect(page.getByRole('heading', { name: 'Catálogo' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Nuevo producto' })).toHaveCount(0);
+});
+
+test('restablecer la demo vuelve a cargar los datos de ejemplo', async ({ page }) => {
+  await page.goto('./#/');
+  await page.getByRole('button', { name: 'Restablecer demo' }).click();
+  await page.getByRole('button', { name: 'Sí, restablecer' }).click();
+  await toast(page, /datos de ejemplo cargados/);
+  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('12')).toBeVisible();
+});

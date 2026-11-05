@@ -5,8 +5,9 @@ import { CAFE_SEED } from './cafe';
 import { type LineSeedDef, type SeedTables, simulateLine } from './engine';
 import { TABACO_SEED } from './tabaco';
 
-export const SEED_VERSION = 4;
-export const DEFAULT_ECOSYSTEM_NAME = 'Grupo Miami · Tabaco & Café';
+import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from './version';
+
+export { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION };
 
 export const SEEDS: Record<LineId, LineSeedDef> = { tabaco: TABACO_SEED, cafe: CAFE_SEED };
 

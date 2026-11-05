@@ -1,11 +1,10 @@
 // Lo común del ecosistema (eco-core): la sesión, «Entrar como…», el nombre del ecosistema,
 // restablecer la demo y exportar o importar su estado.
-import { z } from 'zod';
 import type { DirectoryAccount, EcosystemSettings, LineId, Photo, SessionState, User } from '../data/types';
 import { LINES } from '../data/types';
-import { getCoreRepo, getLineRepo } from '../data';
+import { getCoreRepo, getDbPrefix, getLineRepo } from '../data';
 import type { Actor } from '../domain/permissions';
-import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION, seedEverything } from '../seed';
+import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from '../seed/version';
 import { emitAll, emitChange } from './bus';
 
 const EXPORT_APP = 'grupo-miami-ecosistema';
@@ -13,31 +12,70 @@ const EXPORT_VERSION = 1;
 
 let seeding: Promise<void> | null = null;
 
-/** Si no hay datos (o son de una versión vieja de la semilla), carga los de ejemplo. */
-export async function ensureSeeded(now = new Date()): Promise<void> {
-  if (seeding) return seeding;
-  seeding = (async () => {
-    const core = getCoreRepo();
-    const settings = await core.settings.get('ecosystem');
-    const hasData = (await getLineRepo('tabaco').products.count()) > 0 && (await getLineRepo('cafe').products.count()) > 0;
-    if (!settings || settings.seedVersion !== SEED_VERSION || !hasData) {
-      await resetDemo(now, settings?.name);
-    }
-  })();
-  try {
-    await seeding;
-  } finally {
-    seeding = null;
+/**
+ * Si no hay datos (o son de una versión vieja de la semilla), carga los de ejemplo.
+ * Devuelve siempre la misma promesa: quien necesita datos (entrar, listar cuentas, la sesión)
+ * espera a que termine la primera carga.
+ */
+export function ensureSeeded(now = new Date()): Promise<void> {
+  if (!seeding) {
+    seeding = (async () => {
+      const core = getCoreRepo();
+      const settings = await core.settings.get('ecosystem');
+      const hasData = (await getLineRepo('tabaco').products.count()) > 0 && (await getLineRepo('cafe').products.count()) > 0;
+      if (!settings || settings.seedVersion !== SEED_VERSION || !hasData) {
+        await resetDemo(now, settings?.name);
+      }
+    })();
+    seeding.catch(() => {
+      seeding = null;
+    });
   }
+  return seeding;
 }
 
 /** Borra todo y vuelve a cargar los datos de ejemplo (fechas relativas a hoy). */
 export async function resetDemo(now = new Date(), keepName?: string): Promise<void> {
+  const name = keepName ?? DEFAULT_ECOSYSTEM_NAME;
+  if (typeof window !== 'undefined' && typeof Worker === 'function') {
+    try {
+      await seedInWorker(now, name);
+      emitAll();
+      return;
+    } catch (e) {
+      console.warn('La semilla en segundo plano falló; se carga en la página.', e);
+    }
+  }
   const core = getCoreRepo();
   const repos = { tabaco: getLineRepo('tabaco'), cafe: getLineRepo('cafe') };
+  // La semilla (datos y simulador) solo se descarga cuando hace falta.
+  const { seedEverything } = await import('../seed');
   await Promise.all([core.clearAll(), repos.tabaco.clearAll(), repos.cafe.clearAll()]);
-  await seedEverything(core, repos, now, keepName ?? DEFAULT_ECOSYSTEM_NAME);
+  await seedEverything(core, repos, now, name);
   emitAll();
+}
+
+/** Corre la simulación de la semilla en un Web Worker: la pantalla no se traba. */
+function seedInWorker(now: Date, name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../seed/seed.worker.ts', import.meta.url), { type: 'module' });
+    const timer = window.setTimeout(() => {
+      worker.terminate();
+      reject(new Error('La carga de datos de ejemplo tardó demasiado.'));
+    }, 60_000);
+    worker.onmessage = (e: MessageEvent<{ ok: boolean; error?: string }>) => {
+      window.clearTimeout(timer);
+      worker.terminate();
+      if (e.data.ok) resolve();
+      else reject(new Error(e.data.error ?? 'No se pudieron cargar los datos de ejemplo.'));
+    };
+    worker.onerror = (e) => {
+      window.clearTimeout(timer);
+      worker.terminate();
+      reject(new Error(e.message || 'No se pudieron cargar los datos de ejemplo.'));
+    };
+    worker.postMessage({ now: now.toISOString(), name, prefix: getDbPrefix() });
+  });
 }
 
 export async function getEcosystem(): Promise<EcosystemSettings> {
@@ -70,6 +108,7 @@ export interface AccountOption extends DirectoryAccount {
 
 /** Cuentas para «Entrar como…»: las principales y, aparte, el resto de vendedores y locales. */
 export async function listAccounts(): Promise<{ primary: AccountOption[]; others: Record<LineId, AccountOption[]> }> {
+  await ensureSeeded();
   const primary = (await getCoreRepo().directory.all()).sort((a, b) => order(a) - order(b));
   const primaryUserIds = new Set(primary.map((p) => `${p.line}:${p.userId}`));
   const others: Record<LineId, AccountOption[]> = { tabaco: [], cafe: [] };
@@ -114,6 +153,7 @@ export async function findAccount(accountId: string): Promise<DirectoryAccount |
 }
 
 export async function enterAs(accountId: string): Promise<DirectoryAccount> {
+  await ensureSeeded();
   const acc = await findAccount(accountId);
   if (!acc) throw new Error('Esa cuenta no existe.');
   await saveSession({ id: 'session', accountId: acc.id, viewAsAccountId: null, directorLine: null });
@@ -155,6 +195,7 @@ function actorFrom(acc: DirectoryAccount, readOnly: boolean): Actor {
  * acceso a esa línea (entonces la pantalla vuelve a la portada).
  */
 export async function resolveActor(line: LineId): Promise<{ actor: Actor; account: DirectoryAccount; viewing: DirectoryAccount | null } | null> {
+  await ensureSeeded();
   const s = await getSession();
   if (!s.accountId) return null;
   const acc = await findAccount(s.accountId);
@@ -220,14 +261,18 @@ export async function exportState(): Promise<string> {
   return JSON.stringify({ app: EXPORT_APP, version: EXPORT_VERSION, exportedAt: new Date().toISOString(), core, lines });
 }
 
-const tableSchema = z.array(z.record(z.string(), z.unknown()));
-const importSchema = z.object({
-  app: z.literal(EXPORT_APP, { error: 'Este archivo no es un respaldo de esta app.' }),
-  version: z.literal(EXPORT_VERSION, { error: 'El respaldo es de otra versión de la app.' }),
-  exportedAt: z.string(),
-  core: z.object({ session: tableSchema, settings: tableSchema, directory: tableSchema }),
-  lines: z.object({ tabaco: z.record(z.string(), tableSchema), cafe: z.record(z.string(), tableSchema) }),
-});
+/** Esquema del respaldo; zod se carga solo cuando alguien importa un archivo. */
+async function importSchema() {
+  const { z } = await import('zod');
+  const tableSchema = z.array(z.record(z.string(), z.unknown()));
+  return z.object({
+    app: z.literal(EXPORT_APP, { error: 'Este archivo no es un respaldo de esta app.' }),
+    version: z.literal(EXPORT_VERSION, { error: 'El respaldo es de otra versión de la app.' }),
+    exportedAt: z.string(),
+    core: z.object({ session: tableSchema, settings: tableSchema, directory: tableSchema }),
+    lines: z.object({ tabaco: z.record(z.string(), tableSchema), cafe: z.record(z.string(), tableSchema) }),
+  });
+}
 
 /** Carga un respaldo JSON. El archivo es información, no instrucciones: se valida antes de usarlo. */
 export async function importState(json: string): Promise<void> {
@@ -237,7 +282,7 @@ export async function importState(json: string): Promise<void> {
   } catch {
     throw new Error('El archivo no es un JSON válido.');
   }
-  const data = importSchema.parse(parsed);
+  const data = (await importSchema()).parse(parsed);
   for (const line of LINES) {
     const tables = data.lines[line];
     for (const row of [...(tables.products ?? []), ...(tables.stores ?? [])]) {

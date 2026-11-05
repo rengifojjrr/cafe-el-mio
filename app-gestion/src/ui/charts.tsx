@@ -152,7 +152,7 @@ export function BarsChart({
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-          <XAxis dataKey={xKey} tick={axisTick} axisLine={{ stroke: 'var(--chart-grid)' }} tickLine={false} tickFormatter={xLabel ? (v: unknown) => xLabel(v) : undefined} interval="preserveStartEnd" />
+          <XAxis dataKey={xKey} tick={axisTick} axisLine={{ stroke: 'var(--chart-grid)' }} tickLine={false} tickFormatter={xLabel ? (v: unknown) => xLabel(v) : undefined} interval={0} />
           <YAxis tick={axisTick} axisLine={false} tickLine={false} width={64} tickFormatter={(v: number) => shortAxis(v, fmt)} />
           <Tooltip
             {...tooltipStyle}
@@ -256,7 +256,7 @@ export function LinesChart({
   const common = (
     <>
       <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-      <XAxis dataKey={xKey} tick={axisTick} axisLine={{ stroke: 'var(--chart-grid)' }} tickLine={false} tickFormatter={xLabel ? (v: unknown) => xLabel(v) : undefined} />
+      <XAxis dataKey={xKey} tick={axisTick} axisLine={{ stroke: 'var(--chart-grid)' }} tickLine={false} tickFormatter={xLabel ? (v: unknown) => xLabel(v) : undefined} interval={0} />
       <YAxis tick={axisTick} axisLine={false} tickLine={false} width={64} tickFormatter={(v: number) => shortAxis(v, fmt)} />
       <Tooltip {...tooltipStyle} formatter={(v: unknown, name: unknown) => [format(v, fmt), String(name)]} labelFormatter={(v: unknown) => (xLabel ? xLabel(v) : String(v))} />
       {legend ? <Legend formatter={legendFormatter} iconType="circle" iconSize={8} itemSorter={null} /> : null}

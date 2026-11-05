@@ -85,15 +85,3 @@ export async function lineOverview(actor: Actor, line: LineId, now = new Date())
 }
 
 export const MONTH_KEY = monthKey;
-
-/** Datos no sensibles para la portada (cuántos locales, productos y vendedores tiene cada línea). */
-export async function lineTeaser(line: LineId): Promise<{ products: number; activeStores: number; sellers: number; pendingOrders: number }> {
-  const repo = getLineRepo(line);
-  const [products, stores, users, reorders] = await Promise.all([repo.products.all(), repo.stores.all(), repo.users.all(), repo.reorders.all()]);
-  return {
-    products: products.filter((p) => p.active).length,
-    activeStores: stores.filter((s) => s.status === 'activo').length,
-    sellers: users.filter((u) => u.role === 'seller' && u.active).length,
-    pendingOrders: reorders.filter((r) => r.status === 'enviado' || r.status === 'confirmado' || r.status === 'preparado').length,
-  };
-}

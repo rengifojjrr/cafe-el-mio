@@ -1,6 +1,5 @@
 import { CheckCircle2, CircleAlert, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { ZodError } from 'zod';
 
 type Tone = 'ok' | 'error' | 'info';
 interface Toast {
@@ -50,7 +49,11 @@ export function useToast() {
 
 /** Texto claro de un error (incluye los de validación de zod). */
 export function errorText(e: unknown): string {
-  if (e instanceof ZodError) return e.issues[0]?.message ?? 'Revisa los datos.';
+  // Errores de validación (zod) sin cargar zod en la portada: tienen `issues`.
+  if (e && typeof e === 'object' && 'issues' in e && Array.isArray((e as { issues: unknown[] }).issues)) {
+    const first = (e as { issues: { message?: string }[] }).issues[0];
+    return first?.message ?? 'Revisa los datos.';
+  }
   if (e instanceof Error) return e.message;
   return 'Algo salió mal.';
 }

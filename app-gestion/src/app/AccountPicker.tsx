@@ -23,6 +23,14 @@ export function AccountPicker({ onDone, only }: { onDone?: () => void; only?: Li
   const { data, loading } = useAsync(listAccounts, []);
   const [open, setOpen] = useState<LineId | null>(null);
   if (loading || !data) return <Loading rows={4} />;
+  if (data.primary.length === 0) {
+    return (
+      <div className="grid gap-3">
+        <p className="text-muted">Preparando los datos de ejemplo… tarda unos segundos la primera vez.</p>
+        <Loading rows={3} />
+      </div>
+    );
+  }
 
   const go = async (acc: AccountOption) => {
     try {
