@@ -1,5 +1,5 @@
-// Mapa (Leaflet) con teselas oscuras de CARTO y respaldo en OpenStreetMap si fallan.
-// Marcadores propios (divIcon): locales por estado y ventas, vendedores, almacén y punto elegido.
+// Mapa (Leaflet) con teselas de OpenStreetMap, sin clave (como en registro forestal); en modo oscuro las
+// oscurece un filtro de CSS. Marcadores propios (divIcon): locales por estado y ventas, vendedores, almacén y punto elegido.
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef } from 'react';
@@ -35,8 +35,12 @@ export interface MapViewProps {
   label: string;
 }
 
-const CARTO_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
-const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const OSM_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+// CARTO empezó a pedir clave: contesta 200 con una tesela «API KEY REQUIRED», así que el respaldo por error
+// nunca saltaba. Se dejó de usar y se borra lo que su caché del service worker guardó en los teléfonos.
+if (typeof caches !== 'undefined') void caches.delete('teselas-carto').catch(() => undefined);
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -85,25 +89,8 @@ export default function MapView({ markers, route, onMarkerClick, pick, center, z
     const m = L.map(el.current, { zoomControl: true, attributionControl: true, center: center ?? [25.79, -80.27], zoom, scrollWheelZoom: true });
     // En desarrollo (StrictMode) el mapa se crea dos veces: el nuevo tiene que volver a encuadrar.
     fitted.current = undefined;
-    const light = document.documentElement.dataset.theme === 'light';
-    const carto = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${light ? 'light_all' : 'dark_all'}/{z}/{x}/{y}{r}.png`, {
-      attribution: CARTO_ATTR,
-      subdomains: 'abcd',
-      maxZoom: 19,
-    });
-    let errors = 0;
-    let loaded = 0;
-    carto.on('tileload', () => {
-      loaded += 1;
-    });
-    carto.on('tileerror', () => {
-      errors += 1;
-      if (errors >= 4 && loaded === 0 && m.hasLayer(carto)) {
-        m.removeLayer(carto);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: OSM_ATTR, maxZoom: 19 }).addTo(m);
-      }
-    });
-    carto.addTo(m);
+    // La clase `teselas` lleva el filtro del modo oscuro (index.css): cambiar de tema no obliga a rehacer el mapa.
+    L.tileLayer(OSM_TILES, { attribution: OSM_ATTR, maxZoom: 19, className: 'teselas' }).addTo(m);
     m.on('click', (e: L.LeafletMouseEvent) => {
       pickRef.current?.onPick({ lat: Number(e.latlng.lat.toFixed(6)), lng: Number(e.latlng.lng.toFixed(6)) });
     });

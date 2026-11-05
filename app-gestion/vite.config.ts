@@ -52,14 +52,10 @@ export default defineConfig({
             options: { cacheName: 'pdf-worker', expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 60 } },
           },
           {
-            urlPattern: /^https:\/\/([abcd]\.)?basemaps\.cartocdn\.com\/.*/,
-            handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'teselas-carto', expiration: { maxEntries: 600, maxAgeSeconds: 60 * 60 * 24 * 14 } },
-          },
-          {
+            // El mapa usa solo OpenStreetMap (CARTO empezó a pedir clave). 7 días, como pide su política de uso.
             urlPattern: /^https:\/\/tile\.openstreetmap\.org\/.*/,
             handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'teselas-osm', expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 7 } },
+            options: { cacheName: 'teselas-osm', expiration: { maxEntries: 600, maxAgeSeconds: 60 * 60 * 24 * 7 } },
           },
         ],
       },
