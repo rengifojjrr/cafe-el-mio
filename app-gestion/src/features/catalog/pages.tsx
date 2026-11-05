@@ -106,7 +106,7 @@ export function CatalogPage() {
           {data.length ? 'Prueba con otra palabra.' : isAdmin ? 'Toca «Nuevo producto» para armar el catálogo.' : 'Administración todavía no cargó productos.'}
         </EmptyState>
       ) : null}
-      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {list.map((v) => (
           <li key={v.product.id}>
             <ProductCard view={v} now={now} onOrder={() => setOrdering(v)} />
@@ -124,9 +124,9 @@ function ProductCard({ view, now, onOrder }: { view: ProductView; now: Date; onO
   const s = view.stock;
   const summary = config.productFields.filter((f) => config.summaryFields.includes(f.key));
   return (
-    <div className="glass relative flex h-full flex-col overflow-hidden transition-colors hover:border-line-strong">
+    <div className="glass relative flex h-full min-w-0 flex-col overflow-hidden transition-colors hover:border-line-strong">
       <Link to={p(`catalogo/${pr.id}`)} className="absolute inset-0 z-0 rounded-[20px]" aria-label={`Ver ${pr.name}`} />
-      <div className={line === 'tabaco' ? 'pointer-events-none h-20 px-3 pt-3' : 'pointer-events-none h-40 bg-surface-2 p-3'}>
+      <div className={line === 'tabaco' ? 'pointer-events-none h-20 min-w-0 overflow-hidden px-3 pt-3' : 'pointer-events-none h-40 min-w-0 bg-surface-2 p-3'}>
         <ProductThumb product={pr} loadPhoto={(id) => getPhoto(ctx, id)} />
       </div>
       <div className="pointer-events-none flex flex-1 flex-col gap-2 p-4 pt-3 [&_button]:pointer-events-auto">

@@ -19,6 +19,7 @@ const catalog = () => import('../features/catalog/pages');
 const warehouse = () => import('../features/warehouse/WarehousePage');
 const stores = () => import('../features/stores/pages');
 const contracts = () => import('../features/contracts/pages');
+const contractsHub = () => import('../features/contracts/hub');
 const consignment = () => import('../features/consignment/pages');
 const money = () => import('../features/money/pages');
 const insight = () => import('../features/insight/pages');
@@ -69,6 +70,7 @@ const router = createHashRouter([
           { path: 'locales/:id', element: page(stores, 'StoreDetailPage') },
           { path: 'locales/:id/editar', element: page(stores, 'StoreFormPage') },
           { path: 'locales/:id/visita', element: page(consignment, 'VisitPage') },
+          { path: 'contratos', element: page(contractsHub, 'ContractsHubPage') },
           { path: 'contratos/:id', element: page(contracts, 'ContractPage') },
           { path: 'contratos/:id/imprimir', element: page(contracts, 'ContractPrintPage') },
           { path: 'entregas', element: page(consignment, 'DeliveriesPage') },

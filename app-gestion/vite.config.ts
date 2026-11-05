@@ -40,10 +40,17 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,woff2,webp,png,svg}'],
+        // El worker de pdf.js pesa más de 1 MB: no va en la precarga, se guarda la primera vez que se usa.
+        globIgnores: ['**/pdf.worker*'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallback: `${BASE}index.html`,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.includes('/assets/pdf.worker'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'pdf-worker', expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 60 } },
+          },
           {
             urlPattern: /^https:\/\/([abcd]\.)?basemaps\.cartocdn\.com\/.*/,
             handler: 'StaleWhileRevalidate',

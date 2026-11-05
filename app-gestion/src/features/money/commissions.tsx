@@ -110,7 +110,7 @@ function CommissionsView({ sellerId, admin }: { sellerId?: string; admin?: boole
 
       {admin && !sellerId ? (
         <Section title="Por vendedor">
-          <ul className="grid gap-2 sm:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {summary.bySeller.map((s) => (
               <li key={s.key} className="glass flex flex-wrap items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">

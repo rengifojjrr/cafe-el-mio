@@ -92,29 +92,33 @@ function ChartFrame({
       <div style={{ width: '100%', height }} aria-hidden="true">
         {children}
       </div>
-      <table className="sr-only">
-        <caption>{label}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{xKey}</th>
-            {series.map((s) => (
-              <th key={s.key} scope="col">
-                {s.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row, i) => (
-            <tr key={i}>
-              <th scope="row">{xLabel ? xLabel(row[xKey]) : String(row[xKey] ?? '')}</th>
+      {/* La tabla para lectores de pantalla va dentro de un div sr-only: una tabla no se deja
+          encoger a 1 px y, suelta, ensanchaba la página en el teléfono. */}
+      <div className="sr-only">
+        <table>
+          <caption>{label}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{xKey}</th>
               {series.map((s) => (
-                <td key={s.key}>{format(row[s.key], fmt)}</td>
+                <th key={s.key} scope="col">
+                  {s.label}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((row, i) => (
+              <tr key={i}>
+                <th scope="row">{xLabel ? xLabel(row[xKey]) : String(row[xKey] ?? '')}</th>
+                {series.map((s) => (
+                  <td key={s.key}>{format(row[s.key], fmt)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

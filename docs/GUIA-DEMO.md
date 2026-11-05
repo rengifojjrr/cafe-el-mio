@@ -43,6 +43,8 @@
 | Lo más vendido, lo más pedido, rentabilidad | Administración | Rentabilidad |
 | Mensajes y escalar a administración (24 h) | Tabaco · Local (El Faro) | Mensajes |
 | Ajustes y plantilla de contrato | Administración | Ajustes |
+| Subir un PDF de contrato o de nota de entrega y ubicar las firmas | Administración | Contratos → Plantillas |
+| Todo lo firmado: contratos y notas de entrega (cada uno ve lo suyo) | Cualquiera | Contratos («Mis contratos» en el local) |
 | Quién hizo qué | Administración | Auditoría |
 | Mirar con los ojos de otro | Administración | «Ver como…» (arriba) |
 

@@ -5,7 +5,8 @@ import type { AuditEntry, Entity, LineId } from '../types';
 import type { AppendOnlyLog, CoreRepo, LineRepo, Table } from '../repo';
 import { CORE_TABLES, LINE_TABLES } from '../repo';
 
-const LINE_SCHEMA: Record<(typeof LINE_TABLES)[number], string> = {
+/** Esquema de la versión 1 (no se toca: los navegadores que ya tienen datos suben a la 2). */
+const LINE_SCHEMA: Record<Exclude<(typeof LINE_TABLES)[number], 'templates'>, string> = {
   products: 'id, sku',
   photos: 'id, ownerId',
   warehouses: 'id',
@@ -99,6 +100,8 @@ export function lineDbName(line: LineId, prefix = ''): string {
 export function openLineRepo(line: LineId, prefix = ''): LineRepo {
   const db = new Dexie(lineDbName(line, prefix));
   db.version(1).stores(LINE_SCHEMA);
+  // Versión 2: plantillas PDF. Dexie conserva las tablas de la versión 1 con sus datos.
+  db.version(2).stores({ templates: 'id, kind' });
   const table = <T extends Entity>(name: string) => new DexieTableAdapter<T>(db.table(name));
   return {
     line,
@@ -127,6 +130,7 @@ export function openLineRepo(line: LineId, prefix = ''): LineRepo {
     users: table('users'),
     zones: table('zones'),
     settings: table('settings'),
+    templates: table('templates'),
     audit: new AuditAdapter(db.table('audit')),
     transaction: (fn) => runInTransaction(db, fn),
     clearAll: async () => {

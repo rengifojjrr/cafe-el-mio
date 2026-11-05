@@ -8,6 +8,7 @@ import { storeEarning } from '../domain/money-rules';
 import { fmtDate } from '../lib/time';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
 import { STORE_STATUS_LABEL, loadStoreForActor } from './stores';
+import { findActive } from './templates';
 
 export async function contractsForStore(ctx: Ctx, storeId: string): Promise<Contract[]> {
   const store = await loadStoreForActor(ctx, storeId);
@@ -94,11 +95,13 @@ export async function issueContract(ctx: Ctx, storeId: string): Promise<Contract
         await ctx.repo.contracts.put(c);
       }
     }
+    // Si administración dejó activa una plantilla PDF, el contrato se emite sobre ese PDF.
+    const pdfTemplate = await findActive(ctx, 'consignacion');
     const contract: Contract = {
       id: ctx.newId('ctr'),
       storeId,
       version,
-      templateVersion: settings.contractTemplateVersion,
+      templateVersion: pdfTemplate ? pdfTemplate.version : settings.contractTemplateVersion,
       status: 'enviado',
       body,
       annex,
@@ -106,6 +109,7 @@ export async function issueContract(ctx: Ctx, storeId: string): Promise<Contract
       createdAt: nowIso(ctx),
       createdBy: ctx.actor.userId,
       signatures: [],
+      templateId: pdfTemplate?.id,
     };
     await ctx.repo.contracts.put(contract);
     if (store.status === 'prospecto') {

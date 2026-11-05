@@ -89,7 +89,7 @@ function UsersInner() {
             Toca «Alta de vendedor» para dar de alta al primero, con su zona y su comisión.
           </EmptyState>
         ) : (
-          <ul className="grid gap-3 md:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {sellers.map((u) => (
               <Card key={u.id} as="li" className="p-4">
                 <div className="flex items-start gap-3">
@@ -194,7 +194,7 @@ function UsersInner() {
           ) : undefined
         }
       >
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {(zones.data ?? []).map((z) => {
             const count = sellers.filter((s) => s.zoneId === z.id).length;
             return (

@@ -124,3 +124,24 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
   legible («Lun–Sáb 9 a. m.–8 p. m. · Dom cerrado»). Un horario viejo escrito a mano se muestra como «Antes
   decía…» hasta que se elija uno nuevo.
 - **Lista de locales** con columnas fijas: el estado queda centrado y alineado en todas las filas.
+- **Contratos con plantilla PDF.** Administración sube su PDF (o crea uno desde el texto de Ajustes) y ubica
+  recuadros sobre las páginas: firma del local, firma del vendedor, nombre del local, encargado, vendedor, fecha,
+  dirección y, en la nota de entrega, el detalle. Las posiciones se guardan en fracciones de la página, así que no
+  dependen de la pantalla. Cada «Guardar plantilla» es una **versión nueva que no se edita**; el contrato y la nota
+  guardan el id de la versión con que se emitieron, por eso lo ya firmado no cambia. Un contrato que estaba por
+  firmar no pasa solo a la plantilla nueva: el vendedor toca «Preparar de nuevo» (no se crean versiones sin que
+  alguien lo pida). Las reglas de firma no cambian: dos firmas, consentimiento y ubicación opcional.
+- **El PDF firmado se arma al abrirlo** con pdf-lib, a partir de la plantilla (inmutable) y de las firmas
+  guardadas, y se le agrega el anexo de precios. No se guarda el PDF final ni su huella: para la demo basta, para
+  locales reales no (ver `PENDIENTES.md`). La nota de entrega usa la plantilla de entrega activa al recibir.
+- **«Contratos»** reúne lo firmado (contratos y notas de entrega) y lo que falta por firmar. Cada rol ve lo suyo:
+  administración todo, el vendedor lo de sus locales y el local lo propio («Mis contratos»). Las plantillas solo
+  las ve administración.
+- **pdf.js y pdf-lib se cargan al usarse**, no en la carga inicial. El motor de pdf.js que dibuja las páginas
+  (1,3 MB) no va en la precarga del service worker: se guarda la primera vez que se abre un PDF.
+- **Un PDF con páginas giradas se rechaza** al subirlo: se ve derecho en pantalla, pero sus coordenadas no, y las
+  firmas quedarían fuera de su recuadro. Se pide guardarlo derecho.
+- **Nada puede ser más ancho que el teléfono.** Si una pantalla se pasa del ancho, el navegador aleja la vista y
+  los toques caen fuera de los botones. Pasaba en el catálogo (la silueta ensanchaba la tarjeta), en los gráficos
+  (la tabla para lectores de pantalla) y en la lista de vendedores. Las listas en cuadrícula ahora tienen una
+  columna que no crece más que la pantalla, y una prueba en el teléfono recorre las pantallas principales.

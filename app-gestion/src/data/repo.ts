@@ -9,6 +9,7 @@ import type {
   Commission,
   CommissionPayout,
   Contract,
+  ContractTemplate,
   Delivery,
   DirectoryAccount,
   EcosystemSettings,
@@ -81,6 +82,8 @@ export interface LineRepo {
   readonly users: Table<User>;
   readonly zones: Table<Zone>;
   readonly settings: Table<LineSettings>;
+  /** Plantillas PDF de contrato y de nota de entrega (versiones inmutables). */
+  readonly templates: Table<ContractTemplate>;
   readonly audit: AppendOnlyLog<AuditEntry>;
   /** Todo o nada: si algo falla adentro, no queda nada a medias. */
   transaction<R>(fn: () => Promise<R>): Promise<R>;
@@ -129,6 +132,7 @@ export const LINE_TABLES = [
   'zones',
   'settings',
   'audit',
+  'templates',
 ] as const;
 
 export const CORE_TABLES = ['session', 'settings', 'directory'] as const;

@@ -2,7 +2,7 @@
 // entrega imprimible, pedidos de los locales y la pantalla «Pedir más» del local.
 import { CheckCircle2, ClipboardCheck, ClipboardList, MapPin, Printer, Send, ShoppingBag, Truck, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import type { Delivery, Reorder } from '../../data/types';
 import { fmtMoney } from '../../lib/money';
 import { fmtDate, fmtDateTime, fmtRelativeDays } from '../../lib/time';
@@ -10,7 +10,7 @@ import type { NewPhoto } from '../../lib/image';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { getPhoto, listProducts } from '../../services/catalog';
-import { REORDER_STATUS_LABEL, cancelReorder, confirmReorder, createReorder, listDeliveries, listReorders, recordVisit, type ReorderView } from '../../services/consignment';
+import { REORDER_STATUS_LABEL, cancelReorder, confirmReorder, createReorder, listDeliveries, listReorders, recordVisit, type DeliveryView, type ReorderView } from '../../services/consignment';
 import { getWarehouse } from '../../services/inventory';
 import { loadStoreForActor, storeConsignment } from '../../services/stores';
 import { Button, Card, EmptyState, ErrorBox, LinkButton, Loading, PageHeader, Pill, QtyStepper, Tabs, TextArea } from '../../ui/kit';
@@ -19,6 +19,7 @@ import { askLocation } from '../../ui/signature';
 import { useAction } from '../../ui/toast';
 import { RoleGate } from '../common';
 import { DeliveryCard, DeliveryEmpty } from './components';
+import { DeliveryPdfView } from '../contracts/pdf-viewer';
 
 // ---------- Visita con conteo ----------
 
@@ -146,7 +147,7 @@ export function DeliveriesPage() {
       {loading && !data ? <Loading rows={3} /> : null}
       {error ? <ErrorBox error={error} /> : null}
       {data && by(tab).length === 0 ? <DeliveryEmpty /> : null}
-      <ul className="grid gap-3 lg:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {by(tab)
           .slice(0, 60)
           .map((d) => (
@@ -161,75 +162,100 @@ export function DeliveriesPage() {
 
 export function DeliveryNotePrintPage() {
   const { id = '' } = useParams();
-  const { ctx, p, config } = useLine();
+  const { ctx, p, config, actor } = useLine();
+  const fromHub = (useLocation().state as { from?: string } | null)?.from === 'contratos';
   const list = useAsync(() => listDeliveries(ctx), [ctx]);
   const wh = useAsync(() => getWarehouse(ctx), [ctx]);
   const d = list.data?.find((x) => x.id === id);
   if (list.loading && !list.data) return <Loading rows={3} />;
   if (list.error) return <ErrorBox error={list.error} />;
   if (!d) return <EmptyState icon={Truck} title="No encontré esa entrega" />;
+  const back = fromHub || actor.role === 'store' ? { to: p('contratos'), label: actor.role === 'store' ? 'Mis contratos' : 'Contratos' } : { to: p('entregas'), label: 'Entregas' };
   return (
     <>
       <div className="no-print mb-4 flex flex-wrap justify-between gap-2">
-        <LinkButton to={p('entregas')} variant="ghost">
-          ‹ Entregas
+        <LinkButton to={back.to} variant="ghost">
+          ‹ {back.label}
         </LinkButton>
-        <Button variant="primary" icon={Printer} onClick={() => window.print()}>
-          Imprimir o guardar como PDF
-        </Button>
+        {d.templateId ? null : (
+          <Button variant="primary" icon={Printer} onClick={() => window.print()}>
+            Imprimir o guardar como PDF
+          </Button>
+        )}
       </div>
-      <article className="print-sheet mx-auto max-w-[70ch] rounded-[20px] bg-papel px-6 py-8 text-papel-tinta">
-        <h1 className="font-display text-3xl font-semibold">Nota de entrega {d.code}</h1>
-        <p className="mt-1 text-sm text-papel-suave">
-          {config.companyName} · desde {wh.data?.name ?? 'el almacén'} · mercancía en consignación: sigue siendo de la empresa hasta que se vende.
-        </p>
-        <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <dt className="text-papel-suave">Local</dt>
-            <dd className="font-semibold">{d.storeName}</dd>
-          </div>
-          <div>
-            <dt className="text-papel-suave">Vendedor</dt>
-            <dd className="font-semibold">{d.sellerName}</dd>
-          </div>
-          <div>
-            <dt className="text-papel-suave">Solicitada</dt>
-            <dd>{fmtDateTime(d.requestedAt)}</dd>
-          </div>
-          <div>
-            <dt className="text-papel-suave">Entregada</dt>
-            <dd>{d.deliveredAt ? fmtDateTime(d.deliveredAt) : '—'}</dd>
-          </div>
-        </dl>
-        <table className="mt-6 w-full text-sm">
-          <thead>
-            <tr className="border-b border-papel-linea text-left">
-              <th className="py-2">Producto</th>
-              <th className="py-2 text-right">Cantidad</th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.itemsView
-              .filter((i) => (i.preparedQty ?? i.qty) > 0)
-              .map((i) => (
-                <tr key={i.productId} className="border-b border-papel-linea">
-                  <td className="py-2">{i.name}</td>
-                  <td className="py-2 text-right tabular">{i.preparedQty ?? i.qty}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-        {d.receivedSignature ? (
-          <div className="mt-8">
-            <img src={d.receivedSignature.image} alt={`Firma de ${d.receivedSignature.name}`} className="h-16 w-auto" />
-            <p className="border-t border-papel-tinta pt-1.5 text-sm">
-              Recibió <b>{d.receivedSignature.name}</b> · {fmtDateTime(d.receivedSignature.signedAt)}
-            </p>
-          </div>
-        ) : null}
-        <p className="mt-8 text-xs text-papel-suave">Firma de demostración registrada en la aplicación.</p>
-      </article>
+      {d.templateId ? (
+        <DeliveryNotePdf d={d} />
+      ) : (
+        <article className="print-sheet mx-auto max-w-[70ch] rounded-[20px] bg-papel px-6 py-8 text-papel-tinta">
+          <h1 className="font-display text-3xl font-semibold">Nota de entrega {d.code}</h1>
+          <p className="mt-1 text-sm text-papel-suave">
+            {config.companyName} · desde {wh.data?.name ?? 'el almacén'} · mercancía en consignación: sigue siendo de la empresa hasta que se vende.
+          </p>
+          <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <dt className="text-papel-suave">Local</dt>
+              <dd className="font-semibold">{d.storeName}</dd>
+            </div>
+            <div>
+              <dt className="text-papel-suave">Vendedor</dt>
+              <dd className="font-semibold">{d.sellerName}</dd>
+            </div>
+            <div>
+              <dt className="text-papel-suave">Solicitada</dt>
+              <dd>{fmtDateTime(d.requestedAt)}</dd>
+            </div>
+            <div>
+              <dt className="text-papel-suave">Entregada</dt>
+              <dd>{d.deliveredAt ? fmtDateTime(d.deliveredAt) : '—'}</dd>
+            </div>
+          </dl>
+          <table className="mt-6 w-full text-sm">
+            <thead>
+              <tr className="border-b border-papel-linea text-left">
+                <th className="py-2">Producto</th>
+                <th className="py-2 text-right">Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.itemsView
+                .filter((i) => (i.preparedQty ?? i.qty) > 0)
+                .map((i) => (
+                  <tr key={i.productId} className="border-b border-papel-linea">
+                    <td className="py-2">{i.name}</td>
+                    <td className="py-2 text-right tabular">{i.preparedQty ?? i.qty}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          {d.receivedSignature ? (
+            <div className="mt-8">
+              <img src={d.receivedSignature.image} alt={`Firma de ${d.receivedSignature.name}`} className="h-16 w-auto" />
+              <p className="border-t border-papel-tinta pt-1.5 text-sm">
+                Recibió (dueño o encargado del local): <b>{d.receivedSignature.name}</b> · {fmtDateTime(d.receivedSignature.signedAt)}
+              </p>
+            </div>
+          ) : null}
+          <p className="mt-8 text-xs text-papel-suave">Firma de demostración registrada en la aplicación.</p>
+        </article>
+      )}
     </>
+  );
+}
+
+/** Nota de entrega sobre la plantilla PDF que estaba activa al recibir. */
+function DeliveryNotePdf({ d }: { d: DeliveryView }) {
+  const { ctx } = useLine();
+  const store = useAsync(() => loadStoreForActor(ctx, d.storeId), [ctx, d.storeId]);
+  if (store.error) return <ErrorBox error={store.error} />;
+  if (!store.data) return <Loading rows={3} />;
+  return (
+    <DeliveryPdfView
+      delivery={d}
+      storeName={d.storeName}
+      sellerName={d.sellerName}
+      address={`${store.data.address}, ${store.data.city}`}
+      lines={d.itemsView.filter((i) => (i.preparedQty ?? i.qty) > 0).map((i) => ({ name: i.name, qty: i.preparedQty ?? i.qty }))}
+    />
   );
 }
 
@@ -284,7 +310,7 @@ export function OrdersPage() {
           {actor.role === 'store' && tab === 'curso' ? 'Toca «Pedir más producto» y le llega el aviso a tu vendedor.' : undefined}
         </EmptyState>
       ) : null}
-      <ul className="grid gap-3 lg:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {groups[tab].slice(0, 60).map((r) => (
           <li key={r.id}>
             <OrderCard r={r} />

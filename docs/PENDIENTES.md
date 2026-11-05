@@ -27,10 +27,15 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
   tabaco a comercios en Florida, los impuestos que aplican y si la consignación de productos de tabaco tiene alguna
   restricción. La app solo exige el permiso del local y la regla de 21+.
 - Política de firma electrónica (hoy: firma de demostración con consentimiento escrito en el contrato).
+- **Firma con valor legal.** Hoy la imagen del trazo se pega en el PDF: no hay certificado, ni sello de tiempo, ni
+  prueba de que el PDF no se cambió después. Para locales reales hace falta un servicio de firma (por ejemplo
+  Dropbox Sign o DocuSign) o, como mínimo, guardar en el servidor el PDF firmado con su huella (hash).
 
 ## Producto
 
 - **Pasar a servidor (Supabase)** para que varios usuarios compartan datos en tiempo real (plan en `SUPABASE.md`).
+  Sin servidor, el contrato que se firma en el teléfono del vendedor no lo ven ni administración ni el local en
+  sus teléfonos.
   Hoy cada navegador tiene su copia; exportar/importar JSON sirve para llevar la demo a otro teléfono.
 - Lista real de vendedores, zonas y locales; fotos reales de los tabacos.
 - Dominio propio (hoy GitHub Pages).
@@ -41,3 +46,6 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
   compilación publicada es la misma que pasó todas las pruebas contra `vite preview`.
 - Que las teselas del mapa (CARTO) carguen bien con datos móviles; si fallan, la app cambia sola a OpenStreetMap.
 - La búsqueda de direcciones (Nominatim) en el teléfono; si no encuentra, se toca el mapa.
+- Subir un PDF desde el teléfono (Archivos, Drive o iCloud) y ubicar las firmas con el dedo.
+- Ver un contrato en PDF sin conexión: hace falta haber abierto uno antes con conexión (el motor de pdf.js se
+  descarga la primera vez).

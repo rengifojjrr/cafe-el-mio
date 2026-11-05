@@ -208,6 +208,46 @@ export interface Contract extends Entity {
   createdBy: string;
   signedAt?: IsoDateTime;
   signatures: Signature[];
+  /** Plantilla PDF con la que se emitió (si no hay, es el texto de Ajustes). */
+  templateId?: string;
+}
+
+// ---------- Plantillas PDF de documentos ----------
+export type TemplateKind = 'consignacion' | 'entrega';
+
+export type TemplateFieldType =
+  | 'firma_local'
+  | 'firma_vendedor'
+  | 'nombre_local'
+  | 'encargado'
+  | 'vendedor'
+  | 'fecha'
+  | 'direccion_local'
+  | 'detalle_entrega';
+
+/** Un recuadro sobre una página del PDF. x, y, w, h son fracciones (0 a 1) de la página, origen arriba a la izquierda. */
+export interface TemplateField {
+  id: string;
+  type: TemplateFieldType;
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Plantilla PDF: no se edita nunca; guardar crea una versión nueva y la deja activa. */
+export interface ContractTemplate extends Entity {
+  kind: TemplateKind;
+  name: string;
+  pdf: Blob;
+  /** Tamaño de cada página en puntos PDF. */
+  pageSizes: { w: number; h: number }[];
+  fields: TemplateField[];
+  version: number;
+  active: boolean;
+  createdAt: IsoDateTime;
+  createdBy: string;
 }
 
 // ---------- Entregas en consignación ----------
@@ -236,6 +276,8 @@ export interface Delivery extends Entity {
   deliveredAt?: IsoDateTime;
   receivedSignature?: Signature;
   rejectedReason?: string;
+  /** Plantilla PDF de nota de entrega activa cuando se recibió (si había). */
+  templateId?: string;
 }
 
 // ---------- Visitas, ventas, devoluciones ----------

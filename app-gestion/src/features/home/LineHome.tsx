@@ -147,7 +147,7 @@ function AdminHome() {
         {todo.length === 0 ? (
           <p className="text-muted">Nada pendiente. Todo al día.</p>
         ) : (
-          <ul className="grid gap-2 md:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {todo.slice(0, 12).map((t, i) => (
               <li key={i}>
                 <Link to={t.to} className="glass flex min-h-14 items-center gap-3 px-4 py-3 hover:border-line-strong">
@@ -424,7 +424,7 @@ function StoreHome() {
         {lines.data && lines.data.length === 0 ? (
           <EmptyState icon={Package} title="Todavía no tienes producto en consignación" action={<LinkButton to={p('pedir')} variant="primary" icon={ShoppingBag}>Pedir producto</LinkButton>} />
         ) : null}
-        <ul className="grid gap-2 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {(lines.data ?? []).map((l) => (
             <li key={l.productId} className="glass flex items-center justify-between gap-3 p-4">
               <div className="min-w-0">

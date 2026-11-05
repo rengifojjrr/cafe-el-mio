@@ -1,6 +1,6 @@
 // Lo común del ecosistema (eco-core): la sesión, «Entrar como…», el nombre del ecosistema,
 // restablecer la demo y exportar o importar su estado.
-import type { DirectoryAccount, EcosystemSettings, LineId, Photo, SessionState, User } from '../data/types';
+import type { ContractTemplate, DirectoryAccount, EcosystemSettings, LineId, Photo, SessionState, User } from '../data/types';
 import { LINES } from '../data/types';
 import { getCoreRepo, getDbPrefix, getLineRepo } from '../data';
 import type { Actor } from '../domain/permissions';
@@ -256,6 +256,10 @@ export async function exportState(): Promise<string> {
     dump.photos = await Promise.all(
       (dump.photos as Photo[]).map(async (p) => ({ ...p, blob: await blobToDataUrl(p.blob) })),
     );
+    // Las plantillas PDF también llevan su archivo (Blob): viajan como data URL.
+    dump.templates = await Promise.all(
+      ((dump.templates ?? []) as ContractTemplate[]).map(async (t) => ({ ...t, pdf: await blobToDataUrl(t.pdf) })),
+    );
     lines[line] = dump;
   }
   return JSON.stringify({ app: EXPORT_APP, version: EXPORT_VERSION, exportedAt: new Date().toISOString(), core, lines });
@@ -292,6 +296,7 @@ export async function importState(json: string): Promise<void> {
   for (const line of LINES) {
     const tables = { ...data.lines[line] };
     tables.photos = (tables.photos ?? []).map((p) => ({ ...p, blob: dataUrlToBlob(String(p.blob)) }));
+    tables.templates = (tables.templates ?? []).map((t) => ({ ...t, pdf: dataUrlToBlob(String(t.pdf)) }));
     await getLineRepo(line).load(tables);
   }
   await getCoreRepo().load({ ...data.core, session: [{ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null }] });

@@ -22,6 +22,7 @@ import { round2 } from '../lib/money';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
 import { type InventorySnapshot, loadInventory } from './inventory';
 import { STORE_STATUS_LABEL, applyStoreStatus, scopedStores } from './stores';
+import { findActive } from './templates';
 
 const itemsSchema = z
   .array(
@@ -281,6 +282,8 @@ export async function receiveDelivery(ctx: Ctx, deliveryId: string, signature: z
     d.status = 'entregada';
     d.deliveredAt = at;
     d.receivedSignature = received;
+    // La nota de entrega se arma sobre la plantilla PDF activa, si administración dejó una.
+    d.templateId = (await findActive(ctx, 'entrega'))?.id;
     await ctx.repo.deliveries.put(d);
     if (d.reorderId) await setReorderStatus(ctx, d.reorderId, 'entregado');
     const units = d.items.reduce((s, i) => s + (i.preparedQty ?? 0), 0);

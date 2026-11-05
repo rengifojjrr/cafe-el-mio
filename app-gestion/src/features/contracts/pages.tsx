@@ -2,15 +2,17 @@
 // (encargado del local y vendedor como representante de la empresa) y se imprime o guarda en PDF.
 import { FileSignature, MapPin, Printer, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import type { Contract, Signature } from '../../data/types';
 import { CONTRACT_DISCLAIMER, parseContract } from '../../domain/contract';
 import { fmtDate, fmtDateTime } from '../../lib/time';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { getContract, issueContract, signContract } from '../../services/contracts';
+import { getActiveTemplate } from '../../services/templates';
 import { Button, Card, ErrorBox, LinkButton, Loading, PageHeader, Pill, TextInput } from '../../ui/kit';
 import { SignatureField, askLocation } from '../../ui/signature';
+import { ContractPdfView } from './pdf-viewer';
 import { useAction } from '../../ui/toast';
 
 function ContractDocument({ contract }: { contract: Contract }) {
@@ -62,7 +64,11 @@ export function ContractPage() {
   const { ctx, actor, p } = useLine();
   const nav = useNavigate();
   const { run, busy } = useAction();
+  const fromHub = (useLocation().state as { from?: string } | null)?.from === 'contratos';
   const { data, error, loading } = useAsync(() => getContract(ctx, id), [ctx, id]);
+  const pending = data?.contract.status === 'enviado';
+  // Si administración activó otra plantilla después de preparar este contrato, se avisa.
+  const active = useAsync(async () => (pending ? getActiveTemplate(ctx, 'consignacion') : null), [ctx, pending]);
   if (loading && !data) return <Loading rows={5} />;
   if (error) return <ErrorBox error={error} />;
   if (!data) return null;
@@ -72,15 +78,22 @@ export function ContractPage() {
   return (
     <>
       <PageHeader
-        back={{ to: actor.role === 'store' ? p() : p(`locales/${store.id}`), label: actor.role === 'store' ? 'Mi tienda' : store.name }}
+        back={
+          fromHub
+            ? { to: p('contratos'), label: actor.role === 'store' ? 'Mis contratos' : 'Contratos' }
+            : { to: actor.role === 'store' ? p() : p(`locales/${store.id}`), label: actor.role === 'store' ? 'Mi tienda' : store.name }
+        }
         title="Contrato de consignación"
         subtitle={`${store.name} · versión ${contract.version}`}
         actions={
           <>
-            <LinkButton to={p(`contratos/${contract.id}/imprimir`)} icon={Printer}>
-              Imprimible / PDF
-            </LinkButton>
-            {canReissue && contract.status !== 'enviado' ? (
+            {/* Con plantilla PDF, el visor ya tiene «Descargar PDF»: no hace falta la versión imprimible. */}
+            {contract.templateId ? null : (
+              <LinkButton to={p(`contratos/${contract.id}/imprimir`)} icon={Printer}>
+                Imprimible / PDF
+              </LinkButton>
+            )}
+            {canReissue && contract.status !== 'anulado' ? (
               <Button
                 variant="ghost"
                 icon={RefreshCw}
@@ -92,7 +105,7 @@ export function ContractPage() {
                   }, 'Nueva versión lista para firmar.')
                 }
               >
-                Nueva versión
+                {contract.status === 'enviado' ? 'Preparar de nuevo' : 'Nueva versión'}
               </Button>
             ) : null}
           </>
@@ -102,9 +115,19 @@ export function ContractPage() {
         <Pill tone={contract.status === 'firmado' ? 'ok' : contract.status === 'anulado' ? 'danger' : 'warn'} dot>
           {contract.status === 'firmado' ? `Firmado el ${fmtDate(contract.signedAt!)}` : contract.status === 'anulado' ? 'Anulado (hay una versión más nueva)' : 'Por firmar'}
         </Pill>
-        <span className="pill pill-warn">{CONTRACT_DISCLAIMER}</span>
+        {/* Texto largo: en un teléfono tiene que poder partirse en varias líneas (una «pill» no se parte). */}
+        <span className="rounded-xl bg-warn-soft px-3 py-1.5 text-sm font-semibold text-ink">{CONTRACT_DISCLAIMER}</span>
       </div>
-      <ContractDocument contract={contract} />
+      {canReissue && contract.status === 'enviado' && active.data && active.data.id !== contract.templateId ? (
+        <p className="mb-4 rounded-xl bg-accent-soft px-3 py-2 text-sm text-ink">
+          Hay una plantilla de contrato más nueva: «{active.data.name}» (versión {active.data.version}). Toca «Preparar de nuevo» para que este contrato la use.
+        </p>
+      ) : null}
+      {contract.templateId ? (
+        <ContractPdfView contract={contract} store={store} sellerName={seller?.name ?? ''} />
+      ) : (
+        <ContractDocument contract={contract} />
+      )}
       {canSign ? <SignForm contract={contract} managerName={store.managerName} sellerName={seller?.name ?? ''} /> : null}
     </>
   );
@@ -183,11 +206,20 @@ export function ContractPrintPage() {
         <LinkButton to={p(`contratos/${data.contract.id}`)} variant="ghost">
           ‹ Volver al contrato
         </LinkButton>
-        <Button variant="primary" icon={Printer} onClick={() => window.print()}>
-          Imprimir o guardar como PDF
-        </Button>
+        {data.contract.templateId ? null : (
+          <Button variant="primary" icon={Printer} onClick={() => window.print()}>
+            Imprimir o guardar como PDF
+          </Button>
+        )}
       </div>
-      <ContractDocument contract={data.contract} />
+      {data.contract.templateId ? (
+        <>
+          <p className="no-print mb-3 rounded-xl bg-warn-soft px-3 py-2 text-sm font-semibold text-ink">{CONTRACT_DISCLAIMER}</p>
+          <ContractPdfView contract={data.contract} store={data.store} sellerName={data.seller?.name ?? ''} />
+        </>
+      ) : (
+        <ContractDocument contract={data.contract} />
+      )}
     </>
   );
 }
