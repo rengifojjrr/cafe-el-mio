@@ -27,11 +27,13 @@ export async function listThreads(ctx: Ctx): Promise<ThreadView[]> {
     .map((t) => {
       const msgs = messages.filter((m) => m.threadId === t.id).sort((a, b) => a.at.localeCompare(b.at));
       const lastRead = t.readBy[ctx.actor.userId] ?? '';
+      // Solo cuenta como «sin leer» para quien participa: administración ve todos los hilos, pero no los suyos.
+      const participates = t.participantIds.includes(ctx.actor.userId);
       const others = t.participantIds.filter((id) => id !== ctx.actor.userId).map((id) => usersById.get(id));
       return {
         ...t,
         lastMessage: msgs[msgs.length - 1],
-        unread: msgs.filter((m) => m.authorId !== ctx.actor.userId && m.at > lastRead).length,
+        unread: participates ? msgs.filter((m) => m.authorId !== ctx.actor.userId && m.at > lastRead).length : 0,
         otherNames: others
           .filter((u): u is User => Boolean(u))
           .map((u) => u.name)
@@ -178,6 +180,10 @@ export async function openThread(ctx: Ctx, target: { kind: 'admin' } | { kind: '
 
 /** ¿Puede el local escribirle a administración? Solo si su vendedor no contestó en 24 h. */
 export async function escalationStatus(ctx: Ctx, storeId: string): Promise<{ allowed: boolean; reason: string; waitingSince?: string }> {
+  ensureOwnLine(ctx);
+  const own = await ctx.repo.stores.get(storeId);
+  if (!own) throw new NotFoundError('el local');
+  guard(ctx, 'store.read', { type: 'store', store: own });
   const threads = (await ctx.repo.threads.all()).filter((t) => t.storeId === storeId);
   const direct = threads.find((t) => t.kind === 'local_admin');
   if (direct) return { allowed: true, reason: 'Ya tienes conversación con administración.' };
@@ -234,17 +240,25 @@ export async function createAnnouncement(ctx: Ctx, input: z.input<typeof announc
 
 // ---------- Avisos (campana) ----------
 
+/** La campana es de la cuenta y de su línea: una cuenta de otra línea no lee nada aquí. */
+function ensureOwnLine(ctx: Ctx): void {
+  if (ctx.actor.line !== ctx.line) throw new ForbiddenError('Esta cuenta es de la otra línea: las cuentas de Tabaco y de Café no se cruzan.');
+}
+
 export async function listNotifications(ctx: Ctx): Promise<AppNotification[]> {
+  ensureOwnLine(ctx);
   const list = await ctx.repo.notifications.where('userId', ctx.actor.userId);
   return list.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 60);
 }
 
 export async function unreadNotifications(ctx: Ctx): Promise<number> {
+  ensureOwnLine(ctx);
   const list = await ctx.repo.notifications.where('userId', ctx.actor.userId);
   return list.filter((n) => !n.read).length;
 }
 
 export async function markNotificationsRead(ctx: Ctx, ids?: string[]): Promise<void> {
+  ensureOwnLine(ctx);
   if (ctx.actor.readOnly) return;
   await mutate(ctx, async () => {
     const list = await ctx.repo.notifications.where('userId', ctx.actor.userId);

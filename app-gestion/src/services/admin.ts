@@ -12,8 +12,14 @@ export async function listUsers(ctx: Ctx): Promise<User[]> {
 }
 
 const ruleSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('percent'), value: z.number().min(0).max(50) }),
-  z.object({ type: z.literal('fixed'), value: z.number().min(0) }),
+  z.object({
+    type: z.literal('percent'),
+    value: z.number({ error: 'Escribe el porcentaje de la comisión.' }).min(0, 'La comisión no puede ser negativa.').max(50, 'La comisión no puede pasar del 50 %.'),
+  }),
+  z.object({
+    type: z.literal('fixed'),
+    value: z.number({ error: 'Escribe el monto de la comisión por unidad.' }).min(0, 'La comisión no puede ser negativa.'),
+  }),
 ]);
 
 const userSchema = z.object({
@@ -21,7 +27,7 @@ const userSchema = z.object({
   role: z.enum(['admin', 'seller']),
   name: z.string().trim().min(3, 'Escribe el nombre completo.'),
   email: z.union([z.literal(''), z.string().trim().email('Escribe un correo válido.')]),
-  phone: z.string().trim().max(20).default(''),
+  phone: z.string().trim().max(20, 'El teléfono es demasiado largo.').default(''),
   zoneId: z.string().optional(),
   commissionOverride: ruleSchema.optional(),
   active: z.boolean().default(true),
@@ -67,8 +73,8 @@ export async function setUserActive(ctx: Ctx, userId: string, active: boolean): 
 const zoneSchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(2, 'Escribe el nombre de la zona.'),
-  lat: z.number(),
-  lng: z.number(),
+  lat: z.number({ error: 'Toca el mapa o escribe la latitud.' }).min(24, 'El punto queda fuera del sur de Florida.').max(27.5, 'El punto queda fuera del sur de Florida.'),
+  lng: z.number({ error: 'Toca el mapa o escribe la longitud.' }).min(-82.5, 'El punto queda fuera del sur de Florida.').max(-79.5, 'El punto queda fuera del sur de Florida.'),
 });
 
 export async function saveZone(ctx: Ctx, input: z.input<typeof zoneSchema>): Promise<Zone> {
@@ -88,16 +94,43 @@ export async function readSettings(ctx: Ctx): Promise<LineSettings> {
 }
 
 const settingsSchema = z.object({
-  companyName: z.string().trim().min(3),
-  settlementEveryDays: z.number().int().min(7, 'Mínimo cada 7 días.').max(60, 'Máximo cada 60 días.'),
-  paymentTermsDays: z.number().int().min(0).max(60),
+  companyName: z.string().trim().min(3, 'Escribe la razón social de la empresa.'),
+  settlementEveryDays: z
+    .number({ error: 'Escribe cada cuántos días se liquida.' })
+    .int('Los días son un número entero.')
+    .min(7, 'Mínimo cada 7 días.')
+    .max(60, 'Máximo cada 60 días.'),
+  paymentTermsDays: z
+    .number({ error: 'Escribe los días para pagar.' })
+    .int('Los días son un número entero.')
+    .min(0, 'Los días para pagar no pueden ser negativos.')
+    .max(60, 'Máximo 60 días para pagar.'),
   commissionPayableOn: z.enum(['venta', 'cobro']),
   defaultSellerCommission: ruleSchema,
-  defaultLowStock: z.number().int().min(0),
-  expiryWarningDays: z.number().int().min(1).max(180),
-  noRotationDays: z.number().int().min(7).max(120),
-  contractTermMonths: z.number().int().min(1).max(60),
-  terminationNoticeDays: z.number().int().min(0).max(120),
+  defaultLowStock: z
+    .number({ error: 'Escribe el stock bajo por defecto.' })
+    .int('El stock bajo es un número entero.')
+    .min(0, 'El stock bajo no puede ser negativo.'),
+  expiryWarningDays: z
+    .number({ error: 'Escribe con cuántos días se avisa el vencimiento.' })
+    .int('Los días son un número entero.')
+    .min(1, 'Mínimo 1 día.')
+    .max(180, 'Máximo 180 días.'),
+  noRotationDays: z
+    .number({ error: 'Escribe los días sin ventas para «no rota».' })
+    .int('Los días son un número entero.')
+    .min(7, 'Mínimo 7 días.')
+    .max(120, 'Máximo 120 días.'),
+  contractTermMonths: z
+    .number({ error: 'Escribe la vigencia del contrato.' })
+    .int('Los meses son un número entero.')
+    .min(1, 'Mínimo 1 mes.')
+    .max(60, 'Máximo 60 meses.'),
+  terminationNoticeDays: z
+    .number({ error: 'Escribe los días de aviso para terminar.' })
+    .int('Los días son un número entero.')
+    .min(0, 'Los días de aviso no pueden ser negativos.')
+    .max(120, 'Máximo 120 días.'),
   contractTemplate: z.string().min(100, 'La plantilla es demasiado corta.'),
 });
 
