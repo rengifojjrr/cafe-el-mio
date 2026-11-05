@@ -589,7 +589,7 @@ function ProductForm({ initial }: { initial?: Product }) {
           </Card>
         </div>
       </div>
-      <div className="sticky bottom-[76px] z-20 mt-5 flex justify-end gap-2 lg:bottom-4">
+      <div className="sticky bottom-[76px] z-20 mt-5 flex justify-end gap-2 lg:bottom-4 lg:justify-start">
         <Button type="submit" variant="primary" big icon={Save} busy={busy} disabled={actor.readOnly}>
           {initial ? 'Guardar cambios' : 'Crear producto'}
         </Button>

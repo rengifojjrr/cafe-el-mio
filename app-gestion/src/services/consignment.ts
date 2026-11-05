@@ -17,6 +17,7 @@ import type {
 import { assertCanConsign, consignmentCheck } from '../domain/compliance';
 import { WAREHOUSE, allocate, storeLoc } from '../domain/ledger';
 import { commissionAmount, effectiveRule } from '../domain/money-rules';
+import type { NewPhoto } from '../lib/image';
 import { round2 } from '../lib/money';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
 import { type InventorySnapshot, loadInventory } from './inventory';
@@ -97,35 +98,45 @@ export async function requestDelivery(
   opts?: { origin?: Delivery['origin']; reorderId?: string },
 ): Promise<Delivery> {
   const items = itemsSchema.parse(input.items);
-  return mutate(ctx, async () => {
-    const store = await storeOrThrow(ctx, input.storeId);
-    guard(ctx, 'delivery.request', { type: 'store', store });
-    assertCanConsign(ctx.line, store, ctx.now());
-    const products = await ctx.repo.products.all();
-    for (const it of items) {
-      const p = products.find((x) => x.id === it.productId);
-      if (!p || !p.active) throw new ValidationError('Uno de los productos no está activo en el catálogo.');
-    }
-    const at = nowIso(ctx);
-    const delivery: Delivery = {
-      id: ctx.newId('ent'),
-      code: await nextCode('E', ctx.repo.deliveries.count()),
-      storeId: store.id,
-      sellerId: store.sellerId,
-      status: 'solicitada',
-      items,
-      note: input.note?.trim() ?? '',
-      origin: opts?.origin ?? (ctx.actor.role === 'admin' ? 'administracion' : 'vendedor'),
-      reorderId: opts?.reorderId,
-      requestedAt: at,
-      requestedBy: ctx.actor.userId,
-    };
-    await ctx.repo.deliveries.put(delivery);
-    const units = items.reduce((s, i) => s + i.qty, 0);
-    await audit(ctx, 'entrega.solicitar', 'delivery', delivery.id, `${delivery.code}: ${units} unidades para ${store.name}`);
-    await notify(ctx, 'admins', 'entrega_solicitada', `Entrega por preparar: ${store.name}`, `${delivery.code} · ${units} unidades.`, `/${ctx.line}/entregas`);
-    return delivery;
-  });
+  return mutate(ctx, async () => await writeDeliveryRequest(ctx, { ...input, items }, opts));
+}
+
+/**
+ * Crea la entrega «solicitada». Escribe dentro de la transacción de quien la llama: nunca abre
+ * otra (IndexedDB cierra una transacción anidada antes de tiempo).
+ */
+async function writeDeliveryRequest(
+  ctx: Ctx,
+  input: { storeId: string; items: { productId: string; qty: number }[]; note?: string },
+  opts?: { origin?: Delivery['origin']; reorderId?: string },
+): Promise<Delivery> {
+  const store = await storeOrThrow(ctx, input.storeId);
+  guard(ctx, 'delivery.request', { type: 'store', store });
+  assertCanConsign(ctx.line, store, ctx.now());
+  const products = await ctx.repo.products.all();
+  for (const it of input.items) {
+    const p = products.find((x) => x.id === it.productId);
+    if (!p || !p.active) throw new ValidationError('Uno de los productos no está activo en el catálogo.');
+  }
+  const at = nowIso(ctx);
+  const delivery: Delivery = {
+    id: ctx.newId('ent'),
+    code: await nextCode('E', ctx.repo.deliveries.count()),
+    storeId: store.id,
+    sellerId: store.sellerId,
+    status: 'solicitada',
+    items: input.items,
+    note: input.note?.trim() ?? '',
+    origin: opts?.origin ?? (ctx.actor.role === 'admin' ? 'administracion' : 'vendedor'),
+    reorderId: opts?.reorderId,
+    requestedAt: at,
+    requestedBy: ctx.actor.userId,
+  };
+  await ctx.repo.deliveries.put(delivery);
+  const units = input.items.reduce((s, i) => s + i.qty, 0);
+  await audit(ctx, 'entrega.solicitar', 'delivery', delivery.id, `${delivery.code}: ${units} unidades para ${store.name}`);
+  await notify(ctx, 'admins', 'entrega_solicitada', `Entrega por preparar: ${store.name}`, `${delivery.code} · ${units} unidades.`, `/${ctx.line}/entregas`);
+  return delivery;
 }
 
 /**
@@ -359,6 +370,7 @@ async function createSalesReport(
 }
 
 const countSchema = z.object({
+  photo: z.custom<NewPhoto>().optional(),
   storeId: z.string().min(1),
   counts: z.array(z.object({ productId: z.string().min(1), counted: z.number().int('El conteo es un número entero.').min(0, 'El conteo no puede ser negativo.') })),
   notes: z.string().trim().max(500).default(''),
@@ -389,8 +401,15 @@ export async function recordVisit(ctx: Ctx, input: z.input<typeof countSchema>):
     }
     let report: SalesReport | undefined;
     if (sold.length) report = await createSalesReport(ctx, snap, store, sold, 'conteo', at);
+    const visitId = ctx.newId('vis');
+    const visitPhotos: string[] = [];
+    if (data.photo) {
+      const photoId = ctx.newId('pho');
+      await ctx.repo.photos.put({ ...data.photo, id: photoId, ownerType: 'visit', ownerId: visitId, createdAt: at });
+      visitPhotos.push(photoId);
+    }
     const visit: Visit = {
-      id: ctx.newId('vis'),
+      id: visitId,
       storeId: store.id,
       sellerId: store.sellerId,
       at,
@@ -398,7 +417,7 @@ export async function recordVisit(ctx: Ctx, input: z.input<typeof countSchema>):
       notes: data.notes,
       counts,
       salesReportId: report?.id,
-      photoIds: [],
+      photoIds: visitPhotos,
     };
     await ctx.repo.visits.put(visit);
     const units = sold.reduce((s, x) => s + x.qty, 0);
@@ -430,6 +449,7 @@ const returnSchema = z.object({
   items: itemsSchema,
   reason: z.string().trim().min(3, 'Escribe el motivo.'),
   photoIds: z.array(z.string()).default([]),
+  photo: z.custom<NewPhoto>().optional(),
 });
 
 /** Devolución (del local al almacén, por lote) o merma en el local (daño, vencido…). */
@@ -466,6 +486,12 @@ export async function recordReturn(ctx: Ctx, input: z.input<typeof returnSchema>
         snap.balances.apply(mv);
       }
     }
+    const photoIds = [...data.photoIds];
+    if (data.photo) {
+      const photoId = ctx.newId('pho');
+      await ctx.repo.photos.put({ ...data.photo, id: photoId, ownerType: 'return', ownerId: id, createdAt: at });
+      photoIds.push(photoId);
+    }
     const rec: ReturnRecord = {
       id,
       storeId: store.id,
@@ -473,7 +499,7 @@ export async function recordReturn(ctx: Ctx, input: z.input<typeof returnSchema>
       at,
       items: data.items,
       reason: data.reason,
-      photoIds: data.photoIds,
+      photoIds,
       createdBy: ctx.actor.userId,
       cost: round2(cost),
     };
@@ -585,7 +611,7 @@ export async function confirmReorder(ctx: Ctx, reorderId: string): Promise<Deliv
   guard(ctx, 'reorder.confirm', { type: 'store', store });
   if (r.status !== 'enviado') throw new ValidationError(`El pedido ${r.code} ya está «${REORDER_STATUS_LABEL[r.status]}».`);
   return mutate(ctx, async () => {
-    const delivery = await requestDelivery(ctx, { storeId: r.storeId, items: r.items, note: `Pedido del local ${r.code}${r.note ? `: ${r.note}` : ''}` }, { origin: 'pedido_local', reorderId: r.id });
+    const delivery = await writeDeliveryRequest(ctx, { storeId: r.storeId, items: r.items, note: `Pedido del local ${r.code}${r.note ? `: ${r.note}` : ''}` }, { origin: 'pedido_local', reorderId: r.id });
     const fresh = await ctx.repo.reorders.get(reorderId);
     if (!fresh) throw new NotFoundError('el pedido');
     fresh.status = 'confirmado';

@@ -50,7 +50,8 @@ function iconFor(m: MapMarker): L.DivIcon {
     return L.divIcon({ className: 'mk-wrap', html: `<span class="mk mk-warehouse" title="${escapeHtml(m.title)}">${WAREHOUSE_SVG}</span>`, iconSize: [38, 38], iconAnchor: [19, 19] });
   }
   if (m.kind === 'seller') {
-    return L.divIcon({ className: 'mk-wrap', html: `<span class="mk mk-seller" title="${escapeHtml(m.title)}">${escapeHtml(m.label ?? '')}</span>`, iconSize: [34, 34], iconAnchor: [17, 17] });
+    // El vendedor se dibuja arriba a la derecha de su punto, para no tapar el local de su última visita.
+    return L.divIcon({ className: 'mk-wrap', html: `<span class="mk mk-seller" title="${escapeHtml(m.title)}">${escapeHtml(m.label ?? '')}</span>`, iconSize: [34, 34], iconAnchor: [-4, 38] });
   }
   const size = Math.round(16 + (m.weight ?? 0) * 18);
   const cls = ['mk', 'mk-store', `mk-${m.status ?? 'activo'}`, m.pulse ? 'mk-pulse' : '', m.selected ? 'mk-selected' : ''].join(' ');
@@ -82,6 +83,8 @@ export default function MapView({ markers, route, onMarkerClick, pick, center, z
   useEffect(() => {
     if (!el.current || map.current) return;
     const m = L.map(el.current, { zoomControl: true, attributionControl: true, center: center ?? [25.79, -80.27], zoom, scrollWheelZoom: true });
+    // En desarrollo (StrictMode) el mapa se crea dos veces: el nuevo tiene que volver a encuadrar.
+    fitted.current = undefined;
     const light = document.documentElement.dataset.theme === 'light';
     const carto = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${light ? 'light_all' : 'dark_all'}/{z}/{x}/{y}{r}.png`, {
       attribution: CARTO_ATTR,
@@ -123,7 +126,7 @@ export default function MapView({ markers, route, onMarkerClick, pick, center, z
     if (!m || !g) return;
     g.clearLayers();
     for (const mk of markers) {
-      const marker = L.marker([mk.lat, mk.lng], { icon: iconFor(mk), title: mk.title, keyboard: true, riseOnHover: true, zIndexOffset: mk.kind === 'warehouse' ? 500 : mk.selected ? 1000 : 0 });
+      const marker = L.marker([mk.lat, mk.lng], { icon: iconFor(mk), title: mk.title, keyboard: true, riseOnHover: true, zIndexOffset: mk.kind === 'warehouse' ? 500 : mk.selected ? 1000 : mk.kind === 'seller' ? -100 : 0 });
       marker.on('click', () => onClickRef.current?.(mk.id));
       marker.on('keypress', (e: L.LeafletKeyboardEvent) => {
         if (e.originalEvent.key === 'Enter') onClickRef.current?.(mk.id);

@@ -506,7 +506,7 @@
 .mapa {
   background: var(--surface-2);
 }
-.mapa .leaflet-container {
+.mapa.leaflet-container {
   font-family: var(--font-sans);
   background: var(--surface-2);
 }

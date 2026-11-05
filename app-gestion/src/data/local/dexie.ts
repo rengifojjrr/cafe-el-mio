@@ -82,6 +82,16 @@ class AuditAdapter implements AppendOnlyLog<AuditEntry> {
   }
 }
 
+/**
+ * Todo o nada. Si ya hay una transacción abierta (un servicio que usa a otro), se reutiliza:
+ * IndexedDB cierra antes de tiempo una transacción anidada. La función se envuelve en un
+ * `async` para que Dexie mantenga viva la transacción a través de cada `await`.
+ */
+function runInTransaction<R>(db: Dexie, fn: () => Promise<R>): Promise<R> {
+  if (Dexie.currentTransaction) return fn();
+  return db.transaction('rw', db.tables, async () => await fn());
+}
+
 export function lineDbName(line: LineId, prefix = ''): string {
   return `${prefix}eco-${line}`;
 }
@@ -118,7 +128,7 @@ export function openLineRepo(line: LineId, prefix = ''): LineRepo {
     zones: table('zones'),
     settings: table('settings'),
     audit: new AuditAdapter(db.table('audit')),
-    transaction: (fn) => db.transaction('rw', db.tables, fn),
+    transaction: (fn) => runInTransaction(db, fn),
     clearAll: async () => {
       await db.transaction('rw', db.tables, async () => {
         await Promise.all(db.tables.map((t) => t.clear()));
@@ -149,7 +159,7 @@ export function openCoreRepo(prefix = ''): CoreRepo {
     session: table('session'),
     settings: table('settings'),
     directory: table('directory'),
-    transaction: (fn) => db.transaction('rw', db.tables, fn),
+    transaction: (fn) => runInTransaction(db, fn),
     clearAll: async () => {
       await db.transaction('rw', db.tables, async () => {
         await Promise.all(db.tables.map((t) => t.clear()));

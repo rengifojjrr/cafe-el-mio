@@ -161,13 +161,14 @@ export async function resolveActor(line: LineId): Promise<{ actor: Actor; accoun
   if (!acc) return null;
   if (acc.role === 'direccion') {
     if (s.directorLine !== line) return null;
-    const admins = await getLineRepo(line).users.where('role', 'admin');
+    // Dirección mira como Administración, pero con su propia identidad: no hereda la campana
+    // ni los mensajes de ninguna persona de administración.
     const asAdmin: DirectoryAccount = {
       id: `${line}:direccion`,
       role: 'admin',
       line,
-      userId: admins[0]?.id ?? 'direccion',
-      name: 'Dirección (solo mirar)',
+      userId: 'direccion',
+      name: 'Dirección',
       label: 'Dirección',
       primary: false,
     };

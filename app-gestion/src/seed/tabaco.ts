@@ -116,7 +116,7 @@ const products: ProductSeed[] = [
     'La punta concentra el sabor: pimienta negra, café y frutos secos.',
     'Espresso doble o un bourbon.',
     7,
-    0.5,
+    0.7,
   ),
   cigar(
     'eve-gordo',

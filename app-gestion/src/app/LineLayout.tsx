@@ -62,9 +62,12 @@ function LineShell({ line }: { line: 'tabaco' | 'cafe' }) {
       </div>
     );
   }
+  // Al cambiar de cuenta (o entrar a «ver como…») se vuelve a montar todo: ninguna pantalla
+  // se queda con el estado inicial que calculó con la cuenta anterior.
+  const actorKey = `${state.actor.accountId}|${state.actor.userId}|${state.actor.readOnly ? 'ro' : 'rw'}`;
   return (
     <LineContext.Provider value={state}>
-      <Shell state={state} />
+      <Shell key={actorKey} state={state} />
     </LineContext.Provider>
   );
 }
