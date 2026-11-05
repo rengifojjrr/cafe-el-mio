@@ -510,6 +510,11 @@
   font-family: var(--font-sans);
   background: var(--surface-2);
 }
+/* Teselas de OpenStreetMap (sin clave). En modo oscuro se invierten y se apagan para que el mapa quede oscuro;
+   los marcadores y la ruta van en otras capas y conservan sus colores. */
+[data-theme='dark'] .mapa .teselas {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.4);
+}
 .leaflet-container a {
   color: var(--accent);
 }
