@@ -33,7 +33,7 @@ export function RootLayout() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="no-print glass fixed right-4 bottom-[88px] z-[60] flex min-h-12 items-center gap-2 rounded-full px-4 font-bold text-ink shadow-lg lg:right-6 lg:bottom-6"
+          className="no-print glass fixed right-3 bottom-[84px] z-[60] flex min-h-11 items-center gap-2 rounded-full px-3.5 text-sm font-bold text-ink shadow-lg lg:right-6 lg:bottom-6 lg:min-h-12 lg:px-4 lg:text-base"
           data-testid="cambiar-rol"
         >
           <Repeat className="h-5 w-5 text-accent" aria-hidden />

@@ -23,6 +23,8 @@ export interface LineConfig {
   summaryFields: string[];
   unitName: { one: string; many: string };
   packName: string;
+  notesLabel: string;
+  pairingLabel: string;
   storeTypes: string[];
   requiresTobaccoPermit: boolean;
   defaultCommission: CommissionRule;
@@ -74,6 +76,8 @@ export const TABACO: LineConfig = {
   summaryFields: ['vitola', 'strength', 'originCountry'],
   unitName: { one: 'tabaco', many: 'tabacos' },
   packName: 'caja',
+  notesLabel: 'Notas de cata',
+  pairingLabel: 'Maridaje',
   storeTypes: ['Tabaquería', 'Licorería', 'Bodega', 'Lounge de puros', 'Gasolinera', 'Supermercado'],
   requiresTobaccoPermit: true,
   defaultCommission: { type: 'percent', value: 8 },
@@ -125,6 +129,8 @@ export const CAFE: LineConfig = {
   summaryFields: ['roast', 'weight', 'productionLine'],
   unitName: { one: 'unidad', many: 'unidades' },
   packName: 'caja',
+  notesLabel: 'Notas',
+  pairingLabel: 'Cómo prepararlo',
   storeTypes: ['Cafetería', 'Bodega', 'Supermercado latino', 'Panadería', 'Ventanita', 'Restaurante'],
   requiresTobaccoPermit: false,
   defaultCommission: { type: 'percent', value: 6 },

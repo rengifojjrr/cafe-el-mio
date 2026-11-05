@@ -212,7 +212,7 @@ function Shell({ state }: { state: LineState }) {
                 className={({ isActive }) => `flex min-h-[64px] flex-col items-center justify-center gap-1 text-[0.72rem] font-semibold ${isActive ? 'text-accent' : 'text-muted'}`}
               >
                 <it.icon className="h-6 w-6" aria-hidden />
-                {it.label}
+                {it.short ?? it.label}
               </NavLink>
             </li>
           ))}

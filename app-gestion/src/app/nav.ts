@@ -27,12 +27,14 @@ export interface NavItem {
   icon: LucideIcon;
   /** Va en la barra de abajo del teléfono. */
   bottom?: boolean;
+  /** Etiqueta corta para la barra de abajo. */
+  short?: string;
 }
 
 /** El menú de cada rol. Lo que no está aquí, el rol no lo ve (y el servicio tampoco lo deja). */
 export const NAV: Record<Exclude<Role, 'direccion'>, NavItem[]> = {
   admin: [
-    { path: '', label: 'Centro de mando', icon: Home, bottom: true },
+    { path: '', label: 'Centro de mando', short: 'Inicio', icon: Home, bottom: true },
     { path: 'catalogo', label: 'Catálogo', icon: BookOpen },
     { path: 'almacen', label: 'Almacén', icon: Boxes },
     { path: 'locales', label: 'Locales', icon: Store, bottom: true },
@@ -50,7 +52,7 @@ export const NAV: Record<Exclude<Role, 'direccion'>, NavItem[]> = {
   ],
   seller: [
     { path: '', label: 'Hoy', icon: Home, bottom: true },
-    { path: 'locales', label: 'Mis locales', icon: Store, bottom: true },
+    { path: 'locales', label: 'Mis locales', short: 'Locales', icon: Store, bottom: true },
     { path: 'catalogo', label: 'Catálogo', icon: BookOpen, bottom: true },
     { path: 'comisiones', label: 'Comisiones', icon: Coins, bottom: true },
     { path: 'pedidos', label: 'Pedidos', icon: ClipboardList },
