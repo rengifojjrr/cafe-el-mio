@@ -100,7 +100,7 @@ const ruleSchema = z.discriminatedUnion('type', [
 const productSchema = z
   .object({
     id: z.string().optional(),
-    sku: z.string().trim().min(3, 'El SKU tiene que tener al menos 3 caracteres.').max(24),
+    sku: z.string().trim().min(3, 'El SKU tiene que tener al menos 3 caracteres.').max(40, 'El SKU puede tener hasta 40 caracteres.'),
     name: z.string().trim().min(2, 'Escribe el nombre.').max(80),
     brandLine: z.string().trim().min(2, 'Escribe la marca o línea.').max(60),
     active: z.boolean().default(true),

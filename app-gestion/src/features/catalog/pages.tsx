@@ -1,6 +1,6 @@
 // Catálogo: fichas con la silueta a escala (tabaco) o la foto de la marca (café), precios,
 // lo que gana el local, la comisión del vendedor y la disponibilidad con la próxima llegada.
-import { AlertTriangle, BookOpen, Camera, Eye, EyeOff, PackagePlus, Pencil, Plus, Save, Search, ShoppingBag, Trash2, Truck } from 'lucide-react';
+import { AlertTriangle, BookOpen, Camera, Eye, EyeOff, FileSpreadsheet, PackagePlus, Pencil, Plus, Save, Search, ShoppingBag, Trash2, Truck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { CommissionRule, Product } from '../../data/types';
@@ -77,9 +77,14 @@ export function CatalogPage() {
         subtitle={subtitle}
         actions={
           isAdmin && !actor.readOnly ? (
-            <LinkButton to={p('catalogo/nuevo')} variant="primary" icon={Plus}>
-              Nuevo producto
-            </LinkButton>
+            <>
+              <LinkButton to={p('catalogo/nuevo')} variant="primary" icon={Plus}>
+                Nuevo producto
+              </LinkButton>
+              <LinkButton to={p('catalogo/importar')} icon={FileSpreadsheet}>
+                Importar
+              </LinkButton>
+            </>
           ) : null
         }
       />
