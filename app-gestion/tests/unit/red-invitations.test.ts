@@ -59,14 +59,14 @@ beforeAll(async () => {
 describe('invitar y abrir el link', () => {
   it('administración invita a un vendedor; el link entra con su cuenta en este navegador', async () => {
     const admin = users.find((u) => u.role === 'admin')!;
-    const tomas = users.find((u) => u.name === 'Lucía Paredes')!;
+    const tomas = users.find((u) => u.name === 'Tomás Garza')!;
     const inv = await createInvitation(ctxOf(admin), { kind: 'seller', userId: tomas.id }, { days: 7 });
     expect(inv.state).toBe('vigente');
     expect(inv.accountId).toBe(`tabaco:${tomas.id}`);
     expect(new Date(inv.expiresAt).getTime() - NOW.getTime()).toBe(7 * 86_400_000);
     const list = await listInvitations(ctxOf(admin), { kind: 'seller', userId: tomas.id });
     expect(list[0]!.id).toBe(inv.id);
-    // La semilla trae otra (vencida) de Lucía.
+    // La semilla trae otra invitación vigente de Tomás.
     expect(list.length).toBeGreaterThanOrEqual(2);
 
     const check = await checkInvitation(inv.token, NOW);
@@ -121,7 +121,7 @@ describe('invitar y abrir el link', () => {
 
   it('«ver como…» no invita', async () => {
     const admin = users.find((u) => u.role === 'admin')!;
-    const tomas = users.find((u) => u.name === 'Lucía Paredes')!;
+    const tomas = users.find((u) => u.name === 'Tomás Garza')!;
     const ro = lineCtx('tabaco', { ...actorOf(admin), readOnly: true }, { repo: getLineRepo('tabaco'), now: () => NOW });
     await expect(createInvitation(ro, { kind: 'seller', userId: tomas.id })).rejects.toBeInstanceOf(ForbiddenError);
   });

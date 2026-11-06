@@ -84,6 +84,8 @@ const router = createHashRouter([
           { path: 'comisiones', element: page(money, 'CommissionsPage') },
           { path: 'contabilidad', element: page(money, 'AccountingPage') },
           { path: 'contabilidad/contadora', element: page(red, 'AccountantReportPage') },
+          { path: 'repartos', element: page(red, 'RoutesPage') },
+          { path: 'repartos/:id', element: page(red, 'RouteDetailPage') },
           { path: 'mapa', element: page(insight, 'MapPage') },
           { path: 'reportes', element: page(insight, 'ReportsPage') },
           { path: 'mensajes', element: page(comms, 'MessagesPage') },

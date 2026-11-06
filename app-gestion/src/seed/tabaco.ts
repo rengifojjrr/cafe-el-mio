@@ -18,6 +18,7 @@ const z = {
   gables: 't-zon_gables',
   beach: 't-zon_beach',
   lauderdale: 't-zon_lauderdale',
+  houston: 't-zon_houston',
 };
 
 function cigar(
@@ -306,6 +307,11 @@ function store(
   };
 }
 
+/** Locales de Houston: ciudad en Texas y teléfono con código 713 (todo inventado). */
+function texas(n: number): Partial<StoreSeed> {
+  return { city: 'Houston, TX', phone: `(713) 555-01${String(n).padStart(2, '0')}` };
+}
+
 const stores: StoreSeed[] = [
   // Andrés Molina: Hialeah y Doral
   store('t-faro', 'Tabaquería El Faro', 'Tabaquería', 'hialeah', 'Hialeah', 25.8612, -80.2788, 'Osvaldo Pérez', 1, 'andres', -88, 'activo', pickSet('bis-rob', 'bis-toro', 'eve-cor', 'eve-torp', 'tam-lanc', 'cor-petit', 'bri-beli', 'bri-cand', 'mz-toro-hab', 'mz-toro-mad', 'mz-rob-hab'), 1.2, 260),
@@ -335,6 +341,12 @@ const stores: StoreSeed[] = [
   store('t-collins', 'Lounge Collins 41', 'Lounge de puros', 'beach', 'Miami Beach', 25.816, -80.1225, 'Carolina Méndez', 16, 'lucia', -45, 'activo', pickSet('bis-church', 'tam-lanc', 'eve-gordo', 'bri-beli', 'eve-torp'), 1.0, 360),
   store('t-rio', 'Tabaquería Río Nuevo', 'Tabaquería', 'lauderdale', 'Fort Lauderdale', 26.1188, -80.139, 'Javier Lozano', 17, 'lucia', -64, 'activo', pickSet('bis-rob', 'eve-cor', 'cor-toro', 'bri-beli', 'mz-toro-mad', 'mz-torp-nat'), 0.9, 230),
   store('t-puerto', 'Licorería Puerto Lauderdale', 'Licorería', 'lauderdale', 'Fort Lauderdale', 26.142, -80.126, 'Adriana Paz', 18, 'lucia', null, 'prospecto', [], 1, 330),
+  // Tomás Garza: Houston, el mercado nuevo (permisos de Texas; ver seed/r3-red.ts)
+  store('t-bayou', 'Tabaquería Bayou', 'Tabaquería', 'houston', 'Houston', 29.7445, -95.3802, 'Ramiro Treviño', 19, 'tomas', -44, 'activo', pickSet('bis-rob', 'bis-toro', 'eve-cor', 'eve-torp', 'bri-beli', 'mz-toro-hab', 'mz-toro-mad'), 1.0, 320, texas(19)),
+  store('t-westheimer', 'Licorería Westheimer 22', 'Licorería', 'houston', 'Houston', 29.7372, -95.4235, 'Leticia Cantú', 20, 'tomas', -38, 'activo', pickSet('bis-rob', 'eve-cor', 'cor-petit', 'mz-toro-hab', 'mz-rob-hab', 'mz-chu-con'), 0.9, 290, texas(20)),
+  store('t-montrose', 'Lounge Montrose', 'Lounge de puros', 'houston', 'Houston', 29.749, -95.391, 'Gerardo Salinas', 21, 'tomas', -30, 'activo', pickSet('bis-church', 'tam-lanc', 'tam-rob', 'eve-gordo', 'bri-beli', 'cor-toro'), 1.1, 350, texas(21)),
+  store('t-magnolia', 'Bodega Magnolia', 'Bodega', 'houston', 'Houston', 29.733, -95.324, 'Alicia Zamora', 22, 'tomas', -21, 'activo', pickSet('eve-cor', 'cor-petit', 'mz-toro-hab', 'mz-toro-mad', 'mz-torp-mad'), 0.8, 300, texas(22)),
+  store('t-heights', 'Tabaquería Heights', 'Tabaquería', 'houston', 'Houston', 29.79, -95.3985, 'Esteban Villarreal', 23, 'tomas', null, 'prospecto', [], 1, 330, texas(23)),
 ];
 
 export const TABACO_SEED: LineSeedDef = {
@@ -363,6 +375,7 @@ export const TABACO_SEED: LineSeedDef = {
     { id: z.gables, name: 'Coral Gables', lat: 25.7215, lng: -80.2684 },
     { id: z.beach, name: 'Miami Beach', lat: 25.8106, lng: -80.125 },
     { id: z.lauderdale, name: 'Fort Lauderdale', lat: 26.1224, lng: -80.1373 },
+    { id: z.houston, name: 'Houston', lat: 29.7604, lng: -95.3698, marketId: 'houston' },
   ],
   users: [
     { key: 'daniela', role: 'admin', name: 'Daniela Ferrer', email: 'oficina.tabaco@example.com', phone: '(305) 555-0190' },
@@ -370,6 +383,7 @@ export const TABACO_SEED: LineSeedDef = {
     { key: 'yanelis', role: 'seller', name: 'Yanelis Cruz', email: 'yanelis.cruz@example.com', phone: '(305) 555-0142', zone: z.habana },
     { key: 'rafael', role: 'seller', name: 'Rafael Ortega', email: 'rafael.ortega@example.com', phone: '(305) 555-0143', zone: z.kendall },
     { key: 'lucia', role: 'seller', name: 'Lucía Paredes', email: 'lucia.paredes@example.com', phone: '(305) 555-0144', zone: z.beach },
+    { key: 'tomas', role: 'seller', name: 'Tomás Garza', email: 'tomas.garza@example.com', phone: '(713) 555-0145', zone: z.houston },
   ],
   products,
   stores,

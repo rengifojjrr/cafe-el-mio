@@ -41,7 +41,7 @@ describe('semilla de ejemplo', () => {
     });
   }
 
-  it('tabaco: 12 premium y 9 de mazo en 4 familias, 4 vendedores, 18 locales, un permiso vencido y nada de Cuba', () => {
+  it('tabaco: 12 premium y 9 de mazo en 4 familias, 5 vendedores, 23 locales (5 en Houston), un permiso vencido y nada de Cuba', () => {
     const products = tabaco.products as Product[];
     expect(products).toHaveLength(21);
     expect(products.filter((p) => p.kind === 'premium')).toHaveLength(12);
@@ -61,8 +61,9 @@ describe('semilla de ejemplo', () => {
     expect(new Set(codes).size).toBe(codes.length);
     for (const p of products) expect(isCubanOrigin(String(p.attrs.originCountry))).toBe(false);
     const stores = tabaco.stores as Store[];
-    expect(stores).toHaveLength(18);
-    expect((tabaco.users as { role: string }[]).filter((u) => u.role === 'seller')).toHaveLength(4);
+    expect(stores).toHaveLength(23);
+    expect(stores.filter((s) => s.marketId === 'houston')).toHaveLength(5);
+    expect((tabaco.users as { role: string }[]).filter((u) => u.role === 'seller')).toHaveLength(5);
     expect(stores.filter((s) => s.status === 'activo' && permitState(s, NOW) === 'vencido')).toHaveLength(1);
   });
 

@@ -9,22 +9,30 @@ import type {
   Commission,
   CommissionPayout,
   CommissionScheme,
+  Delivery,
+  DeliveryRoute,
   Invitation,
   IsoDate,
   LineId,
   LineSettings,
+  Movement,
   Product,
   SalesReport,
   Store,
   User,
+  Warehouse,
   Zone,
 } from '../data/types';
 import { monthToDateMetrics, resolveCommissionRule } from '../domain/commission-scheme';
 import { docAlertNotice, storeDocWarnings } from '../domain/fiscal';
+import { Balances, WAREHOUSE, reservedByProduct } from '../domain/ledger';
 import { HOUSTON, MIAMI } from '../domain/markets';
 import { commissionAmount } from '../domain/money-rules';
+import { orderStep } from '../domain/products';
+import { estimateRouteKm, haversineKm } from '../domain/routes';
+import { seededRandom } from '../lib/ids';
 import { round2 } from '../lib/money';
-import { ZONE, fmtDate } from '../lib/time';
+import { ZONE, fmtDate, toIsoDate } from '../lib/time';
 import type { LineSeedDef, SeedTables } from './engine';
 
 /** Lo común a cada parte: las tablas, fechas relativas a hoy, ids nuevos y la auditoría. */
@@ -86,8 +94,9 @@ export function applyRonda3Red(def: LineSeedDef, t: SeedTables, now: Date): Seed
   seedMarkets(c);
   seedFiscal(c);
   seedCommissions(c);
+  const routes = seedRoutes(c);
   const invitations = seedInvitations(c);
-  return { ...t, invitations, audit: (t.audit as AuditEntry[]).sort((a, b) => a.at.localeCompare(b.at)) };
+  return { ...t, routes, invitations, audit: (t.audit as AuditEntry[]).sort((a, b) => a.at.localeCompare(b.at)) };
 }
 
 // ---------- Mercados: Miami (todo lo de antes) y, en tabaco, Houston ----------
@@ -233,4 +242,138 @@ function seedCommissions({ line, t, settings, stores, users, sellerByKey }: Seed
     const seller = usersById.get(po.sellerId);
     if (entry) entry.summary = `Comisiones pagadas a ${seller?.name ?? po.sellerId}: ${po.amount.toFixed(2)} USD`;
   }
+}
+
+// ---------- Repartos ----------
+
+const DRIVERS = ['Manuel Soto (chofer de ejemplo)', 'Joaquín Rivas (chofer de ejemplo)'];
+const VEHICLES = ['Camión 1 (placa de ejemplo)', 'Van 2 (placa de ejemplo)'];
+
+/**
+ * Repartos terminados (Miami): una ruta por día de entregas, con km, chofer y peajes. En tabaco,
+ * además, entregas listas para salir hoy y el reparto del día en borrador con dos de ellas.
+ */
+function seedRoutes(c: Seed): DeliveryRoute[] {
+  const { def, t, line, settings, stores, users, admin, storeByKey, productByKey, dateOf, ago, id, log } = c;
+  const rng = seededRandom(def.seed + 303);
+  const deliveries = t.deliveries as Delivery[];
+  const notifications = t.notifications as AppNotification[];
+  const warehouse = (t.warehouses as Warehouse[])[0]!;
+  const storesById = new Map(stores.map((s) => [s.id, s]));
+  const routes: DeliveryRoute[] = [];
+  const costPerKm = settings.routeCostPerKm ?? 0.65;
+  const byDay = new Map<IsoDate, Delivery[]>();
+  for (const d of deliveries) {
+    if (d.status !== 'entregada' || !d.deliveredAt) continue;
+    const s = storesById.get(d.storeId);
+    if (!s || s.marketId !== MIAMI.id) continue; // Houston: sale del almacén de Miami por transporte aparte
+    const day = toIsoDate(d.deliveredAt);
+    byDay.set(day, [...(byDay.get(day) ?? []), d]);
+  }
+  const nearestOrder = (list: Delivery[]) => {
+    const left = [...list];
+    const out: Delivery[] = [];
+    let cur = { lat: warehouse.lat, lng: warehouse.lng };
+    while (left.length) {
+      let best = 0;
+      left.forEach((d, i) => {
+        const s = storesById.get(d.storeId)!;
+        if (haversineKm(cur, s) < haversineKm(cur, storesById.get(left[best]!.storeId)!)) best = i;
+      });
+      const [next] = left.splice(best, 1);
+      out.push(next!);
+      cur = storesById.get(next!.storeId)!;
+    }
+    return out;
+  };
+  for (const [day, list] of [...byDay].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const ordered = nearestOrder(list);
+    const stops = ordered.map((d) => ({ deliveryId: d.id, storeId: d.storeId }));
+    const n = routes.length;
+    const route: DeliveryRoute = {
+      id: id('rep'),
+      code: `R-${String(n + 1).padStart(4, '0')}`,
+      date: day,
+      driver: DRIVERS[n % DRIVERS.length]!,
+      vehicle: VEHICLES[n % VEHICLES.length]!,
+      stops,
+      km: estimateRouteKm(warehouse, stops.map((s) => storesById.get(s.storeId)!)),
+      costPerKm,
+      driverCost: 25 + 6 * stops.length,
+      tolls: [0, 2.25, 4.5][Math.floor(rng() * 3)]!,
+      status: 'terminado',
+      createdAt: DateTime.fromISO(day, { zone: ZONE }).set({ hour: 7, minute: 40 }).toUTC().toISO()!,
+      createdBy: admin.id,
+    };
+    routes.push(route);
+    for (const d of ordered) d.routeId = route.id;
+  }
+  if (line !== 'tabaco') return routes;
+
+  // Hoy: entregas listas para salir (lo preparado se aparta del almacén, sin moverlo todavía).
+  const balances = Balances.from(t.movements as Movement[]);
+  const reserved = reservedByProduct(deliveries);
+  const available = (pid: string) => balances.qty(WAREHOUSE, pid) - (reserved.get(pid) ?? 0);
+  const ready: Delivery[] = [];
+  for (const key of ['t-brisa', 't-club', 't-sunset', 't-ocean']) {
+    const s = storeByKey.get(key);
+    const sd = def.stores.find((x) => x.key === key);
+    if (!s || !sd || s.status !== 'activo') continue;
+    const items: Delivery['items'] = [];
+    for (const pk of sd.assortment) {
+      const p = productByKey.get(pk);
+      if (!p) continue;
+      const qty = orderStep(p);
+      if (available(p.id) < qty) continue;
+      items.push({ productId: p.id, qty, preparedQty: qty });
+      reserved.set(p.id, (reserved.get(p.id) ?? 0) + qty);
+      if (items.length === 2) break;
+    }
+    if (items.length === 0) continue;
+    const seller = users.find((u) => u.id === s.sellerId)!;
+    const d: Delivery = {
+      id: id('ent'),
+      code: `E-${String(deliveries.length + 1).padStart(4, '0')}`,
+      storeId: s.id,
+      sellerId: s.sellerId,
+      status: 'preparada',
+      items,
+      note: '',
+      origin: 'vendedor',
+      requestedAt: ago(22 + ready.length),
+      requestedBy: seller.id,
+      preparedAt: ago(2 + ready.length * 0.25),
+      preparedBy: admin.id,
+    };
+    deliveries.push(d);
+    ready.push(d);
+    const units = items.reduce((a, i) => a + i.qty, 0);
+    log(d.requestedAt, 'entrega.solicitar', 'delivery', d.id, `${d.code}: ${units} unidades para ${s.name}`, seller);
+    log(d.preparedAt!, 'entrega.preparar', 'delivery', d.id, `${d.code} preparada: ${units} unidades`);
+    notifications.push({ id: id('ntf'), userId: seller.id, kind: 'entrega_preparada', title: `Entrega lista: ${s.name}`, body: `${d.code} · ${units} unidades.`, link: `/${line}/entregas`, at: d.preparedAt!, read: false });
+  }
+  // El reparto de hoy en borrador lleva dos; las otras quedan listas para armar otro.
+  const draftStops = ready.slice(0, 2);
+  if (draftStops.length) {
+    const stops = draftStops.map((d) => ({ deliveryId: d.id, storeId: d.storeId }));
+    const draft: DeliveryRoute = {
+      id: id('rep'),
+      code: `R-${String(routes.length + 1).padStart(4, '0')}`,
+      date: dateOf(0),
+      driver: DRIVERS[0]!,
+      vehicle: VEHICLES[0]!,
+      stops,
+      km: estimateRouteKm(warehouse, stops.map((s) => storesById.get(s.storeId)!)),
+      costPerKm,
+      driverCost: 0,
+      tolls: 0,
+      status: 'borrador',
+      createdAt: ago(1),
+      createdBy: admin.id,
+    };
+    routes.push(draft);
+    for (const d of draftStops) d.routeId = draft.id;
+    log(draft.createdAt, 'reparto.crear', 'route', draft.id, `${draft.code} para el ${draft.date}: ${stops.length} paradas`);
+  }
+  return routes;
 }

@@ -24,6 +24,7 @@ const PNL_ROWS: { key: keyof PnlMonth; label: string; strong?: boolean; minus?: 
   { key: 'cogs', label: 'Costo de lo vendido (por lote)', minus: true },
   { key: 'commissions', label: 'Comisiones de vendedores', minus: true },
   { key: 'shrink', label: 'Mermas', minus: true },
+  { key: 'distribution', label: 'Costo de distribución (repartos)', minus: true },
   { key: 'grossMargin', label: 'Margen bruto', strong: true },
 ];
 
@@ -43,8 +44,8 @@ function Accounting() {
 
   const exportPnl = () =>
     downloadCsv(csvName(line, 'estado-de-resultados', now), [
-      ['Mes', 'Ventas a precio al local', 'Costo de lo vendido', 'Comisiones', 'Mermas', 'Margen bruto', 'Unidades vendidas'],
-      ...months.map((m) => [m.month, m.revenue, m.cogs, m.commissions, m.shrink, m.grossMargin, m.units]),
+      ['Mes', 'Ventas a precio al local', 'Costo de lo vendido', 'Comisiones', 'Mermas', 'Costo de distribución', 'Margen bruto', 'Unidades vendidas'],
+      ...months.map((m) => [m.month, m.revenue, m.cogs, m.commissions, m.shrink, m.distribution, m.grossMargin, m.units]),
     ]);
   const exportInventory = () => {
     const v = val.data;

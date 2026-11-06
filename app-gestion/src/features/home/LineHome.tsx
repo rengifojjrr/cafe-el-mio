@@ -32,7 +32,7 @@ import { listCommissions, summarizeCommissions } from '../../services/money';
 import { listStores, storeConsignment, storeDebt } from '../../services/stores';
 import { documentAlerts, syncDocumentAlerts } from '../../services/fiscal';
 import { MapView, type MapMarker } from '../../ui/map';
-import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Section, Sheet, Stat } from '../../ui/kit';
+import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Section, Sheet, Stat, Tabs } from '../../ui/kit';
 import { CommissionProgress } from '../red/commission';
 import { useAction } from '../../ui/toast';
 import { DeliveryCard, ReportSalesSheet } from '../consignment/components';
@@ -78,13 +78,19 @@ function AdminHome() {
   useEffect(() => {
     void syncDocumentAlerts(ctx).catch(() => undefined);
   }, [ctx]);
+  const [marketPick, setMarketPick] = useState('');
+  const markets = map.data?.markets ?? [];
+  const market = marketPick || markets[0]?.id || '';
   const month = pnl.data?.[pnl.data.length - 1];
   const markers = useMemo<MapMarker[]>(() => {
     const d = map.data;
     if (!d) return [];
+    // Con varios mercados, el mapa muestra uno a la vez (el almacén está en el primero).
+    const multi = d.markets.length > 1;
+    const inMarket = (id: string) => !multi || id === market;
     return [
-      { id: 'almacen', kind: 'warehouse', lat: d.warehouse.lat, lng: d.warehouse.lng, title: `${d.warehouse.name}: ${d.warehouse.units} unidades` },
-      ...d.stores.map((s) => ({
+      ...(inMarket(d.markets[0]?.id ?? '') ? [{ id: 'almacen', kind: 'warehouse' as const, lat: d.warehouse.lat, lng: d.warehouse.lng, title: `${d.warehouse.name}: ${d.warehouse.units} unidades` }] : []),
+      ...d.stores.filter((s) => inMarket(s.marketId)).map((s) => ({
         id: s.store.id,
         kind: 'store' as const,
         lat: s.store.lat,
@@ -94,9 +100,9 @@ function AdminHome() {
         pulse: s.pendingOrder,
         title: `${s.store.name} · ${s.units} u. en consignación`,
       })),
-      ...d.sellers.map((s) => ({ id: `v-${s.id}`, kind: 'seller' as const, lat: s.lat, lng: s.lng, label: initials(s.name), title: `${s.name}, última visita en ${s.storeName}` })),
+      ...d.sellers.filter((s) => inMarket(s.marketId)).map((s) => ({ id: `v-${s.id}`, kind: 'seller' as const, lat: s.lat, lng: s.lng, label: initials(s.name), title: `${s.name}, última visita en ${s.storeName}` })),
     ];
-  }, [map.data]);
+  }, [map.data, market]);
 
   const pendingApproval = (stores.data ?? []).filter((s) => s.store.status === 'firmado');
   const overdue = (stores.data ?? []).filter((s) => s.overdue);
@@ -114,11 +120,16 @@ function AdminHome() {
       <PageHeader title="Centro de mando" subtitle={`${today(ctx.now())} · ${config.name}: locales, vendedores y almacén en el mapa.`} />
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="relative">
+          {markets.length > 1 ? (
+            <div className="mb-2">
+              <Tabs label="Mercado del mapa" value={market} onChange={setMarketPick} options={markets.map((m) => ({ value: m.id, label: m.name, count: (map.data?.stores ?? []).filter((s) => s.marketId === m.id).length }))} />
+            </div>
+          ) : null}
           <MapView
             label="Mapa de locales, vendedores y almacén"
             className="h-[56vh] min-h-[340px] lg:h-[62vh]"
             markers={markers}
-            fitKey="admin"
+            fitKey={`admin-${market}`}
             onMarkerClick={(id) => {
               if (id !== 'almacen' && !id.startsWith('v-')) nav(p(`locales/${id}`));
             }}

@@ -225,6 +225,13 @@ describe('commissionRuleFor: la única puerta', () => {
     expect(await commissionRuleFor(ctxOf(admin), { sellerId: null, product: corona, at: NOW })).toBeNull();
   });
 
+  it('el vendedor de Houston tiene su propia comisión progresiva', async () => {
+    const tomas = byName('Tomás Garza');
+    const s = await sellerCommissionStatus(ctxOf(tomas));
+    expect(s?.source).toBe('vendedor');
+    expect(s?.rate?.percent).toBeGreaterThanOrEqual(8);
+  });
+
   it('al reportar una venta, la comisión nace con el % del esquema (y la del producto propio, con la suya)', async () => {
     const storeUser = users.find((u) => u.role === 'store' && u.name === 'Osvaldo Pérez')!;
     const andres = byName('Andrés Molina');

@@ -140,7 +140,8 @@ beforeAll(async () => {
 });
 
 describe('datos fiscales en la app', () => {
-  it('la semilla: EIN de ejemplo, permisos de Florida y casos para enseñar', () => {
+  it('la semilla: EIN de ejemplo, permisos de Texas en Houston y casos para enseñar', () => {
+    expect(store('Tabaquería Bayou').tobaccoPermit?.issuer).toBe('Texas Comptroller');
     expect(store('Tabaquería El Faro').tobaccoPermit?.issuer).toBe('Florida DBPR');
     expect(store('Tabaquería El Faro').taxId).toMatch(/^00-\d{7}$/);
     expect(store('Bodega Ocho y Medio').resaleCert).toBeUndefined();
@@ -231,6 +232,7 @@ describe('datos fiscales en la app', () => {
     expect(r.rows.length).toBeGreaterThan(10);
     expect(r.totals.consignmentSold).toBeGreaterThan(0);
     expect(r.totals.total).toBeCloseTo(r.totals.consignmentSold + r.totals.firmSubtotal, 2);
+    expect(r.rows.some((x) => x.marketName === 'Houston')).toBe(true);
     // Bodega Ocho y Medio no tiene certificado (en la semilla): todo lo suyo sale «sin certificado».
     const ocho = r.rows.find((x) => x.storeName === 'Bodega Ocho y Medio');
     if (ocho) expect(ocho.withoutCert).toBeCloseTo(ocho.consignmentSold, 2);

@@ -15,8 +15,12 @@ import { listStores, listZones } from '../../services/stores';
 import { Button, Card, EmptyState, ErrorBox, Field, Loading, NumberInput, PageHeader, Pill, Section, SelectInput, Sheet, TextInput } from '../../ui/kit';
 import { MapView, type MapMarker } from '../../ui/map';
 import { useAction } from '../../ui/toast';
+import type { Market } from '../../data/types';
+import { marketName, marketsOf } from '../../domain/markets';
+import { listMarkets } from '../../services/markets';
 import { CommissionSchemeSettings, SellerCommissionText, SellerSchemeButton } from '../red/commission';
 import { InviteButton } from '../red/invite';
+import { MarketSelect, MarketsSettings, RouteCostSettings } from '../red/markets';
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { actor } = useLine();
@@ -52,6 +56,7 @@ function UsersInner() {
   const users = useAsync(() => listUsers(ctx), [ctx]);
   const zones = useAsync(() => listZones(ctx), [ctx]);
   const stores = useAsync(() => listStores(ctx), [ctx]);
+  const markets = useAsync(() => listMarkets(ctx), [ctx]);
   const lineSettings = useAsync(() => readSettings(ctx), [ctx]);
   const { run, busy } = useAction();
   const [editing, setEditing] = useState<User | 'new' | null>(null);
@@ -63,6 +68,8 @@ function UsersInner() {
 
   const list = users.data ?? [];
   const zoneName = (id?: string) => zones.data?.find((z) => z.id === id)?.name ?? 'Sin zona';
+  const marketList = markets.data ?? [];
+  const sellerMarket = (u: User) => (marketList.length > 1 ? ` · ${marketName(marketList, u.marketId ?? zones.data?.find((z) => z.id === u.zoneId)?.marketId)}` : '');
   const storeName = (id?: string) => stores.data?.find((s) => s.store.id === id)?.store.name ?? 'Local';
   const admins = list.filter((u) => u.role === 'admin');
   const sellers = list.filter((u) => u.role === 'seller');
@@ -110,6 +117,7 @@ function UsersInner() {
                     <p className="text-sm text-muted">
                       <MapPin className="mr-1 inline h-3.5 w-3.5" aria-hidden />
                       {zoneName(u.zoneId)}
+                      {sellerMarket(u)}
                     </p>
                     <SellerCommissionText user={u} lineScheme={lineSettings.data?.commissionScheme} />
                     <p className="mt-1 truncate text-sm text-muted">
@@ -221,13 +229,13 @@ function UsersInner() {
         </ul>
       </Section>
 
-      <UserSheet key={editing === 'new' ? 'new' : (editing?.id ?? 'none')} editing={editing} zones={zones.data ?? []} onClose={() => setEditing(null)} />
-      <ZoneSheet key={zoneEditing === 'new' ? 'new-zone' : (zoneEditing?.id ?? 'no-zone')} editing={zoneEditing} zones={zones.data ?? []} onClose={() => setZoneEditing(null)} />
+      <UserSheet key={editing === 'new' ? 'new' : (editing?.id ?? 'none')} editing={editing} zones={zones.data ?? []} markets={marketList} onClose={() => setEditing(null)} />
+      <ZoneSheet key={zoneEditing === 'new' ? 'new-zone' : (zoneEditing?.id ?? 'no-zone')} editing={zoneEditing} zones={zones.data ?? []} markets={marketList} onClose={() => setZoneEditing(null)} />
     </>
   );
 }
 
-function UserSheet({ editing, zones, onClose }: { editing: User | 'new' | null; zones: Zone[]; onClose: () => void }) {
+function UserSheet({ editing, zones, markets, onClose }: { editing: User | 'new' | null; zones: Zone[]; markets: Market[]; onClose: () => void }) {
   const { ctx } = useLine();
   const { run, busy } = useAction();
   const user = editing && editing !== 'new' ? editing : null;
@@ -236,6 +244,10 @@ function UserSheet({ editing, zones, onClose }: { editing: User | 'new' | null; 
   const [email, setEmail] = useState(user?.email ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [zoneId, setZoneId] = useState(user?.zoneId ?? '');
+  const firstMarket = markets[0]?.id ?? '';
+  const zoneMarket = (id: string) => zones.find((z) => z.id === id)?.marketId ?? firstMarket;
+  const [marketId, setMarketId] = useState(user?.marketId ?? (user?.zoneId ? zoneMarket(user.zoneId) : firstMarket));
+  const marketZones = markets.length > 1 ? zones.filter((z) => (z.marketId ?? firstMarket) === marketId) : zones;
   const [override, setOverride] = useState<'none' | CommissionRule['type']>(user?.commissionOverride?.type ?? 'none');
   const [value, setValue] = useState<number | ''>(user?.commissionOverride?.value ?? '');
 
@@ -250,6 +262,7 @@ function UserSheet({ editing, zones, onClose }: { editing: User | 'new' | null; 
           email,
           phone,
           zoneId: zoneId || undefined,
+          marketId: role === 'seller' && markets.length > 1 ? marketId || undefined : undefined,
           commissionOverride: role === 'seller' && override !== 'none' ? { type: override, value: num(value) } : undefined,
           active: user?.active ?? true,
         }),
@@ -268,12 +281,21 @@ function UserSheet({ editing, zones, onClose }: { editing: User | 'new' | null; 
         </div>
         {role === 'seller' ? (
           <>
+            <MarketSelect
+              markets={markets}
+              all={false}
+              value={marketId}
+              onChange={(id) => {
+                setMarketId(id);
+                if (zoneId && zoneMarket(zoneId) !== id) setZoneId('');
+              }}
+            />
             <SelectInput
               label="Zona"
               value={zoneId}
               onChange={(e) => setZoneId(e.target.value)}
               placeholder="Elige la zona"
-              options={zones.map((z) => ({ value: z.id, label: z.name }))}
+              options={marketZones.map((z) => ({ value: z.id, label: z.name }))}
             />
             <SelectInput
               label="Comisión"
@@ -306,10 +328,12 @@ function UserSheet({ editing, zones, onClose }: { editing: User | 'new' | null; 
   );
 }
 
-function ZoneSheet({ editing, zones, onClose }: { editing: Zone | 'new' | null; zones: Zone[]; onClose: () => void }) {
+function ZoneSheet({ editing, zones, markets, onClose }: { editing: Zone | 'new' | null; zones: Zone[]; markets: Market[]; onClose: () => void }) {
   const { ctx } = useLine();
   const { run, busy } = useAction();
   const zone = editing && editing !== 'new' ? editing : null;
+  const [marketId, setMarketId] = useState(zone?.marketId ?? markets[0]?.id ?? '');
+  const market = markets.find((m) => m.id === marketId);
   const [name, setName] = useState(zone?.name ?? '');
   const [lat, setLat] = useState<number | ''>(zone?.lat ?? '');
   const [lng, setLng] = useState<number | ''>(zone?.lng ?? '');
@@ -335,7 +359,7 @@ function ZoneSheet({ editing, zones, onClose }: { editing: Zone | 'new' | null; 
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const saved = await run(() => saveZone(ctx, { id: zone?.id, name, lat: num(lat), lng: num(lng) }), zone ? 'Zona guardada.' : 'Zona agregada.');
+    const saved = await run(() => saveZone(ctx, { id: zone?.id, name, lat: num(lat), lng: num(lng), marketId: marketId || undefined }), zone ? 'Zona guardada.' : 'Zona agregada.');
     if (saved) onClose();
   };
 
@@ -343,6 +367,7 @@ function ZoneSheet({ editing, zones, onClose }: { editing: Zone | 'new' | null; 
     <Sheet open={editing !== null} onClose={onClose} title={zone ? `Zona ${zone.name}` : 'Agregar zona'} wide>
       <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
         <TextInput label="Nombre de la zona" value={name} onChange={(e) => setName(e.target.value)} placeholder="Little River" required />
+        <MarketSelect markets={markets} all={false} value={marketId} onChange={setMarketId} />
         <div>
           <p className="field-label mb-1.5">Centro de la zona</p>
           <p className="mb-2 text-sm text-muted">Toca el mapa para poner el punto. Las otras zonas aparecen con sus iniciales.</p>
@@ -350,8 +375,10 @@ function ZoneSheet({ editing, zones, onClose }: { editing: Zone | 'new' | null; 
             <MapView
               label="Mapa para elegir el centro de la zona"
               className="h-64"
-              markers={markers}
-              fitKey={`zonas-${markers.length}`}
+              markers={markers.filter((mk) => markets.length < 2 || (zones.find((z) => z.id === mk.id)?.marketId ?? markets[0]?.id) === marketId)}
+              center={market ? [market.lat, market.lng] : undefined}
+              zoom={market?.zoom}
+              fitKey={`zonas-${marketId}-${markers.length}`}
               pick={{
                 value: lat !== '' && lng !== '' ? { lat, lng } : null,
                 onPick: (pt) => {
@@ -398,6 +425,8 @@ function SettingsInner() {
       <SettingsForm settings={settings.data} products={products.data ?? []} />
       {/* Ronda 3: cada sección se guarda sola. */}
       <CommissionSchemeSettings scheme={settings.data.commissionScheme} />
+      <MarketsSettings markets={marketsOf(settings.data)} />
+      <RouteCostSettings value={settings.data.routeCostPerKm} />
     </>
   );
 }
