@@ -19,7 +19,7 @@ import { capaLabel, capaShade, sizeText, stockText, unitOf } from '../../domain/
 import { KIND_LABEL } from '../../lines/config';
 import { fmtMoney } from '../../lib/money';
 import { fmtDate, fmtRelativeDays } from '../../lib/time';
-import { useAsync, usePersistentState } from '../../app/hooks';
+import { useAsync, useBackState, usePersistentState } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { getPhoto, listProducts, type ProductView } from '../../services/catalog';
 import { Button, EmptyState, ErrorBox, LinkButton, Loading, PageHeader, Pill, Sheet } from '../../ui/kit';
@@ -31,10 +31,10 @@ import { StorePrice } from '../sales/store-price';
 export function CatalogPage() {
   const { ctx, actor, config, p, line } = useLine();
   const isAdmin = actor.role === 'admin';
-  const [q, setQ] = usePersistentState(`catalogo-q:${line}`, '');
+  const [q, setQ] = useBackState(`catalogo-q:${actor.accountId}:${line}`, '');
   const [rawFilters, setFilters] = usePersistentState<CatalogFilters>(`catalogo-filtros:${actor.accountId}:${line}`, {}, 'local');
   const filters = useMemo(() => sanitizeFilters(rawFilters), [rawFilters]);
-  const [showInactive, setShowInactive] = usePersistentState(`catalogo-inactivos:${line}`, false);
+  const [showInactive, setShowInactive] = useBackState(`catalogo-inactivos:${actor.accountId}:${line}`, false);
   const [ordering, setOrdering] = useState<ProductView | null>(null);
   const [choosing, setChoosing] = useState<Family<ProductView> | null>(null);
   const [showFilters, setShowFilters] = useState(false);

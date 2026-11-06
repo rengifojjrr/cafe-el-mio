@@ -307,6 +307,30 @@
     color: var(--ink);
     white-space: nowrap;
   }
+  /* Cabecera de una tarjeta de lista con su estado: en el teléfono la pastilla va siempre en su
+     propia fila, debajo; desde 640 px, siempre arriba a la derecha. Así queda en el mismo lugar en
+     todas las tarjetas, sea corto o largo el nombre. */
+  .card-head {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .card-head > :last-child {
+    justify-self: start;
+  }
+  @media (min-width: 40rem) {
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .card-head > :first-child {
+      min-width: 0;
+    }
+    .card-head > :last-child {
+      flex: none;
+    }
+  }
   .pill-dot::before {
     content: '';
     width: 7px;

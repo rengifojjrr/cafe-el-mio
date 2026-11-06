@@ -4,11 +4,11 @@ import { AlertTriangle, ArrowRight, Boxes, CalendarClock, CheckCircle2, Clipboar
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import type { Arrival, ArrivalStatus, Product } from '../../data/types';
-import { mixedUnitsText } from '../../domain/products';
+import { countText, mixedUnitsText, unitNames, unitOf } from '../../domain/products';
 import { arrivalStatusLabel } from '../../lines/config';
 import { fmtMoney } from '../../lib/money';
 import { addDaysToDate, fmtDate, fmtDateTime, fmtRelativeDays, toIsoDate } from '../../lib/time';
-import { useAsync } from '../../app/hooks';
+import { useAsync, useBackState } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import {
   adjustWarehouse,
@@ -42,22 +42,35 @@ export function WarehousePage() {
 function Warehouse() {
   const { ctx, config, actor, p } = useLine();
   const [params] = useSearchParams();
-  const [tab, setTab] = useState<Tab>(() => (TABS.includes(params.get('tab') as Tab) ? (params.get('tab') as Tab) : 'existencias'));
+  // La pestaña de la dirección (?tab=) manda; si no hay, la última que se miró en esta pestaña del navegador.
+  const [savedTab, setTab] = useBackState<Tab>(`almacen-tab:${ctx.actor.accountId}:${ctx.line}`, 'existencias');
+  const urlTab = params.get('tab') as Tab | null;
+  const tab: Tab = urlTab && TABS.includes(urlTab) ? urlTab : TABS.includes(savedTab) ? savedTab : 'existencias';
   const wh = useAsync(() => getWarehouse(ctx), [ctx]);
   const stock = useAsync(() => stockSummary(ctx), [ctx]);
   const alerts = useAsync(() => inventoryAlerts(ctx), [ctx]);
   const arrivals = useAsync(() => listArrivals(ctx), [ctx]);
   const totals = useMemo(() => {
-    let wh = 0;
-    let cons = 0;
     let low = 0;
-    for (const l of stock.data?.lines.values() ?? []) {
-      wh += l.warehouse;
-      cons += l.consignment;
+    const wh: { product: Product; qty: number }[] = [];
+    const cons: { product: Product; qty: number }[] = [];
+    for (const p of stock.data?.products ?? []) {
+      const l = stock.data!.lines.get(p.id);
+      if (!l) continue;
+      wh.push({ product: p, qty: l.warehouse });
+      cons.push({ product: p, qty: l.consignment });
       if (l.lowStock) low += 1;
     }
-    return { wh, cons, low };
-  }, [stock.data]);
+    // Mazos y tabacos no se suman entre sí: la cifra grande es la unidad que más hay y el resto va abajo.
+    const split = (items: typeof wh) => {
+      const byUnit = new Map<string, number>();
+      for (const it of items) byUnit.set(it.product.unitName, (byUnit.get(it.product.unitName) ?? 0) + it.qty);
+      const sorted = [...byUnit].sort((a, b) => b[1] - a[1]);
+      const [main, ...rest] = sorted;
+      return { value: main?.[1] ?? 0, unit: unitNames(main?.[0] ?? config.unitName.one).many, rest: rest.map(([u, q]) => countText(q, unitNames(u))).join(' · ') };
+    };
+    return { wh: split(wh), cons: split(cons), low };
+  }, [stock.data, config.unitName.one]);
   const pending = (arrivals.data ?? []).filter((a) => a.status !== 'recibida' && a.status !== 'cancelada');
 
   return (
@@ -74,8 +87,8 @@ function Warehouse() {
         }
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="En almacén" value={totals.wh} icon={Boxes} hint={config.unitName.many} />
-        <Stat label="En consignación" value={totals.cons} hint="Siguen siendo de la empresa" />
+        <Stat label="En almacén" value={totals.wh.value} icon={Boxes} hint={[totals.wh.unit, totals.wh.rest && `y ${totals.wh.rest}`].filter(Boolean).join(' ')} />
+        <Stat label="En consignación" value={totals.cons.value} hint={`${[totals.cons.unit, totals.cons.rest && `y ${totals.cons.rest}`].filter(Boolean).join(' ')} · siguen siendo de la empresa`} />
         <Stat label="Productos con stock bajo" value={totals.low} tone={totals.low ? 'warn' : 'ok'} />
         <Stat label={config.inbound === 'import' ? 'Importaciones en camino' : 'Tandas por recibir'} value={pending.length} icon={config.inbound === 'import' ? Ship : Flame} />
       </div>
@@ -139,27 +152,22 @@ function StockTab() {
           .map((p) => {
             const l = data.lines.get(p.id)!;
             return (
-              <li key={p.id} className="glass grid gap-3 p-4 md:grid-cols-[1.4fr_repeat(4,minmax(0,0.6fr))_230px] md:items-center">
+              <li key={p.id} className="glass grid gap-3 p-4 md:grid-cols-[1.4fr_repeat(4,minmax(0,0.6fr))_112px_230px] md:items-center">
                 <div className="min-w-0">
                   <p className="font-bold text-ink">{p.name}</p>
+                  {/* La unidad de las cifras: lo de mazo se cuenta en mazos; el premium, en tabacos. */}
                   <p className="text-sm text-muted">
-                    {p.sku}
-                    {l.lowStock ? (
-                      <span className="ml-2">
-                        <Pill tone="warn">Stock bajo</Pill>
-                      </span>
-                    ) : null}
-                    {!p.active ? (
-                      <span className="ml-2">
-                        <Pill>Inactivo</Pill>
-                      </span>
-                    ) : null}
+                    {p.sku} · en {unitOf(p).many}
                   </p>
                 </div>
                 <Cell label="Almacén" value={l.warehouse} />
                 <Cell label="Apartado" value={l.reserved} />
                 <Cell label="Disponible" value={l.available} strong tone={l.available <= p.lowStockThreshold ? 'warn' : undefined} />
                 <Cell label="En locales" value={l.consignment} />
+                {/* Columna fija para el estado: la pastilla queda en el mismo lugar en todas las filas. */}
+                <div className={`${!p.active || l.lowStock ? 'flex' : 'hidden md:flex'} min-h-7 items-center md:justify-center`}>
+                  {!p.active ? <Pill>Inactivo</Pill> : l.lowStock ? <Pill tone="warn">Stock bajo</Pill> : null}
+                </div>
                 <div className="flex flex-wrap items-center gap-2 md:justify-end">
                   {l.nextArrival ? (
                     <span className="text-sm text-muted">
@@ -309,7 +317,7 @@ function ArrivalsTab({ arrivals, loading, products }: { arrivals?: Arrival[]; lo
           const unitsLabel = mixedUnitsText(a.items.flatMap((i) => (byId.get(i.productId) ? [{ product: byId.get(i.productId)!, qty: i.qty }] : [])));
           return (
             <li key={a.id} className="glass p-4" aria-label={`Importación ${a.code}`}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="card-head">
                 <div>
                   <p className="font-bold text-ink">
                     {a.code} <span className="font-normal text-muted">· {a.supplier}</span>

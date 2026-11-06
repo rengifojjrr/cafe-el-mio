@@ -344,8 +344,12 @@ export function Sheet({ open, onClose, title, children, wide }: { open: boolean;
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     const t = window.setTimeout(() => {
-      const first = ref.current?.querySelector<HTMLElement>('input, select, textarea, button:not([data-close])');
-      (first ?? ref.current)?.focus();
+      const box = ref.current;
+      // Si la persona ya tocó algo de la hoja, el foco se queda donde lo puso.
+      if (!box || (box.contains(document.activeElement) && document.activeElement !== box)) return;
+      // Una hoja puede decir qué va primero (el campo del código en el lector, por ejemplo).
+      const first = box.querySelector<HTMLElement>('[data-autofocus]') ?? box.querySelector<HTMLElement>('input, select, textarea, button:not([data-close])');
+      (first ?? box).focus();
     }, 30);
     return () => {
       openSheets.splice(openSheets.indexOf(me), 1);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useLocation } from 'react-router';
 import { subscribe, versionKey } from '../services/bus';
 
 /** Número que cambia cada vez que un servicio escribe algo. */
@@ -138,4 +139,16 @@ export function usePersistentState<T>(key: string, initial: T, kind: StorageKind
     [kind],
   );
   return [value, set];
+}
+
+/**
+ * Estado de una lista (pestaña, filtro, búsqueda) que vuelve al volver atrás: se guarda por entrada
+ * del historial. Abrir la sección de nuevo desde el menú es otra entrada y empieza como siempre.
+ */
+export function useBackState<T>(key: string, initial: T): [T, (v: T | ((prev: T) => T)) => void] {
+  const loc = useLocation();
+  // Una entrada sin clave (una dirección escrita a mano) no se puede reconocer al volver: empieza limpia.
+  const once = useRef(`sin-clave-${Math.random().toString(36).slice(2)}`);
+  const entry = loc.key === 'default' ? once.current : loc.key;
+  return usePersistentState<T>(`${key}@${entry}`, initial, 'session');
 }

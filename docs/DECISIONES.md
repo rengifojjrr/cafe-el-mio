@@ -187,6 +187,18 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
   tapaba botones y casillas del final de un formulario en el teléfono.
 - **Cifras alineadas.** Las tarjetas de cifras reservan dos líneas para la etiqueta: en una misma fila los números
   quedan a la misma altura.
+- **Estados en su columna.** En Almacén, Locales y Pedidos la pastilla de estado va en una columna de ancho fijo, no
+  pegada al nombre: queda en el mismo lugar en todas las filas y no se parte a 360 px. En el teléfono, si una fila no
+  tiene estado, no deja un hueco.
+- **Mazos y tabacos no se suman.** En Almacén cada fila dice en qué se cuenta («en mazos», «en tabacos») y las
+  tarjetas de arriba muestran la unidad que más hay y, debajo, el resto («2,310 mazos y 640 tabacos»).
+- **Volver atrás recupera pestaña, filtros y búsqueda** en todas las secciones (Catálogo, Almacén, Locales, Entregas,
+  Pedidos, Cobros, Contratos, Repartos, Mapa). Se guardan por entrada del historial y por cuenta: abrir la sección
+  desde el menú es una entrada nueva y empieza como siempre, y cambiar de rol no arrastra los filtros de otro. Los
+  chips del catálogo son la excepción: se recuerdan por persona aunque se entre otro día. La primera pantalla que se
+  abre recibe su propia clave en el historial, así también se reconoce al volver o al recargar.
+- **Modo claro** revisado en las pantallas nuevas (catálogo, ficha, importar, venta rápida). La ficha del producto
+  sigue oscura en los dos modos; el oscuro sigue siendo el de por defecto.
 
 ### Datos reales
 - **«Empezar en blanco»** vacía solo esa línea y la marca como `dataMode: 'real'`: quedan los ajustes, el almacén, las
@@ -206,6 +218,11 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
 ### Escáner, etiquetas, trazabilidad y recepción
 - **Escanear** usa `BarcodeDetector` si el navegador lo trae y, si no (iPhone), `@zxing/browser` en un trozo aparte
   (≈127 KB comprimido, solo cuando se abre la cámara). Siempre se puede escribir el código o leerlo de una foto.
+- **Lector de mano (USB o Bluetooth).** La pistola «escribe» el código y un Enter. En la computadora el cursor empieza
+  en el campo del código. En el teléfono no (el teclado taparía la cámara), así que una tanda de teclas muy rápida
+  (menos de 60 ms entre una y otra, 4 caracteres o más) que termina en Enter se toma como una lectura aunque el
+  cursor esté en otro lado, y ese Enter no aprieta «Leer de una foto» ni ningún botón. Una persona tecleando no llega
+  a esa velocidad. Antes, el primer código de la pistola caía en el primer botón de la hoja.
 - **Etiquetas** en PDF dibujadas como vectores (Code 128 o EAN-13 propios, probados contra un decodificador, y QR que
   abre la ficha): hoja carta de 3 × 10 o etiqueta térmica de 2 × 1″.
 - **Recibir bulto por bulto**: el paso «Confirmar bultos» va entre «En aduana» y «Recibida». Entra al almacén lo

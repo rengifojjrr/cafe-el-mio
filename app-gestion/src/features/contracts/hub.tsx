@@ -8,7 +8,7 @@ import type { ContractTemplate, TemplateField, TemplateKind } from '../../data/t
 import { CONTRACT_VARIABLES, renderTemplate } from '../../domain/contract';
 import { blobBytes, readPdfInfo, stampPdf, textToPdfWithSlots, type PdfSlot } from '../../lib/pdf';
 import { fmtDate, fmtDateTime } from '../../lib/time';
-import { useAsync } from '../../app/hooks';
+import { useAsync, useBackState } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { readSettings } from '../../services/admin';
 import { listSignedDocuments, type SignedDocument } from '../../services/documents';
@@ -45,7 +45,7 @@ const slotsToFields = (slots: PdfSlot[]): TemplateField[] => slots.map((s) => ({
 export function ContractsHubPage() {
   const { ctx, actor, p } = useLine();
   const isAdmin = actor.role === 'admin';
-  const [tab, setTab] = useState<Tab>('firmados');
+  const [tab, setTab] = useBackState<Tab>(`contratos-tab:${ctx.actor.accountId}:${ctx.line}`, 'firmados');
   const [editing, setEditing] = useState<EditState | null>(null);
   const [preview, setPreview] = useState<{ bytes: Uint8Array; name: string } | null>(null);
   const [q, setQ] = useState('');

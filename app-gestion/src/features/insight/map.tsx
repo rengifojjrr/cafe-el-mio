@@ -7,7 +7,7 @@ import { fmtAgo } from '../../lib/time';
 import { mapData, sellerRoute, type MapData, type MapStore } from '../../services/analytics';
 import { listProducts } from '../../services/catalog';
 import { STORE_STATUS_LABEL } from '../../services/stores';
-import { useAsync, useMediaQuery } from '../../app/hooks';
+import { useAsync, useMediaQuery, useBackState } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { Card, EmptyState, ErrorBox, KeyValue, LinkButton, Loading, Money, PageHeader, Pill, SelectInput, Sheet, Stat } from '../../ui/kit';
 import { MapView, directionsUrl, type MapMarker } from '../../ui/map';
@@ -67,9 +67,9 @@ function CommandMap() {
   const { ctx, config } = useLine();
   const data = useAsync(() => mapData(ctx), [ctx]);
   const products = useAsync(() => listProducts(ctx), [ctx]);
-  const [seller, setSeller] = useState('');
-  const [product, setProduct] = useState('');
-  const [status, setStatus] = useState<'' | StoreStatus>('');
+  const [seller, setSeller] = useBackState(`mapa-vendedor:${ctx.actor.accountId}:${ctx.line}`, '');
+  const [product, setProduct] = useBackState(`mapa-producto:${ctx.actor.accountId}:${ctx.line}`, '');
+  const [status, setStatus] = useBackState<'' | StoreStatus>(`mapa-estado:${ctx.actor.accountId}:${ctx.line}`, '');
   const [selected, setSelected] = useState<string | null>(null);
   // Mercado: el primero (Miami) al abrir; cambiarlo vuelve a centrar el mapa. '*' es «Todos».
   const [marketPick, setMarketPick] = useState<string | null>(null);

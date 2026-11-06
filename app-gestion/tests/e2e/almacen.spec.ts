@@ -123,16 +123,19 @@ test('preparar una entrega escaneando', async ({ page }) => {
   const hoja = page.getByRole('dialog', { name: /Preparar E-\d{4} escaneando/ });
   await hoja.getByRole('button', { name: 'Escanear', exact: true }).click();
   const lector = page.getByRole('dialog', { name: /Juntar E-\d{4}/ });
-  // Brickell Belicoso: código interno de ejemplo. Como un lector de mano (USB o Bluetooth):
-  // escribe el código y Enter, y el cursor se queda en el campo para la siguiente lectura.
+  // Brickell Belicoso: código interno de ejemplo. Un lector de mano (USB o Bluetooth) «escribe»
+  // el código y Enter sin que nadie toque la pantalla: cuenta aunque el cursor no esté en el campo,
+  // y el Enter no aprieta «Leer de una foto» ni ningún otro botón.
+  await page.keyboard.type(internalEan13(1011));
+  await page.keyboard.press('Enter');
+  await expect(lector.getByTestId('lector-ultimo')).toContainText('Brickell Belicoso: 1 de 20');
+  // Escrito a mano en el campo: Enter y el cursor se queda ahí para el siguiente.
   const campo = lector.getByTestId('codigo-manual');
   await campo.fill(internalEan13(1011));
   await campo.press('Enter');
-  await expect(lector.getByTestId('lector-ultimo')).toContainText('Brickell Belicoso: 1 de 20');
-  await expect(campo).toBeFocused();
-  await page.keyboard.type(internalEan13(1011));
-  await page.keyboard.press('Enter');
   await expect(lector.getByTestId('lector-ultimo')).toContainText('Brickell Belicoso: 2 de 20');
+  await expect(campo).toBeFocused();
+  await expect(campo).toHaveValue('');
   // Escape cierra solo el lector; la hoja de preparar sigue abierta con lo juntado.
   await page.keyboard.press('Escape');
   await expect(lector).toHaveCount(0);

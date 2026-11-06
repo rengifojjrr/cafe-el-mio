@@ -3,7 +3,7 @@
 import { ArrowDown, ArrowUp, Calculator, CheckCircle2, Plus, Route as RouteIcon, Save, Trash2, Truck, Undo2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { useAsync } from '../../app/hooks';
+import { useAsync, useBackState } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import type { RouteStatus } from '../../data/types';
 import { routePath, routeTotalCost } from '../../domain/routes';
@@ -41,7 +41,7 @@ function RoutesList() {
   const { ctx, p, actor } = useLine();
   const routes = useAsync(() => listRoutes(ctx), [ctx]);
   const ready = useAsync(() => readyDeliveries(ctx), [ctx]);
-  const [tab, setTab] = useState<'abiertos' | 'terminados'>('abiertos');
+  const [tab, setTab] = useBackState<'abiertos' | 'terminados'>(`repartos-tab:${ctx.actor.accountId}:${ctx.line}`, 'abiertos');
   const [more, setMore] = useState(false);
   const [creating, setCreating] = useState(false);
   const list = routes.data ?? [];

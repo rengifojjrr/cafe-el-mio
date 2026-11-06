@@ -102,6 +102,8 @@ function beep(): void {
 
 /** La misma lectura de la cámara dentro de este tiempo no se cuenta dos veces. */
 const REPEAT_MS = 1500;
+/** Entre tecla y tecla, un lector de mano tarda unos milisegundos; una persona, bastante más. */
+const WEDGE_GAP_MS = 60;
 
 /** El lector: cámara, «Leer de una foto» y el código escrito a mano. */
 export function ScanSheet({
@@ -159,6 +161,35 @@ function ScanBody({ onCode, hint, feedback, camera }: { onCode: (code: string) =
     [onCode, push],
   );
 
+  // Un lector de mano (USB o Bluetooth) «escribe» el código muy rápido y termina con Enter. Si el
+  // cursor no está en el campo (por ejemplo, en el teléfono, donde no se enfoca para no tapar la
+  // cámara con el teclado), la lectura se reconoce igual y el Enter no aprieta ningún botón.
+  useEffect(() => {
+    let buffer = '';
+    let lastAt = 0;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const now = performance.now();
+      if (now - lastAt > WEDGE_GAP_MS) buffer = '';
+      lastAt = now;
+      if (e.key === 'Enter') {
+        if (buffer.length >= 4) {
+          e.preventDefault();
+          e.stopPropagation();
+          void handle(buffer, 'mano');
+        }
+        buffer = '';
+        return;
+      }
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) buffer += e.key;
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [handle]);
+  // En la computadora el cursor empieza en el campo del código, listo para la pistola.
+  const [finePointer] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia('(pointer: fine)').matches);
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     // La hoja va en un portal, pero React hace subir el evento por el árbol de componentes: sin
@@ -210,6 +241,7 @@ function ScanBody({ onCode, hint, feedback, camera }: { onCode: (code: string) =
           placeholder="Código de barras, SKU o número de caja"
           value={manual}
           onChange={(e) => setManual(e.target.value)}
+          data-autofocus={finePointer ? '' : undefined}
           data-testid="codigo-manual"
         />
         <Button type="submit" variant="primary" icon={Keyboard} disabled={!manual.trim()}>

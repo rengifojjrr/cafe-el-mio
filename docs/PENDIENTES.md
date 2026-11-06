@@ -81,6 +81,8 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 - La lista de empaque en Excel se probó con CSV; las reglas para reconocer productos («52 torpedo maduro») necesitan un
   archivo real de la fábrica. Un contenedor de 147 bultos dibuja todas las filas a la vez.
 - El borrador de «Contar» vive solo en ese navegador.
+- El lector de mano (USB o Bluetooth) se probó simulando sus teclas: se reconoce una lectura cuando entre tecla y
+  tecla pasan menos de 60 ms. Falta probar un lector real; uno Bluetooth lento puede necesitar más margen.
 
 ### Venta en firme
 - No hay devoluciones ni notas de crédito de una factura, ni anular facturas, ni límite de crédito o bloqueo de un

@@ -47,6 +47,12 @@ function RouteError() {
   );
 }
 
+// La primera entrada del historial no trae clave (react-router le diría «default»): se le da una
+// propia para que volver a ella, o recargar, recupere la posición y los filtros de esa pantalla.
+if (typeof window !== 'undefined' && !(window.history.state as { key?: string } | null)?.key) {
+  window.history.replaceState({ ...((window.history.state as object | null) ?? {}), usr: null, key: Math.random().toString(36).slice(2, 10), idx: 0 }, '');
+}
+
 const router = createHashRouter([
   {
     element: <RootLayout />,

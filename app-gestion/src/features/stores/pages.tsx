@@ -27,7 +27,7 @@ import { creditText } from '../../domain/invoices';
 import { searchAddress, type GeoResult } from '../../lib/geocode';
 import { fmtMoney } from '../../lib/money';
 import { addDaysToDate, fmtAgo, fmtDate, fmtDateTime, toIsoDate } from '../../lib/time';
-import { useAsync } from '../../app/hooks';
+import { useAsync, useBackState } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { contractsForStore, issueContract } from '../../services/contracts';
 import { listMarkets } from '../../services/markets';
@@ -90,9 +90,10 @@ type Filter = 'todos' | 'activos' | 'proceso' | 'pausados';
 export function StoresPage() {
   const { ctx, actor, p, config } = useLine();
   const { data, error, loading } = useAsync(() => listStores(ctx), [ctx]);
-  const [filter, setFilter] = useState<Filter>('todos');
-  const [q, setQ] = useState('');
-  const [seller, setSeller] = useState('');
+  // Se recuerdan al ir a un local y volver (en esta pestaña del navegador).
+  const [filter, setFilter] = useBackState<Filter>(`locales-filtro:${ctx.actor.accountId}:${ctx.line}`, 'todos');
+  const [q, setQ] = useBackState(`locales-q:${ctx.actor.accountId}:${ctx.line}`, '');
+  const [seller, setSeller] = useBackState(`locales-vendedor:${ctx.actor.accountId}:${ctx.line}`, '');
   const sellers = useMemo(() => [...new Set((data ?? []).map((s) => s.sellerName))].sort(), [data]);
   const list = (data ?? []).filter((v) => {
     const st = v.store.status;

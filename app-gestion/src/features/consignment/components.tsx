@@ -62,7 +62,7 @@ export function DeliveryCard({ d, showStore }: { d: DeliveryView; showStore?: bo
 
   return (
     <article className="glass p-4" aria-label={`Entrega ${d.code}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="card-head">
         <div className="min-w-0">
           <p className="font-bold text-ink">
             {d.code}

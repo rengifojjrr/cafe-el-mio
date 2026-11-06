@@ -17,7 +17,7 @@ export function StorePicker({ stores, onPick, top = 6 }: { stores: readonly Quic
       <label className="relative block">
         <span className="sr-only">Buscar local</span>
         <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-faint" aria-hidden />
-        <input className="input pl-10" placeholder="Buscar local por nombre, ciudad o encargado" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input pl-10" placeholder="Buscar local, ciudad o encargado" value={q} onChange={(e) => setQ(e.target.value)} />
       </label>
       {shown.length === 0 ? <p className="text-muted">Ningún local coincide.</p> : null}
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Locales">

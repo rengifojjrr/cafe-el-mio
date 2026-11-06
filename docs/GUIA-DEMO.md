@@ -76,9 +76,10 @@ Antes de enseñar la demo otra vez: portada → «Restablecer demo» (con datos 
 | Barra de avance de un contenedor grande (37 de 147) | Tabaco · Administración | Almacén → Importaciones → IMP-2026-015 |
 | Diferencias de la importación (PDF y CSV) | Tabaco · Administración | Una importación recibida |
 | Contar el almacén escaneando | Administración | Almacén → «Contar» |
+| Preparar una entrega con un lector de mano (USB o Bluetooth) | Tabaco · Administración | Entregas → «Preparar escaneando» → «Escanear»: la pistola cuenta sin tocar la pantalla |
 | Local en firme: pedido → entrega firmada → factura → pago | Administración | Bodega El Primo (pedido por teléfono) → Entregas → Cobros |
-| Venta rápida (tres toques para un mazo) y factura para compartir | Administración | Inicio o Entregas → «Venta rápida» |
-| Pegar un pedido de WhatsApp | Administración | Pedidos → «Pegar pedido» («10 toro maduro, 5 robusto habano, 2 cajas torpedo») |
+| Venta rápida (tres toques para un mazo) y factura para compartir | Administración | Entregas, Cobros o Más → «Venta rápida» (o la ficha de un local) |
+| Pegar un pedido de WhatsApp | Administración | Entregas o Más → Pedidos → «Pegar pedido» («10 toro maduro, 5 robusto habano, 2 cajas torpedo») |
 | Listas de precios (fijo o % sobre costo, por caja y desde N cajas) | Administración | Ajustes → «Listas de precios» |
 | El local en firme ve solo su precio | Otras cuentas → Ramón Quesada (Bodega El Primo) | Catálogo |
 | Factura vencida / certificado de reventa vencido | Administración | Cobros (Licorería La Bendición) / Locales (Mini Market Flagler 57) |

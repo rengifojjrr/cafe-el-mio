@@ -8,7 +8,7 @@ import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitNames, unitOf
 import { fmtMoney } from '../../lib/money';
 import { fmtDate, fmtDateTime, fmtRelativeDays } from '../../lib/time';
 import type { NewPhoto } from '../../lib/image';
-import { useAsync } from '../../app/hooks';
+import { useAsync, useBackState } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { getPhoto, listProducts } from '../../services/catalog';
 import { findByCode } from '../../services/codes';
@@ -160,7 +160,7 @@ export function DeliveriesPage() {
   const { ctx, actor, p } = useLine();
   const { data, error, loading } = useAsync(() => listDeliveries(ctx), [ctx]);
   const initial: DTab = actor.role === 'admin' ? 'solicitada' : 'preparada';
-  const [tab, setTab] = useState<DTab>(initial);
+  const [tab, setTab] = useBackState<DTab>(`entregas-tab:${ctx.actor.accountId}:${ctx.line}`, initial);
   const by = (s: DTab) => (data ?? []).filter((d) => d.status === s);
   const subtitle =
     actor.role === 'admin'
@@ -327,7 +327,7 @@ type OTab = 'curso' | 'entregados' | 'cancelados';
 export function OrdersPage() {
   const { ctx, actor, p } = useLine();
   const { data, error, loading } = useAsync(() => listReorders(ctx), [ctx]);
-  const [tab, setTab] = useState<OTab>('curso');
+  const [tab, setTab] = useBackState<OTab>(`pedidos-tab:${ctx.actor.accountId}:${ctx.line}`, 'curso');
   const groups: Record<OTab, ReorderView[]> = {
     curso: (data ?? []).filter((r) => r.status === 'enviado' || r.status === 'confirmado' || r.status === 'preparado'),
     entregados: (data ?? []).filter((r) => r.status === 'entregado'),
@@ -402,7 +402,7 @@ function OrderCard({ r }: { r: ReorderView }) {
   const short = r.itemsView.some((i) => i.available < i.qty);
   return (
     <article className="glass p-4" aria-label={`Pedido ${r.code}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="card-head">
         <div>
           <p className="font-bold text-ink">
             {r.code}
