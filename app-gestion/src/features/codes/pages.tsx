@@ -315,10 +315,12 @@ function InvoiceResult({ r }: { r: Extract<CodeLookup, { kind: 'invoice' }> }) {
 function ArrivalResult({ r }: { r: Extract<CodeLookup, { kind: 'arrival' }> }) {
   const { line, p } = useLine();
   const a = r.arrival;
+  const bale = r.baleNumber ? a.bales?.find((b) => b.number === r.baleNumber) : undefined;
   return (
     <Card className="p-4 sm:p-5" aria-label={`Importación ${a.code}`}>
-      <Kind icon={Ship}>{a.kind === 'roast' ? 'Tanda de tostado' : 'Importación'}</Kind>
+      <Kind icon={Ship}>{bale ? `Bulto de una importación · ${bale.status === 'pendiente' ? 'por revisar' : 'revisado'}` : a.kind === 'roast' ? 'Tanda de tostado' : 'Importación'}</Kind>
       <h2 className="text-xl font-bold text-ink">
+        {bale ? `Bulto ${bale.number} · ` : ''}
         {a.code} · {a.supplier}
       </h2>
       <p className="text-sm text-muted">

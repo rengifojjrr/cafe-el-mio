@@ -121,14 +121,22 @@ test('preparar una entrega escaneando', async ({ page }) => {
   const hoja = page.getByRole('dialog', { name: /Preparar E-\d{4} escaneando/ });
   await hoja.getByRole('button', { name: 'Escanear', exact: true }).click();
   const lector = page.getByRole('dialog', { name: /Juntar E-\d{4}/ });
-  // Brickell Belicoso: código interno de ejemplo.
-  await lector.getByTestId('codigo-manual').fill(internalEan13(1011));
-  await lector.getByRole('button', { name: 'Usar este código' }).click();
+  // Brickell Belicoso: código interno de ejemplo. Como un lector de mano (USB o Bluetooth):
+  // escribe el código y Enter, y el cursor se queda en el campo para la siguiente lectura.
+  const campo = lector.getByTestId('codigo-manual');
+  await campo.fill(internalEan13(1011));
+  await campo.press('Enter');
   await expect(lector.getByTestId('lector-ultimo')).toContainText('Brickell Belicoso: 1 de 20');
-  await lector.getByRole('button', { name: 'Cerrar' }).click();
-  await expect(hoja.getByText('1 de 20', { exact: true })).toBeVisible();
+  await expect(campo).toBeFocused();
+  await page.keyboard.type(internalEan13(1011));
+  await page.keyboard.press('Enter');
+  await expect(lector.getByTestId('lector-ultimo')).toContainText('Brickell Belicoso: 2 de 20');
+  // Escape cierra solo el lector; la hoja de preparar sigue abierta con lo juntado.
+  await page.keyboard.press('Escape');
+  await expect(lector).toHaveCount(0);
+  await expect(hoja.getByText('2 de 20', { exact: true })).toBeVisible();
   await hoja.getByRole('button', { name: 'Preparar con lo juntado' }).click();
-  await toast(page, /Preparada con 1 u\./);
+  await toast(page, /Preparada con 2 u\./);
 });
 
 test('recibir una importación bulto por bulto: todos «Bien» menos uno con falta', async ({ page }) => {
@@ -216,6 +224,38 @@ test('cargar una lista de empaque desde un CSV: columnas, productos y un bulto m
   await hoja.getByRole('button', { name: 'Guardar lista de empaque' }).click();
   await toast(page, 'Lista de empaque guardada: 3 bultos.');
   await expect(page.getByText('3 bultos · 140 en total · 1 mixto')).toBeVisible();
+});
+
+test('la visita del vendedor se cuenta escaneando: lo que no se escanea cuenta como vendido', async ({ page }) => {
+  await enterAs(page, 'tabaco:seller');
+  await go(page, '/tabaco/locales/t-loc_0001/visita');
+  await expect(page.getByRole('heading', { name: 'Registrar visita' })).toBeVisible();
+  await page.getByRole('button', { name: 'Contar escaneando' }).click();
+  const lector = page.getByRole('dialog', { name: 'Contar escaneando' });
+  // Biscayne Robusto: código interno de ejemplo; dos lecturas escritas a mano.
+  for (const n of [1, 2]) {
+    await lector.getByTestId('codigo-manual').fill(internalEan13(1001));
+    await lector.getByRole('button', { name: 'Usar este código' }).click();
+    await expect(lector.getByTestId('lector-ultimo')).toContainText(`Biscayne Robusto: ${n} contados`);
+  }
+  await lector.getByRole('button', { name: 'Cerrar' }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Cantidad de Biscayne Robusto, contados' })).toHaveValue('2');
+  await expect(page.getByText('Contando con el escáner: lo que no escaneaste cuenta como vendido.')).toBeVisible();
+  await page.getByRole('button', { name: 'Guardar visita' }).click();
+  await toast(page, /Visita registrada: \d+ vendidas/);
+});
+
+test('un tostado de café se abre y se recibe como antes, sin lista de empaque', async ({ page }) => {
+  const roast = (buildLine('cafe', new Date()).arrivals as Arrival[]).find((x) => x.status !== 'recibida')!;
+  await enterAs(page, 'cafe:admin');
+  await go(page, `/cafe/almacen/llegadas/${roast.id}`);
+  await expect(page.getByRole('heading', { name: roast.code, level: 1 })).toBeVisible();
+  await expect(page.getByText('Lista de empaque')).toHaveCount(0);
+  const w = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
+  expect(w.scroll).toBeLessThanOrEqual(w.client + 1);
+  await go(page, '/cafe/almacen?tab=llegadas');
+  await page.getByRole('listitem', { name: `Importación ${roast.code}` }).getByRole('button', { name: 'Recibir en almacén' }).click();
+  await toast(page, new RegExp(`${roast.code} recibida`));
 });
 
 test('nada de lo nuevo del almacén se sale del ancho del teléfono', async ({ page }, info) => {

@@ -161,10 +161,17 @@ function ScanBody({ onCode, hint, feedback, camera }: { onCode: (code: string) =
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    // La hoja va en un portal, pero React hace subir el evento por el árbol de componentes: sin
+    // esto, escribir un código enviaría también el formulario donde está el botón (la visita).
+    e.stopPropagation();
+    const input = e.currentTarget.querySelector('input');
     const code = cleanCode(manual);
     if (!code) return;
     setManual('');
     await handle(code, 'mano');
+    // Un lector de mano (USB o Bluetooth) escribe el código y Enter: el cursor se queda en el campo
+    // para la lectura siguiente.
+    if (input?.isConnected) input.focus();
   };
 
   const fromPhoto = async (file: File) => {

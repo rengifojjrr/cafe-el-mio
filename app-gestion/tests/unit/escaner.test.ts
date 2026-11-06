@@ -127,6 +127,15 @@ describe('buscar por código', () => {
     await expect(lookupCode(T(seller), d.code)).rejects.toThrow(ForbiddenError);
   });
 
+  it('la etiqueta de un bulto lleva a su importación (solo administración)', async () => {
+    const a = (await repo.arrivals.all()).find((x) => x.status === 'aduana' && x.bales?.length)!;
+    const m = await findByCode(T(admin), `B-${a.code}-7`);
+    expect(m).toMatchObject({ kind: 'arrival', baleNumber: '7' });
+    if (m.kind === 'arrival') expect(m.arrival.id).toBe(a.id);
+    expect((await findByCode(T(admin), a.code.toLowerCase())).kind).toBe('arrival');
+    expect((await findByCode(T(seller), `B-${a.code}-7`)).kind).toBe('none');
+  });
+
   it('un código que no existe', async () => {
     expect(await findByCode(T(admin), '2009999999994')).toEqual({ kind: 'none', code: '2009999999994' });
     expect((await findByCode(T(admin), '   ')).kind).toBe('none');

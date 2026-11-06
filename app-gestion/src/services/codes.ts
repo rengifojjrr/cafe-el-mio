@@ -13,7 +13,8 @@ export type CodeMatch =
   | { kind: 'case'; code: string; caseUnit: CaseUnit; product?: Product | PublicProduct }
   | { kind: 'delivery'; code: string; delivery: Delivery }
   | { kind: 'invoice'; code: string; invoice: Invoice }
-  | { kind: 'arrival'; code: string; arrival: Arrival }
+  /** Una importación (por su código, o por la etiqueta de uno de sus bultos: `baleNumber`). */
+  | { kind: 'arrival'; code: string; arrival: Arrival; baleNumber?: string }
   | { kind: 'none'; code: string };
 
 /** Mismo código aunque uno traiga guiones o espacios y el otro no. */
@@ -62,8 +63,14 @@ export async function findByCode(ctx: Ctx, raw: string): Promise<CodeMatch> {
     if (delivery) return { kind: 'delivery', code, delivery };
     const invoice = (await ctx.repo.invoices.all()).find((i) => sameCode(i.code, code));
     if (invoice) return { kind: 'invoice', code, invoice };
-    const arrival = (await ctx.repo.arrivals.all()).find((a) => sameCode(a.code, code));
+    const arrivals = await ctx.repo.arrivals.all();
+    const arrival = arrivals.find((a) => sameCode(a.code, code));
     if (arrival) return { kind: 'arrival', code, arrival };
+    // Etiqueta de un bulto: «B-IMP-2026-016-12».
+    for (const a of arrivals) {
+      const bale = a.bales?.find((b) => cleanCode(`B-${a.code}-${b.number}`) === code);
+      if (bale) return { kind: 'arrival', code, arrival: a, baleNumber: bale.number };
+    }
   }
   return { kind: 'none', code };
 }
@@ -110,7 +117,7 @@ export type CodeLookup =
   | { kind: 'case'; code: string; trace: CaseTrace }
   | { kind: 'delivery'; code: string; info: DeliveryLookup }
   | { kind: 'invoice'; code: string; invoice: Invoice; storeName: string }
-  | { kind: 'arrival'; code: string; arrival: Arrival }
+  | { kind: 'arrival'; code: string; arrival: Arrival; baleNumber?: string }
   | { kind: 'none'; code: string };
 
 /** Todo lo que se sabe de un código, para la pantalla «Buscar código». */
@@ -148,7 +155,7 @@ export async function lookupCode(ctx: Ctx, raw: string): Promise<CodeLookup> {
       return { kind: 'invoice', code: m.code, invoice: m.invoice, storeName: store?.name ?? '—' };
     }
     case 'arrival':
-      return { kind: 'arrival', code: m.code, arrival: m.arrival };
+      return { kind: 'arrival', code: m.code, arrival: m.arrival, baleNumber: m.baleNumber };
     case 'none':
       return m;
   }
