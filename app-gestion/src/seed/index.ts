@@ -4,6 +4,7 @@ import type { CoreRepo, LineRepo } from '../data/repo';
 import { CAFE_SEED } from './cafe';
 import { type LineSeedDef, type SeedTables, simulateLine } from './engine';
 import { applyRonda3Red } from './r3-red';
+import { addR3Almacen } from './r3-almacen';
 import { TABACO_SEED } from './tabaco';
 
 import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from './version';
@@ -15,7 +16,9 @@ export const SEEDS: Record<LineId, LineSeedDef> = { tabaco: TABACO_SEED, cafe: C
 export function buildLine(line: LineId, now: Date): SeedTables {
   const tables = simulateLine(SEEDS[line], now);
   // Ronda 3 · mercados, datos fiscales, comisión progresiva, repartos e invitaciones.
-  return applyRonda3Red(SEEDS[line], tables, now);
+  const red = applyRonda3Red(SEEDS[line], tables, now);
+  // Ronda 3 · almacén: importaciones con lista de empaque (bultos) y cajas con trazabilidad.
+  return addR3Almacen(line, red, now);
 }
 
 /** La cuenta de Dirección (no es de ninguna línea). */

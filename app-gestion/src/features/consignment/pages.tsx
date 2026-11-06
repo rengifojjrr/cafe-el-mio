@@ -11,11 +11,13 @@ import type { NewPhoto } from '../../lib/image';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { getPhoto, listProducts } from '../../services/catalog';
+import { findByCode } from '../../services/codes';
 import { REORDER_STATUS_LABEL, cancelReorder, confirmReorder, createReorder, listDeliveries, listReorders, recordVisit, type DeliveryView, type ReorderView } from '../../services/consignment';
 import { getWarehouse } from '../../services/inventory';
 import { loadStoreForActor, storeConsignment } from '../../services/stores';
 import { Button, Card, EmptyState, ErrorBox, LinkButton, Loading, PageHeader, Pill, QtyStepper, Tabs, TextArea } from '../../ui/kit';
 import { PhotoPicker, ProductThumb } from '../../ui/media';
+import { ScanButton } from '../../ui/scanner';
 import { askLocation } from '../../ui/signature';
 import { useAction } from '../../ui/toast';
 import { RoleGate } from '../common';
@@ -43,8 +45,31 @@ function Visit() {
   const [notes, setNotes] = useState('');
   const [withGeo, setWithGeo] = useState(true);
   const [photo, setPhoto] = useState<NewPhoto | undefined>();
+  const [scanned, setScanned] = useState(false);
+  const [scanNote, setScanNote] = useState<string>();
   const data = lines.data ?? [];
   const value = (pid: string, expected: number) => counted[pid] ?? expected;
+  // Contar escaneando: el conteo empieza en cero con la primera lectura y cada lectura suma uno
+  // (nunca más de lo que hay en consignación).
+  const onScan = async (code: string) => {
+    const m = await findByCode(ctx, code);
+    const productId = m.kind === 'product' ? m.product.id : m.kind === 'case' ? m.caseUnit.productId : null;
+    const line = data.find((l) => l.productId === productId);
+    if (!productId || !line) {
+      setScanNote(m.kind === 'product' ? `${m.product.name} no está en consignación en este local.` : m.kind === 'none' ? `No conozco el código ${m.code}.` : 'Ese código no es de un producto de este local.');
+      return;
+    }
+    const base = scanned ? counted : Object.fromEntries(data.map((l) => [l.productId, 0]));
+    const now = base[productId] ?? 0;
+    if (now >= line.qty) {
+      setScanNote(`Ya contaste todo lo que había de ${line.name} (${line.qty}).`);
+      if (!scanned) setCounted(base);
+    } else {
+      setCounted({ ...base, [productId]: now + 1 });
+      setScanNote(`+1 · ${line.name}: ${now + 1} contados`);
+    }
+    setScanned(true);
+  };
   const soldUnits = data.reduce((a, l) => a + (l.qty - value(l.productId, l.qty)), 0);
   const soldAmount = data.reduce((a, l) => a + (l.qty - value(l.productId, l.qty)) * l.priceToStore, 0);
   if (store.error) return <ErrorBox error={store.error} />;
@@ -63,6 +88,20 @@ function Visit() {
       }}
     >
       <PageHeader back={{ to: p(`locales/${s.id}`), label: s.name }} title="Registrar visita" subtitle="Cuenta lo que queda en el local. Lo que falta contra lo que había es venta reportada." />
+      {data.length > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <ScanButton
+            label="Contar escaneando"
+            title="Contar escaneando"
+            continuous
+            disabled={actor.readOnly}
+            hint="El conteo empieza en cero: cada lectura suma uno a lo que queda en el local."
+            feedback={scanNote}
+            onCode={onScan}
+          />
+          {scanned ? <p className="text-sm text-muted">Contando con el escáner: lo que no escaneaste cuenta como vendido.</p> : null}
+        </div>
+      ) : null}
       {data.length === 0 ? (
         <EmptyState icon={ClipboardCheck} title="Este local no tiene producto en consignación">
           Puedes registrar la visita igual (con notas), o pedirle producto desde su ficha.

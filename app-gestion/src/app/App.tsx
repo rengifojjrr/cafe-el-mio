@@ -72,6 +72,10 @@ const router = createHashRouter([
           { path: 'catalogo/:id', element: page(catalog, 'ProductDetailPage') },
           { path: 'catalogo/:id/editar', element: page(catalog, 'ProductFormPage') },
           { path: 'almacen', element: page(warehouse, 'WarehousePage') },
+          // Ronda 3 · escáner, etiquetas, trazabilidad y recepción (en el mismo trozo del almacén)
+          { path: 'almacen/contar', element: page(warehouse, 'CountPage') },
+          { path: 'almacen/llegadas/:id', element: page(warehouse, 'ArrivalPage') },
+          { path: 'codigos', element: page(warehouse, 'CodesPage') },
           { path: 'locales', element: page(stores, 'StoresPage') },
           { path: 'locales/nuevo', element: page(stores, 'StoreFormPage') },
           { path: 'locales/:id', element: page(stores, 'StoreDetailPage') },

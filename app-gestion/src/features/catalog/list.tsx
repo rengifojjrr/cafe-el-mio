@@ -1,7 +1,7 @@
 // Catálogo: una tarjeta por familia (por ejemplo «Toro 6 × 52») con sus capas como chips,
 // filtros de un toque que se recuerdan por persona, y la capa, la fortaleza y la procedencia
 // a la vista sin entrar a la ficha.
-import { AlertTriangle, BookOpen, Eye, EyeOff, FileSpreadsheet, Images, Plus, Ruler, Search, ShoppingBag, SlidersHorizontal, Truck, X } from 'lucide-react';
+import { AlertTriangle, BookOpen, Eye, EyeOff, FileSpreadsheet, Images, Plus, Printer, Ruler, Search, ShoppingBag, SlidersHorizontal, Truck, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
@@ -25,6 +25,7 @@ import { getPhoto, listProducts, type ProductView } from '../../services/catalog
 import { Button, EmptyState, ErrorBox, LinkButton, Loading, PageHeader, Pill, Sheet } from '../../ui/kit';
 import { ProductThumb } from '../../ui/media';
 import { QuickOrderSheet } from '../consignment/components';
+import { LabelsSheet } from '../labels/LabelsSheet';
 
 export function CatalogPage() {
   const { ctx, actor, config, p, line } = useLine();
@@ -36,6 +37,7 @@ export function CatalogPage() {
   const [ordering, setOrdering] = useState<ProductView | null>(null);
   const [choosing, setChoosing] = useState<Family<ProductView> | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [labels, setLabels] = useState(false);
   const { data, error, loading } = useAsync(() => listProducts(ctx, { includeInactive: isAdmin && showInactive }), [ctx, showInactive, isAdmin]);
   const now = ctx.now();
 
@@ -75,6 +77,11 @@ export function CatalogPage() {
               <LinkButton to={p('catalogo/comparar')} icon={Ruler}>
                 Comparar
               </LinkButton>
+            ) : null}
+            {isAdmin ? (
+              <Button icon={Printer} onClick={() => setLabels(true)}>
+                Etiquetas
+              </Button>
             ) : null}
             {isAdmin && !actor.readOnly ? (
               <>
@@ -167,6 +174,7 @@ export function CatalogPage() {
         ))}
       </ul>
       <QuickOrderSheet view={ordering} onClose={() => setOrdering(null)} />
+      {isAdmin ? <LabelsSheet open={labels} onClose={() => setLabels(false)} /> : null}
       <Sheet open={Boolean(choosing)} onClose={() => setChoosing(null)} title={choosing ? `¿Cuál ${choosing.name}?` : ''}>
         <ul className="grid gap-2">
           {(choosing?.variants ?? []).map((v) => (

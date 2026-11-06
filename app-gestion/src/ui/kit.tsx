@@ -324,13 +324,22 @@ export function QtyStepper({
 
 // ---------- Hoja modal (abajo en el teléfono, centrada en la computadora) ----------
 
+/** Hojas abiertas, la de arriba al final (por ejemplo, el lector abierto desde otra hoja). */
+const openSheets: symbol[] = [];
+
 export function Sheet({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Con la función en una ref, que la pantalla se vuelva a dibujar no reinicia la hoja (el foco no salta).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
+    const me = Symbol('hoja');
+    openSheets.push(me);
     const prev = document.activeElement as HTMLElement | null;
+    // Escape cierra solo la hoja de arriba.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && openSheets[openSheets.length - 1] === me) onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
@@ -339,12 +348,13 @@ export function Sheet({ open, onClose, title, children, wide }: { open: boolean;
       (first ?? ref.current)?.focus();
     }, 30);
     return () => {
+      openSheets.splice(openSheets.indexOf(me), 1);
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      if (openSheets.length === 0) document.body.style.overflow = '';
       window.clearTimeout(t);
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="presentation">

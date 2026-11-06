@@ -1,6 +1,6 @@
 // Piezas de consignación que se usan en varias pantallas: tarjeta de entrega con sus acciones,
 // pedir producto para un local, recibir con firma, reportar ventas y devoluciones o mermas.
-import { CheckCircle2, FileText, MapPin, PackageCheck, Printer, Send, Truck, Undo2, XCircle } from 'lucide-react';
+import { CheckCircle2, FileText, MapPin, PackageCheck, Printer, ScanBarcode, Send, Truck, Undo2, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import type { Store } from '../../data/types';
@@ -29,6 +29,7 @@ import { Button, Pill, QtyStepper, Sheet, Tabs, TextArea, TextInput } from '../.
 import { PhotoPicker } from '../../ui/media';
 import { SignatureField, askLocation } from '../../ui/signature';
 import { useAction } from '../../ui/toast';
+import { PrepareScanSheet } from './scan-prepare';
 
 const ORIGIN_LABEL: Record<DeliveryView['origin'], string> = {
   vendedor: 'Pedida por el vendedor',
@@ -40,6 +41,7 @@ export function DeliveryCard({ d, showStore }: { d: DeliveryView; showStore?: bo
   const { ctx, actor, p } = useLine();
   const { run, busy } = useAction();
   const [receive, setReceive] = useState(false);
+  const [scanPrepare, setScanPrepare] = useState(false);
   const [reject, setReject] = useState(false);
   const [reason, setReason] = useState('');
   const isAdmin = actor.role === 'admin';
@@ -113,6 +115,9 @@ export function DeliveryCard({ d, showStore }: { d: DeliveryView; showStore?: bo
             <Button variant="primary" icon={PackageCheck} busy={busy} onClick={prepare}>
               Aprobar y preparar
             </Button>
+            <Button icon={ScanBarcode} onClick={() => setScanPrepare(true)}>
+              Preparar escaneando
+            </Button>
             <Button variant="ghost" icon={XCircle} onClick={() => setReject(true)}>
               Rechazar
             </Button>
@@ -130,6 +135,7 @@ export function DeliveryCard({ d, showStore }: { d: DeliveryView; showStore?: bo
         ) : null}
       </div>
       {receive ? <ReceiveSheet d={d} units={units} onClose={() => setReceive(false)} /> : null}
+      {scanPrepare ? <PrepareScanSheet d={d} onClose={() => setScanPrepare(false)} /> : null}
       <Sheet open={reject} onClose={() => setReject(false)} title={`Rechazar ${d.code}`}>
         <form
           className="grid gap-4"

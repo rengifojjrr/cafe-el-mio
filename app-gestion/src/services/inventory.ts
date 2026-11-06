@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import type { Arrival, ArrivalStatus, Delivery, IsoDate, Lot, Movement, Product, Warehouse } from '../data/types';
 import { Balances, InsufficientStockError, WAREHOUSE, allocate, reservedByProduct } from '../domain/ledger';
+import { arrivalDifferences, receivedFromBales } from '../domain/receiving';
 import { round2 } from '../lib/money';
 import { addDaysToDate, daysBetween, toIsoDate } from '../lib/time';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
@@ -321,6 +322,7 @@ export async function setArrivalStatus(ctx: Ctx, arrivalId: string, status: Arri
     const a = await ctx.repo.arrivals.get(arrivalId);
     if (!a) throw new NotFoundError('la llegada');
     if (a.status === 'recibida') throw new ValidationError('Esta llegada ya se recibió.');
+    if (status === 'confirmando' && !a.bales?.length) throw new ValidationError('Para confirmar bultos primero carga la lista de empaque.');
     a.status = status;
     if (eta) a.eta = eta;
     a.statusHistory.push({ status, at: nowIso(ctx) });
@@ -329,7 +331,11 @@ export async function setArrivalStatus(ctx: Ctx, arrivalId: string, status: Arri
   });
 }
 
-/** Recibir una llegada crea un lote por producto y suma al almacén con un movimiento de entrada. */
+/**
+ * Recibir una llegada crea un lote por producto y suma al almacén con un movimiento de entrada.
+ * Una importación con lista de empaque se recibe después de confirmar todos sus bultos, y entra
+ * lo contado (con el costo de sus bultos); la diferencia con la lista queda en el movimiento.
+ */
 export async function receiveArrival(ctx: Ctx, arrivalId: string): Promise<void> {
   guard(ctx, 'inventory.write');
   await mutate(ctx, async () => {
@@ -339,7 +345,16 @@ export async function receiveArrival(ctx: Ctx, arrivalId: string): Promise<void>
     if (a.status === 'cancelada') throw new ValidationError('Esta llegada está cancelada.');
     const at = nowIso(ctx);
     const today = toIsoDate(ctx.now());
-    for (const [i, item] of a.items.entries()) {
+    // Ronda 3 · recepción bulto por bulto: entra lo contado de cada producto.
+    let items: { productId: string; qty: number; unitCost: number; expected?: number }[] = a.items;
+    if (a.bales?.length) {
+      guard(ctx, 'arrival.confirm');
+      if (a.status !== 'confirmando') throw new ValidationError(`Primero confirma los bultos de ${a.code}: toca «Confirmar bultos».`);
+      const pending = a.bales.filter((b) => b.status === 'pendiente').length;
+      if (pending) throw new ValidationError(`Faltan ${pending} bulto${pending === 1 ? '' : 's'} por revisar.`);
+      items = receivedFromBales(a.bales).filter((r) => r.qty > 0);
+    }
+    for (const [i, item] of items.entries()) {
       const lot: Lot = {
         id: ctx.newId('lot'),
         productId: item.productId,
@@ -364,6 +379,7 @@ export async function receiveArrival(ctx: Ctx, arrivalId: string): Promise<void>
         storeId: null,
         refType: 'arrival',
         refId: a.id,
+        reason: item.expected !== undefined && item.expected !== item.qty ? `Lista de empaque: ${item.expected} · contado: ${item.qty}` : undefined,
         actorId: ctx.actor.userId,
       };
       await ctx.repo.movements.put(mv);
@@ -372,8 +388,15 @@ export async function receiveArrival(ctx: Ctx, arrivalId: string): Promise<void>
     a.receivedAt = at;
     a.statusHistory.push({ status: 'recibida', at });
     await ctx.repo.arrivals.put(a);
-    const units = a.items.reduce((s, i) => s + i.qty, 0);
-    await audit(ctx, 'llegada.recibir', 'arrival', a.id, `Recibida ${a.code}: ${units} unidades al almacén`);
+    const units = items.reduce((s, i) => s + i.qty, 0);
+    let detail = '';
+    if (a.bales?.length) {
+      const r = arrivalDifferences(a.bales);
+      const short = r.byProduct.reduce((s, x) => s + Math.max(0, -x.diff), 0);
+      const extra = r.byProduct.reduce((s, x) => s + Math.max(0, x.diff), 0);
+      detail = ` (lista de empaque: ${r.expected}; ${r.withIssues ? `${r.withIssues} bulto${r.withIssues === 1 ? '' : 's'} con diferencias${short ? `, faltaron ${short}` : ''}${extra ? `, sobraron ${extra}` : ''}` : 'todos los bultos bien'})`;
+    }
+    await audit(ctx, 'llegada.recibir', 'arrival', a.id, `Recibida ${a.code}: ${units} unidades al almacén${detail}`);
     const sellers = await ctx.repo.users.where('role', 'seller');
     await notify(
       ctx,

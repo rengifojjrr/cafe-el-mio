@@ -20,6 +20,7 @@ import { commissionAmount } from '../domain/money-rules';
 import type { NewPhoto } from '../lib/image';
 import { round2 } from '../lib/money';
 import { ruleFromContext, sellerCommissionContext } from './commission-scheme';
+import { attachCases, detachCases } from './cases';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
 import { type InventorySnapshot, loadInventory } from './inventory';
 import { STORE_STATUS_LABEL, applyStoreStatus, scopedStores } from './stores';
@@ -144,12 +145,13 @@ async function writeDeliveryRequest(
 /**
  * Administración aprueba y prepara. Se aparta lo que hay en el almacén; lo que falta
  * queda como demanda no atendida. Si el local está firmado pero no aprobado, `approveStore`
- * lo aprueba en el mismo paso.
+ * lo aprueba en el mismo paso. Al preparar escaneando, `picked` dice cuánto se juntó de cada
+ * producto (nunca más de lo pedido) y `caseIds` las cajas con trazabilidad que van.
  */
 export async function prepareDelivery(
   ctx: Ctx,
   deliveryId: string,
-  opts?: { approveStore?: boolean },
+  opts?: { approveStore?: boolean; picked?: Record<string, number>; caseIds?: string[] },
 ): Promise<{ delivery: Delivery; prepared: number; short: number }> {
   guard(ctx, 'delivery.prepare');
   return mutate(ctx, async () => {
@@ -172,7 +174,8 @@ export async function prepareDelivery(
     const shortages: UnmetDemand[] = [];
     for (const it of d.items) {
       const available = Math.max(0, snap.balances.qty(WAREHOUSE, it.productId) - (snap.reserved.get(it.productId) ?? 0));
-      const take = Math.min(it.qty, available);
+      const want = opts?.picked ? Math.min(it.qty, Math.max(0, Math.floor(opts.picked[it.productId] ?? 0))) : it.qty;
+      const take = Math.min(want, available);
       prepared += take;
       if (take < it.qty) {
         short += it.qty - take;
@@ -203,6 +206,7 @@ export async function prepareDelivery(
     d.preparedAt = nowIso(ctx);
     d.preparedBy = ctx.actor.userId;
     await ctx.repo.deliveries.put(d);
+    if (opts?.caseIds?.length) await attachCases(ctx, d, opts.caseIds, (pid) => snap.productsById.get(pid)?.packSize ?? 1);
     if (d.reorderId) await setReorderStatus(ctx, d.reorderId, 'preparado');
     await audit(ctx, 'entrega.preparar', 'delivery', d.id, `${d.code} preparada: ${prepared} unidades${short ? ` (faltaron ${short})` : ''}`);
     const storeUsers = await ctx.repo.users.where('storeId', store.id);
@@ -228,6 +232,7 @@ export async function rejectDelivery(ctx: Ctx, deliveryId: string, reason: strin
     d.status = 'rechazada';
     d.rejectedReason = reason.trim();
     await ctx.repo.deliveries.put(d);
+    await detachCases(ctx, d.id);
     if (d.reorderId) await setReorderStatus(ctx, d.reorderId, 'cancelado');
     await audit(ctx, 'entrega.rechazar', 'delivery', d.id, `${d.code} rechazada: ${reason}`);
     await notify(ctx, [d.sellerId], 'entrega_preparada', `Entrega ${d.code} rechazada`, reason, `/${ctx.line}/entregas`);

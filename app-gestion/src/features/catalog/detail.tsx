@@ -1,7 +1,7 @@
 // Ficha del producto: el tabaco grande sobre fondo oscuro (o la foto), sus variantes por capa,
 // los atributos en una cuadrícula, «Ver en 3D», «Comparar con…», existencias, precios y lotes.
 // Es su propia pantalla: al volver, la lista queda donde estaba y con sus filtros.
-import { AlertTriangle, ArrowUpDown, Box, Camera, Eye, EyeOff, PackagePlus, Pencil, Plus, Rotate3d, Ruler, ShoppingBag, Trash2, Truck } from 'lucide-react';
+import { AlertTriangle, ArrowUpDown, Box, Camera, Printer, Eye, EyeOff, PackagePlus, Pencil, Plus, Rotate3d, Ruler, ShoppingBag, Trash2, Truck } from 'lucide-react';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { describeRule, storeEarning } from '../../domain/money-rules';
@@ -20,6 +20,7 @@ import { useAction } from '../../ui/toast';
 import { QuickOrderSheet } from '../consignment/components';
 import { CapaDot, StrengthMeter } from './list';
 import { PhotoOrderSheet } from './photo-order';
+import { LabelsSheet } from '../labels/LabelsSheet';
 
 // El visor 3D (canvas) se baja solo al tocar «Ver en 3D».
 const Cigar3D = lazy(() => import('./cigar3d').then((m) => ({ default: m.Cigar3D })));
@@ -35,6 +36,7 @@ export function ProductDetailPage() {
   const lots = useAsync(() => (actor.role === 'admin' ? listLots(ctx) : Promise.resolve([])), [ctx, actor.role]);
   const [ordering, setOrdering] = useState(false);
   const [show3d, setShow3d] = useState(false);
+  const [labels, setLabels] = useState(false);
   const siblings = useMemo(() => {
     if (!v) return [];
     const key = familyKey(v.product);
@@ -107,6 +109,11 @@ export function ProductDetailPage() {
             {actor.role === 'store' && !actor.readOnly ? (
               <Button variant="primary" icon={ShoppingBag} onClick={() => setOrdering(true)}>
                 Pedir este producto
+              </Button>
+            ) : null}
+            {isAdmin ? (
+              <Button icon={Printer} onClick={() => setLabels(true)}>
+                Imprimir etiquetas
               </Button>
             ) : null}
             {canEdit ? (
@@ -335,6 +342,7 @@ export function ProductDetailPage() {
         </div>
       ) : null}
       {ordering ? <QuickOrderSheet view={v} onClose={() => setOrdering(false)} /> : null}
+      {isAdmin ? <LabelsSheet open={labels} onClose={() => setLabels(false)} initialIds={[pr.id]} /> : null}
       <Sheet open={show3d} onClose={() => setShow3d(false)} title={`${pr.name} en 3D`} wide>
         {show3d && isCigar ? (
           reduced ? (
