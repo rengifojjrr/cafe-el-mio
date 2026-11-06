@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, Compass, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import type { LineId } from '../../data/types';
-import { enterAs } from '../../services/session';
+import { enterAs, getLineDataMode } from '../../services/session';
 import { errorText, useToast } from '../../ui/toast';
 import { TOUR } from './steps';
 
@@ -40,7 +40,18 @@ export function TourProvider({ children }: { children: ReactNode }) {
     [nav, push],
   );
 
-  const api = useMemo<TourApi>(() => ({ start: (l) => void goTo(l, 0) }), [goTo]);
+  // El recorrido enseña los datos de ejemplo: con los datos reales de la empresa no hay recorrido.
+  const start = useCallback(
+    async (l: LineId) => {
+      if ((await getLineDataMode(l)) === 'real') {
+        push('info', `${l === 'tabaco' ? 'Tabaco' : 'Café'} tiene datos reales: el recorrido es solo para los datos de ejemplo.`);
+        return;
+      }
+      await goTo(l, 0);
+    },
+    [goTo, push],
+  );
+  const api = useMemo<TourApi>(() => ({ start: (l) => void start(l) }), [start]);
   const step = line ? TOUR[line][i] : undefined;
   const total = line ? TOUR[line].length : 0;
 

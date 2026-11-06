@@ -12,6 +12,14 @@ const EXPORT_VERSION = 1;
 
 let seeding: Promise<void> | null = null;
 
+export type DataMode = 'demo' | 'real';
+
+/** ¿La línea tiene datos de ejemplo o los datos reales de la empresa? (Sin ajustes: ejemplo.) */
+export async function getLineDataMode(line: LineId): Promise<DataMode> {
+  const s = await getLineRepo(line).settings.get('settings');
+  return s?.dataMode === 'real' ? 'real' : 'demo';
+}
+
 /**
  * Si no hay datos (o son de una versión vieja de la semilla), carga los de ejemplo.
  * Devuelve siempre la misma promesa: quien necesita datos (entrar, listar cuentas, la sesión)
@@ -19,19 +27,116 @@ let seeding: Promise<void> | null = null;
  */
 export function ensureSeeded(now = new Date()): Promise<void> {
   if (!seeding) {
-    seeding = (async () => {
-      const core = getCoreRepo();
-      const settings = await core.settings.get('ecosystem');
-      const hasData = (await getLineRepo('tabaco').products.count()) > 0 && (await getLineRepo('cafe').products.count()) > 0;
-      if (!settings || settings.seedVersion !== SEED_VERSION || !hasData) {
-        await resetDemo(now, settings?.name);
-      }
-    })();
+    seeding = seedIfNeeded(now);
     seeding.catch(() => {
       seeding = null;
     });
   }
   return seeding;
+}
+
+/**
+ * Lo que hace `ensureSeeded`, sin recordar el resultado (las pruebas lo llaman directo).
+ *
+ * Regla de oro: una línea con datos reales (`dataMode: 'real'`) NUNCA se borra ni se vuelve a
+ * sembrar, aunque cambie la versión de la semilla o su catálogo esté vacío. Solo se (re)cargan
+ * las líneas de ejemplo, y las cuentas de «Entrar como…» de las líneas reales se conservan.
+ */
+export async function seedIfNeeded(now = new Date()): Promise<void> {
+  const core = getCoreRepo();
+  const settings = await core.settings.get('ecosystem');
+  const stale = !settings || settings.seedVersion !== SEED_VERSION;
+  const real: LineId[] = [];
+  const reseed: LineId[] = [];
+  for (const line of LINES) {
+    if ((await getLineDataMode(line)) === 'real') real.push(line);
+    else if (stale || (await getLineRepo(line).products.count()) === 0) reseed.push(line);
+  }
+  if (real.length === 0) {
+    // Todo es de ejemplo: como siempre, se recarga todo junto.
+    if (reseed.length) await resetDemo(now, settings?.name);
+    return;
+  }
+  if (reseed.length) await seedDemoLines(reseed, now, settings?.name);
+  if (await keepRealLines(real, now)) emitAll();
+}
+
+/** Recarga los datos de ejemplo de algunas líneas (en un Web Worker si se puede). */
+async function seedDemoLines(lines: LineId[], now: Date, keepName?: string): Promise<void> {
+  const name = keepName ?? DEFAULT_ECOSYSTEM_NAME;
+  if (typeof window !== 'undefined' && typeof Worker === 'function') {
+    try {
+      await seedInWorker(now, name, lines);
+      emitAll();
+      return;
+    } catch (e) {
+      console.warn('La semilla en segundo plano falló; se carga en la página.', e);
+    }
+  }
+  const { seedLines } = await import('../seed');
+  await seedLines(getCoreRepo(), { tabaco: getLineRepo('tabaco'), cafe: getLineRepo('cafe') }, lines, now, name);
+  emitAll();
+}
+
+/**
+ * Las líneas reales conservan sus cuentas: se quitan del directorio las que apuntan a usuarios
+ * que ya no existen y, si falta, se vuelve a poner la de Administración. También se asegura que
+ * existan la sesión y los ajustes del ecosistema. Devuelve true si cambió algo.
+ */
+async function keepRealLines(real: LineId[], now: Date): Promise<boolean> {
+  const core = getCoreRepo();
+  const [directory, settings, session] = await Promise.all([core.directory.all(), core.settings.get('ecosystem'), core.session.get('session')]);
+  let changed = false;
+  if (!directory.some((a) => a.id === 'direccion')) {
+    const { DIRECCION_ACCOUNT } = await import('../seed');
+    await core.directory.put(DIRECCION_ACCOUNT);
+    changed = true;
+  }
+  for (const line of real) {
+    const users = await getLineRepo(line).users.all();
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const mine = directory.filter((a) => a.line === line);
+    for (const acc of mine) {
+      if (!byId.get(acc.userId)?.active) {
+        await core.directory.remove(acc.id);
+        changed = true;
+      }
+    }
+    const hasAdmin = mine.some((a) => a.role === 'admin' && byId.get(a.userId)?.active);
+    const admin = users.find((u) => u.role === 'admin' && u.active);
+    if (!hasAdmin && admin) {
+      await core.directory.put(realAdminAccount(line, admin));
+      changed = true;
+    }
+  }
+  if (!settings || settings.seedVersion !== SEED_VERSION) {
+    await core.settings.put({
+      id: 'ecosystem',
+      name: settings?.name ?? DEFAULT_ECOSYSTEM_NAME,
+      theme: settings?.theme ?? 'dark',
+      seededAt: settings?.seededAt ?? now.toISOString(),
+      seedVersion: SEED_VERSION,
+    });
+    changed = true;
+  }
+  if (!session) {
+    await core.session.put({ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null });
+    changed = true;
+  }
+  return changed;
+}
+
+/** La cuenta de Administración de una línea con datos reales, para «Entrar como…». */
+export function realAdminAccount(line: LineId, admin: Pick<User, 'id' | 'name'>): DirectoryAccount {
+  return {
+    id: `${line}:admin`,
+    role: 'admin',
+    line,
+    userId: admin.id,
+    name: admin.name,
+    label: `Administración de ${line === 'tabaco' ? 'Tabaco' : 'Café'}`,
+    primary: true,
+  };
 }
 
 /** Borra todo y vuelve a cargar los datos de ejemplo (fechas relativas a hoy). */
@@ -56,7 +161,7 @@ export async function resetDemo(now = new Date(), keepName?: string): Promise<vo
 }
 
 /** Corre la simulación de la semilla en un Web Worker: la pantalla no se traba. */
-function seedInWorker(now: Date, name: string): Promise<void> {
+function seedInWorker(now: Date, name: string, lines?: LineId[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('../seed/seed.worker.ts', import.meta.url), { type: 'module' });
     const timer = window.setTimeout(() => {
@@ -74,7 +179,7 @@ function seedInWorker(now: Date, name: string): Promise<void> {
       worker.terminate();
       reject(new Error(e.message || 'No se pudieron cargar los datos de ejemplo.'));
     };
-    worker.postMessage({ now: now.toISOString(), name, prefix: getDbPrefix() });
+    worker.postMessage({ now: now.toISOString(), name, prefix: getDbPrefix(), lines });
   });
 }
 
@@ -231,14 +336,14 @@ export async function resolveActor(line: LineId): Promise<{ actor: Actor; accoun
 
 // ---------- Exportar / importar ----------
 
-async function blobToDataUrl(blob: Blob): Promise<string> {
+export async function blobToDataUrl(blob: Blob): Promise<string> {
   const buf = new Uint8Array(await blob.arrayBuffer());
   let bin = '';
   for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
   return `data:${blob.type || 'application/octet-stream'};base64,${btoa(bin)}`;
 }
 
-function dataUrlToBlob(url: string): Blob {
+export function dataUrlToBlob(url: string): Blob {
   const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(url);
   if (!m) throw new Error('Foto inválida en el archivo.');
   const mime = m[1] ?? 'application/octet-stream';
@@ -262,7 +367,15 @@ export async function exportState(): Promise<string> {
     );
     lines[line] = dump;
   }
-  return JSON.stringify({ app: EXPORT_APP, version: EXPORT_VERSION, exportedAt: new Date().toISOString(), core, lines });
+  const exportedAt = new Date().toISOString();
+  const json = JSON.stringify({ app: EXPORT_APP, version: EXPORT_VERSION, exportedAt, core, lines });
+  // El respaldo completo también es la copia de seguridad de cada línea con datos reales.
+  for (const line of LINES) {
+    const repo = getLineRepo(line);
+    const s = await repo.settings.get('settings');
+    if (s?.dataMode === 'real') await repo.settings.put({ ...s, lastExportAt: exportedAt });
+  }
+  return json;
 }
 
 /** Esquema del respaldo; zod se carga solo cuando alguien importa un archivo. */

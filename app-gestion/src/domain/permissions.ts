@@ -57,7 +57,16 @@ export type Action =
   | 'settings.read'
   | 'settings.manage'
   | 'audit.read'
-  | 'direccion.read';
+  | 'direccion.read'
+  // Ronda 3 · datos reales e importación
+  /** Empezar en blanco: vaciar la línea para cargar los datos reales. */
+  | 'data.reset'
+  /** Exportar la copia de seguridad de la línea (anota la fecha de la última copia). */
+  | 'data.export'
+  /** Importar una copia de la línea (reemplaza todo lo de la línea). */
+  | 'data.import'
+  /** Importar productos desde Excel o CSV (crea productos y su inventario inicial). */
+  | 'product.import';
 
 export type Resource =
   | { type: 'store'; store: Pick<Store, 'id' | 'sellerId'> }
@@ -87,6 +96,11 @@ const WRITE: ReadonlySet<Action> = new Set<Action>([
   'announcement.create',
   'user.manage',
   'settings.manage',
+  // Ronda 3 · datos reales e importación
+  'data.reset',
+  'data.export',
+  'data.import',
+  'product.import',
 ]);
 
 export function isWrite(action: Action): boolean {
@@ -110,6 +124,11 @@ const ADMIN_ONLY: ReadonlySet<Action> = new Set<Action>([
   'settings.read',
   'settings.manage',
   'audit.read',
+  // Ronda 3 · datos reales e importación
+  'data.reset',
+  'data.export',
+  'data.import',
+  'product.import',
 ]);
 
 /** Lo que cada rol puede hacer sin mirar el recurso. */
@@ -211,6 +230,11 @@ const ACTION_TEXT: Partial<Record<Action, string>> = {
   'user.manage': 'dar de alta usuarios',
   'settings.manage': 'cambiar los ajustes',
   'audit.read': 'ver la auditoría',
+  // Ronda 3 · datos reales e importación
+  'data.reset': 'empezar en blanco',
+  'data.export': 'exportar los datos de la línea',
+  'data.import': 'importar una copia de la línea',
+  'product.import': 'importar productos',
 };
 
 export function ensure(actor: Actor, action: Action, line: LineId | null, res?: Resource): void {

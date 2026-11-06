@@ -16,6 +16,7 @@ import { listStores, listZones } from '../../services/stores';
 import { Button, Card, EmptyState, ErrorBox, Field, Loading, NumberInput, PageHeader, Pill, Section, SelectInput, Sheet, TextInput } from '../../ui/kit';
 import { MapView, type MapMarker } from '../../ui/map';
 import { useAction } from '../../ui/toast';
+import { DataPanel } from '../data/DataPanel';
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { actor } = useLine();
@@ -497,6 +498,7 @@ function SettingsForm({ settings, products }: { settings: LineSettings; products
           </Button>
         }
       />
+      <DataPanel />
       <fieldset disabled={actor.readOnly} className="m-0 min-w-0 border-0 p-0">
         <Section title="Empresa y almacén">
           <Card className="grid gap-4 p-5 md:grid-cols-2">

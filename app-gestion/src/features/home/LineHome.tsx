@@ -34,6 +34,7 @@ import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Sectio
 import { useAction } from '../../ui/toast';
 import { DeliveryCard, ReportSalesSheet } from '../consignment/components';
 import { StoreStatusPill } from '../common';
+import { BackupNotice } from '../data/BackupNotice';
 
 export function LineHome() {
   const { actor } = useLine();
@@ -103,6 +104,7 @@ function AdminHome() {
   return (
     <>
       <PageHeader title="Centro de mando" subtitle={`${today(ctx.now())} · ${config.name}: locales, vendedores y almacén en el mapa.`} />
+      <BackupNotice className="mb-4" />
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="relative">
           <MapView
