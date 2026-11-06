@@ -1,7 +1,8 @@
 // Almacén de la línea: existencias calculadas del libro, llegadas (importaciones o lotes de
 // tostado), lotes con costo y vencimiento, y el libro de movimientos.
-import { AlertTriangle, ArrowRight, Boxes, CalendarClock, CheckCircle2, Flame, PackageCheck, Plus, Scale, Ship, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, Flame, FolderOpen, PackageCheck, Plus, Scale, Ship, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import type { Arrival, ArrivalStatus, Product } from '../../data/types';
 import { arrivalStatusLabel } from '../../lines/config';
 import { fmtMoney } from '../../lib/money';
@@ -21,11 +22,12 @@ import {
   stockSummary,
   warehouseShrink,
 } from '../../services/inventory';
-import { Button, Card, EmptyState, ErrorBox, Loading, NumberInput, PageHeader, Pill, SelectInput, Sheet, Stat, Tabs, TextArea, TextInput } from '../../ui/kit';
+import { Button, Card, EmptyState, ErrorBox, LinkButton, Loading, NumberInput, PageHeader, Pill, SelectInput, Sheet, Stat, Tabs, TextArea, TextInput } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { MOVEMENT_LABEL, RoleGate, locationLabel } from '../common';
 
 type Tab = 'existencias' | 'llegadas' | 'lotes' | 'movimientos';
+const TABS: Tab[] = ['existencias', 'llegadas', 'lotes', 'movimientos'];
 
 export function WarehousePage() {
   return (
@@ -36,8 +38,9 @@ export function WarehousePage() {
 }
 
 function Warehouse() {
-  const { ctx, config } = useLine();
-  const [tab, setTab] = useState<Tab>('existencias');
+  const { ctx, config, actor, p } = useLine();
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => (TABS.includes(params.get('tab') as Tab) ? (params.get('tab') as Tab) : 'existencias'));
   const wh = useAsync(() => getWarehouse(ctx), [ctx]);
   const stock = useAsync(() => stockSummary(ctx), [ctx]);
   const alerts = useAsync(() => inventoryAlerts(ctx), [ctx]);
@@ -57,7 +60,17 @@ function Warehouse() {
 
   return (
     <>
-      <PageHeader title={wh.data?.name ?? 'Almacén'} subtitle={`${wh.data?.address ?? ''} · Las existencias salen del libro de movimientos; nadie las edita a mano.`} />
+      <PageHeader
+        title={wh.data?.name ?? 'Almacén'}
+        subtitle={`${wh.data?.address ?? ''} · Las existencias salen del libro de movimientos; nadie las edita a mano.`}
+        actions={
+          !actor.readOnly ? (
+            <LinkButton to={p('almacen/contar')} icon={ClipboardCheck}>
+              Contar
+            </LinkButton>
+          ) : null
+        }
+      />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="En almacén" value={totals.wh} icon={Boxes} hint={config.unitName.many} />
         <Stat label="En consignación" value={totals.cons} hint="Siguen siendo de la empresa" />
@@ -258,7 +271,7 @@ function nextStatus(a: Arrival): ArrivalStatus | null {
 }
 
 function ArrivalsTab({ arrivals, loading, products }: { arrivals?: Arrival[]; loading: boolean; products: Product[] }) {
-  const { ctx, line, config, actor } = useLine();
+  const { ctx, line, config, actor, p } = useLine();
   const { run, busy } = useAction();
   const [create, setCreate] = useState(false);
   const names = new Map(products.map((p) => [p.id, p.name]));
@@ -321,18 +334,23 @@ function ArrivalsTab({ arrivals, loading, products }: { arrivals?: Arrival[]; lo
                   </li>
                 ))}
               </ol>
-              {!done && canWrite ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {next && next !== 'recibida' ? (
-                    <Button icon={ArrowRight} busy={busy} onClick={() => void run(() => setArrivalStatus(ctx, a.id, next), `${a.code}: ${arrivalStatusLabel(line, next)}.`)}>
-                      Pasar a «{arrivalStatusLabel(line, next)}»
+              <div className="mt-3 flex flex-wrap gap-2">
+                <LinkButton to={p(`almacen/llegadas/${a.id}`)} variant="ghost" icon={FolderOpen} aria-label={`Abrir ${a.code}`}>
+                  Abrir
+                </LinkButton>
+                {!done && canWrite ? (
+                  <>
+                    {next && next !== 'recibida' ? (
+                      <Button icon={ArrowRight} busy={busy} onClick={() => void run(() => setArrivalStatus(ctx, a.id, next), `${a.code}: ${arrivalStatusLabel(line, next)}.`)}>
+                        Pasar a «{arrivalStatusLabel(line, next)}»
+                      </Button>
+                    ) : null}
+                    <Button variant="primary" icon={PackageCheck} busy={busy} onClick={() => void run(() => receiveArrival(ctx, a.id), `${a.code} recibida: ${units} unidades al almacén.`)}>
+                      Recibir en almacén
                     </Button>
-                  ) : null}
-                  <Button variant="primary" icon={PackageCheck} busy={busy} onClick={() => void run(() => receiveArrival(ctx, a.id), `${a.code} recibida: ${units} unidades al almacén.`)}>
-                    Recibir en almacén
-                  </Button>
-                </div>
-              ) : null}
+                  </>
+                ) : null}
+              </div>
               {done ? (
                 <p className="mt-2 flex items-center gap-1.5 text-sm text-ok">
                   <CheckCircle2 className="h-4 w-4" aria-hidden /> Sumó al almacén por lote.
@@ -516,3 +534,9 @@ function MovementsTab({ products, warehouseName }: { products: Product[]; wareho
     </>
   );
 }
+
+// Ronda 3: «Contar», el detalle de una llegada y «Buscar código» van en este mismo trozo, así la
+// carga inicial no suma una ruta perezosa por cada pantalla.
+export { ArrivalPage } from './arrival';
+export { CountPage } from './count';
+export { CodesPage } from '../codes/pages';

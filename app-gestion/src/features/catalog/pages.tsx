@@ -1,6 +1,6 @@
 // Catálogo: fichas con la silueta a escala (tabaco) o la foto de la marca (café), precios,
 // lo que gana el local, la comisión del vendedor y la disponibilidad con la próxima llegada.
-import { AlertTriangle, BookOpen, Camera, Eye, EyeOff, PackagePlus, Pencil, Plus, Save, Search, ShoppingBag, Trash2, Truck } from 'lucide-react';
+import { AlertTriangle, BookOpen, Camera, Eye, EyeOff, PackagePlus, Pencil, Plus, Printer, Save, Search, ShoppingBag, Trash2, Truck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { CommissionRule, Product } from '../../data/types';
@@ -35,6 +35,7 @@ import { PhotoPicker, ProductThumb, useStoredPhoto } from '../../ui/media';
 import { useAction } from '../../ui/toast';
 import { attrText } from '../common';
 import { QuickOrderSheet } from '../consignment/components';
+import { LabelsSheet } from '../labels/LabelsSheet';
 
 function arrivalText(n: NextArrival | undefined, now: Date): string {
   if (!n) return 'Sin llegada programada';
@@ -50,6 +51,7 @@ export function CatalogPage() {
   const [showInactive, setShowInactive] = useState(false);
   const [onlyLow, setOnlyLow] = useState(false);
   const [ordering, setOrdering] = useState<ProductView | null>(null);
+  const [labels, setLabels] = useState(false);
   const { data, error, loading } = useAsync(() => listProducts(ctx, { includeInactive: showInactive }), [ctx, showInactive]);
   const now = ctx.now();
 
@@ -76,13 +78,21 @@ export function CatalogPage() {
         title="Catálogo"
         subtitle={subtitle}
         actions={
-          isAdmin && !actor.readOnly ? (
-            <LinkButton to={p('catalogo/nuevo')} variant="primary" icon={Plus}>
-              Nuevo producto
-            </LinkButton>
+          isAdmin ? (
+            <>
+              <Button icon={Printer} onClick={() => setLabels(true)}>
+                Imprimir etiquetas
+              </Button>
+              {!actor.readOnly ? (
+                <LinkButton to={p('catalogo/nuevo')} variant="primary" icon={Plus}>
+                  Nuevo producto
+                </LinkButton>
+              ) : null}
+            </>
           ) : null
         }
       />
+      {isAdmin ? <LabelsSheet open={labels} onClose={() => setLabels(false)} /> : null}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <label className="relative min-w-0 flex-1 basis-64">
           <span className="sr-only">Buscar en el catálogo</span>
@@ -207,6 +217,7 @@ export function ProductDetailPage() {
   const { data: v, error, loading } = useAsync(() => getProduct(ctx, id), [ctx, id]);
   const lots = useAsync(() => (actor.role === 'admin' ? listLots(ctx) : Promise.resolve([])), [ctx, actor.role]);
   const [ordering, setOrdering] = useState(false);
+  const [labels, setLabels] = useState(false);
   if (loading && !v) return <Loading rows={4} />;
   if (error) return <ErrorBox error={error} />;
   if (!v) return null;
@@ -229,6 +240,11 @@ export function ProductDetailPage() {
             {actor.role === 'store' && !actor.readOnly ? (
               <Button variant="primary" icon={ShoppingBag} onClick={() => setOrdering(true)}>
                 Pedir este producto
+              </Button>
+            ) : null}
+            {isAdmin ? (
+              <Button icon={Printer} onClick={() => setLabels(true)}>
+                Imprimir etiquetas
               </Button>
             ) : null}
             {canEdit ? (
@@ -398,6 +414,7 @@ export function ProductDetailPage() {
         </div>
       ) : null}
       {ordering ? <QuickOrderSheet view={v} onClose={() => setOrdering(false)} /> : null}
+      {isAdmin ? <LabelsSheet open={labels} onClose={() => setLabels(false)} initialIds={[pr.id]} /> : null}
     </>
   );
 }

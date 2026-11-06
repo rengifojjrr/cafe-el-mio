@@ -3,6 +3,7 @@ import type { DirectoryAccount, EcosystemSettings, LineId, Store, User } from '.
 import type { CoreRepo, LineRepo } from '../data/repo';
 import { CAFE_SEED } from './cafe';
 import { type LineSeedDef, type SeedTables, simulateLine } from './engine';
+import { addR3Almacen } from './r3-almacen';
 import { TABACO_SEED } from './tabaco';
 
 import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from './version';
@@ -12,7 +13,7 @@ export { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION };
 export const SEEDS: Record<LineId, LineSeedDef> = { tabaco: TABACO_SEED, cafe: CAFE_SEED };
 
 export function buildLine(line: LineId, now: Date): SeedTables {
-  return simulateLine(SEEDS[line], now);
+  return addR3Almacen(line, simulateLine(SEEDS[line], now), now);
 }
 
 /** Las cuentas principales de «Entrar como…»: una por rol de cada línea, más Dirección. */

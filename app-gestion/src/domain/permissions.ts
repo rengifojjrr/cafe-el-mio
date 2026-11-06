@@ -57,7 +57,24 @@ export type Action =
   | 'settings.read'
   | 'settings.manage'
   | 'audit.read'
-  | 'direccion.read';
+  | 'direccion.read'
+  // Ronda 3 · escáner, etiquetas, trazabilidad y recepción
+  | R3AlmacenAction;
+
+// Ronda 3 · escáner, etiquetas, trazabilidad y recepción (todo de administración).
+// Asignar códigos, registrar cajas, confirmar bultos y contar el almacén escriben; ver la
+// trazabilidad de una caja e imprimir etiquetas solo leen.
+const R3_ALMACEN_WRITE = ['code.assign', 'case.write', 'arrival.confirm', 'warehouse.count'] as const;
+const R3_ALMACEN_READ = ['case.read', 'label.print'] as const;
+export type R3AlmacenAction = (typeof R3_ALMACEN_WRITE)[number] | (typeof R3_ALMACEN_READ)[number];
+const R3_ALMACEN_TEXT: Record<R3AlmacenAction, string> = {
+  'code.assign': 'asignar códigos de barras',
+  'case.write': 'registrar cajas',
+  'arrival.confirm': 'confirmar bultos de una importación',
+  'warehouse.count': 'contar el almacén',
+  'case.read': 'ver de dónde viene y a dónde fue una caja',
+  'label.print': 'imprimir etiquetas',
+};
 
 export type Resource =
   | { type: 'store'; store: Pick<Store, 'id' | 'sellerId'> }
@@ -87,6 +104,8 @@ const WRITE: ReadonlySet<Action> = new Set<Action>([
   'announcement.create',
   'user.manage',
   'settings.manage',
+  // Ronda 3 · escáner, etiquetas, trazabilidad y recepción
+  ...R3_ALMACEN_WRITE,
 ]);
 
 export function isWrite(action: Action): boolean {
@@ -110,6 +129,9 @@ const ADMIN_ONLY: ReadonlySet<Action> = new Set<Action>([
   'settings.read',
   'settings.manage',
   'audit.read',
+  // Ronda 3 · escáner, etiquetas, trazabilidad y recepción
+  ...R3_ALMACEN_WRITE,
+  ...R3_ALMACEN_READ,
 ]);
 
 /** Lo que cada rol puede hacer sin mirar el recurso. */
@@ -211,6 +233,8 @@ const ACTION_TEXT: Partial<Record<Action, string>> = {
   'user.manage': 'dar de alta usuarios',
   'settings.manage': 'cambiar los ajustes',
   'audit.read': 'ver la auditoría',
+  // Ronda 3 · escáner, etiquetas, trazabilidad y recepción
+  ...R3_ALMACEN_TEXT,
 };
 
 export function ensure(actor: Actor, action: Action, line: LineId | null, res?: Resource): void {

@@ -75,6 +75,7 @@ export const TABACO: LineConfig = {
     { value: 'produccion', label: 'En producción' },
     { value: 'transito', label: 'En tránsito' },
     { value: 'aduana', label: 'En aduana' },
+    { value: 'confirmando', label: 'Confirmando bultos' },
     { value: 'recibida', label: 'Recibida' },
   ],
   productFields: [
