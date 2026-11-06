@@ -6,17 +6,24 @@ import { DateTime } from 'luxon';
 import type {
   AppNotification,
   AuditEntry,
+  Commission,
+  CommissionPayout,
+  CommissionScheme,
   Invitation,
   IsoDate,
   LineId,
   LineSettings,
   Product,
+  SalesReport,
   Store,
   User,
   Zone,
 } from '../data/types';
+import { monthToDateMetrics, resolveCommissionRule } from '../domain/commission-scheme';
 import { docAlertNotice, storeDocWarnings } from '../domain/fiscal';
 import { HOUSTON, MIAMI } from '../domain/markets';
+import { commissionAmount } from '../domain/money-rules';
+import { round2 } from '../lib/money';
 import { ZONE, fmtDate } from '../lib/time';
 import type { LineSeedDef, SeedTables } from './engine';
 
@@ -78,6 +85,7 @@ export function applyRonda3Red(def: LineSeedDef, t: SeedTables, now: Date): Seed
   const c = context(def, t, now);
   seedMarkets(c);
   seedFiscal(c);
+  seedCommissions(c);
   const invitations = seedInvitations(c);
   return { ...t, invitations, audit: (t.audit as AuditEntry[]).sort((a, b) => a.at.localeCompare(b.at)) };
 }
@@ -155,4 +163,74 @@ function seedInvitations({ line, users, admin, storeByKey, sellerByKey, ago, id 
     invitations.push({ id: id('inv'), accountId: 'tabaco:store', userId: faroUser.id, role: 'store', storeId: faro.id, expiresAt: ago(24 * 3), createdAt: ago(24 * 10), createdBy: admin.id, revokedAt: ago(24 * 9) });
   }
   return invitations;
+}
+
+// ---------- Comisión progresiva (tabaco) ----------
+
+/** Comisión progresiva de Tabaco: base 7 %, escalones por locales activos y por lo vendido en el mes, tope 10 %. */
+export const TABACO_SCHEME: CommissionScheme = {
+  basePercent: 7,
+  capPercent: 10,
+  tiers: [
+    { metric: 'locales', min: 5, percent: 8 },
+    { metric: 'locales', min: 8, percent: 10 },
+    { metric: 'ventas', min: 4000, percent: 8 },
+    { metric: 'ventas', min: 7000, percent: 9 },
+  ],
+};
+
+/** Tomás Garza abre Houston: su propia comisión, que premia sumar locales. */
+export const HOUSTON_SELLER_SCHEME: CommissionScheme = {
+  basePercent: 8,
+  capPercent: 10,
+  tiers: [
+    { metric: 'locales', min: 6, percent: 9 },
+    { metric: 'locales', min: 10, percent: 10 },
+    { metric: 'ventas', min: 3000, percent: 9 },
+  ],
+};
+
+/** Productos con comisión propia (los de monto fijo por unidad). */
+const CUSTOM_COMMISSION_SKUS = ['TB-EVE-COR42', 'TB-COR-PET42'];
+
+/**
+ * Rige la comisión progresiva y se recalcula la historia como si hubiera regido siempre: cada venta
+ * con las cifras del vendedor en el mes antes de ella (la misma regla que usa la app al devengar).
+ * Los pagos de comisiones se rehacen con los montos nuevos.
+ */
+function seedCommissions({ line, t, settings, stores, users, sellerByKey }: Seed): void {
+  if (line !== 'tabaco') return;
+  const products = t.products as Product[];
+  const reports = t.salesReports as SalesReport[];
+  const commissions = t.commissions as Commission[];
+  const audit = t.audit as AuditEntry[];
+  settings.commissionScheme = TABACO_SCHEME;
+  for (const p of products) if (CUSTOM_COMMISSION_SKUS.includes(p.sku)) p.commissionCustom = true;
+  const tomas = sellerByKey.get('tomas');
+  if (tomas) tomas.commissionScheme = HOUSTON_SELLER_SCHEME;
+  const productsById = new Map(products.map((p) => [p.id, p]));
+  const usersById = new Map(users.map((u) => [u.id, u]));
+  const pack = (pid: string) => productsById.get(pid)?.packSize ?? 1;
+  const bySeller = new Map<string, SalesReport[]>();
+  for (const r of reports) bySeller.set(r.sellerId, [...(bySeller.get(r.sellerId) ?? []), r]);
+  const metricsByReport = new Map<string, ReturnType<typeof monthToDateMetrics>>();
+  for (const r of reports) {
+    metricsByReport.set(r.id, monthToDateMetrics({ sellerId: r.sellerId, at: r.at, stores, reports: bySeller.get(r.sellerId) ?? [], packSize: pack }));
+  }
+  for (const c of commissions) {
+    const p = productsById.get(c.productId);
+    const metrics = metricsByReport.get(c.salesReportId);
+    if (!p || !metrics) continue;
+    const rule = resolveCommissionRule({ product: p, seller: usersById.get(c.sellerId), lineScheme: TABACO_SCHEME, metrics });
+    if (!rule) continue;
+    c.rule = rule;
+    c.amount = commissionAmount(rule, c.qty, c.qty > 0 ? c.base / c.qty : 0);
+  }
+  const commById = new Map(commissions.map((c) => [c.id, c]));
+  for (const po of t.payouts as CommissionPayout[]) {
+    po.amount = round2(po.commissionIds.reduce((a, cid) => a + (commById.get(cid)?.amount ?? 0), 0));
+    const entry = audit.find((e) => e.action === 'comision.pagar' && e.entityId === po.id);
+    const seller = usersById.get(po.sellerId);
+    if (entry) entry.summary = `Comisiones pagadas a ${seller?.name ?? po.sellerId}: ${po.amount.toFixed(2)} USD`;
+  }
 }

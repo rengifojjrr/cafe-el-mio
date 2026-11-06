@@ -49,9 +49,12 @@ export async function saveUser(ctx: Ctx, input: z.input<typeof userSchema>): Pro
       phone: data.phone,
       zoneId: data.zoneId,
       commissionOverride: data.role === 'seller' ? data.commissionOverride : undefined,
+      // La comisión progresiva propia se edita en otra hoja: se conserva al guardar.
+      commissionScheme: data.role === 'seller' ? prev?.commissionScheme : undefined,
       active: data.active,
       createdAt: prev?.createdAt ?? nowIso(ctx),
     };
+    if (!user.commissionScheme) delete user.commissionScheme;
     await ctx.repo.users.put(user);
     await audit(ctx, prev ? 'usuario.editar' : 'usuario.crear', 'user', user.id, `${prev ? 'Editado' : 'Alta de'} ${user.role === 'seller' ? 'vendedor' : 'administración'}: ${user.name}`);
     return user;

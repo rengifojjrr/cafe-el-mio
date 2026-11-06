@@ -7,7 +7,6 @@ import { useLine } from '../../app/line-context';
 import { ROLE_LABEL } from '../../app/nav';
 import type { AuditEntry, CommissionRule, LineSettings, User, Zone } from '../../data/types';
 import { CONTRACT_DISCLAIMER, CONTRACT_VARIABLES, annexText, parseContract, renderTemplate, type ContractBlock } from '../../domain/contract';
-import { describeRule } from '../../domain/money-rules';
 import { addDaysToDate, fmtDate, fmtDateTime, toIsoDate } from '../../lib/time';
 import { listAudit, listUsers, readSettings, saveSettings, saveUser, saveZone, setUserActive } from '../../services/admin';
 import { listProducts, type ProductView } from '../../services/catalog';
@@ -16,6 +15,7 @@ import { listStores, listZones } from '../../services/stores';
 import { Button, Card, EmptyState, ErrorBox, Field, Loading, NumberInput, PageHeader, Pill, Section, SelectInput, Sheet, TextInput } from '../../ui/kit';
 import { MapView, type MapMarker } from '../../ui/map';
 import { useAction } from '../../ui/toast';
+import { CommissionSchemeSettings, SellerCommissionText, SellerSchemeButton } from '../red/commission';
 import { InviteButton } from '../red/invite';
 
 function AdminOnly({ children }: { children: ReactNode }) {
@@ -52,6 +52,7 @@ function UsersInner() {
   const users = useAsync(() => listUsers(ctx), [ctx]);
   const zones = useAsync(() => listZones(ctx), [ctx]);
   const stores = useAsync(() => listStores(ctx), [ctx]);
+  const lineSettings = useAsync(() => readSettings(ctx), [ctx]);
   const { run, busy } = useAction();
   const [editing, setEditing] = useState<User | 'new' | null>(null);
   const [zoneEditing, setZoneEditing] = useState<Zone | 'new' | null>(null);
@@ -110,9 +111,7 @@ function UsersInner() {
                       <MapPin className="mr-1 inline h-3.5 w-3.5" aria-hidden />
                       {zoneName(u.zoneId)}
                     </p>
-                    <p className="mt-1 text-sm text-ink">
-                      Comisión: {u.commissionOverride ? <span className="font-semibold">especial, {describeRule(u.commissionOverride)}</span> : 'según cada producto'}
-                    </p>
+                    <SellerCommissionText user={u} lineScheme={lineSettings.data?.commissionScheme} />
                     <p className="mt-1 truncate text-sm text-muted">
                       {[u.email, u.phone].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
                     </p>
@@ -126,6 +125,7 @@ function UsersInner() {
                     <Button variant="ghost" icon={Power} busy={busy} onClick={() => toggle(u)}>
                       {u.active ? 'Desactivar' : 'Activar'}
                     </Button>
+                    <SellerSchemeButton user={u} lineScheme={lineSettings.data?.commissionScheme} />
                     {u.active ? <InviteButton target={{ kind: 'seller', userId: u.id }} name={u.name} /> : null}
                   </div>
                 ) : null}
@@ -393,7 +393,13 @@ function SettingsInner() {
   if (settings.loading && !settings.data) return <Loading rows={5} />;
   if (settings.error) return <ErrorBox error={settings.error} />;
   if (!settings.data) return null;
-  return <SettingsForm settings={settings.data} products={products.data ?? []} />;
+  return (
+    <>
+      <SettingsForm settings={settings.data} products={products.data ?? []} />
+      {/* Ronda 3: cada sección se guarda sola. */}
+      <CommissionSchemeSettings scheme={settings.data.commissionScheme} />
+    </>
+  );
 }
 
 function SettingsForm({ settings, products }: { settings: LineSettings; products: ProductView[] }) {

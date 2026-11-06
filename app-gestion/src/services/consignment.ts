@@ -16,9 +16,10 @@ import type {
 } from '../data/types';
 import { assertCanConsign, consignmentCheck } from '../domain/compliance';
 import { WAREHOUSE, allocate, storeLoc } from '../domain/ledger';
-import { commissionAmount, effectiveRule } from '../domain/money-rules';
+import { commissionAmount } from '../domain/money-rules';
 import type { NewPhoto } from '../lib/image';
 import { round2 } from '../lib/money';
+import { ruleFromContext, sellerCommissionContext } from './commission-scheme';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
 import { type InventorySnapshot, loadInventory } from './inventory';
 import { STORE_STATUS_LABEL, applyStoreStatus, scopedStores } from './stores';
@@ -305,7 +306,9 @@ async function createSalesReport(
   at: string,
 ): Promise<SalesReport> {
   const settings = await getSettings(ctx);
-  const seller = await ctx.repo.users.get(store.sellerId);
+  // La comisión sale de una sola puerta (comisión progresiva o la del producto), con las cifras
+  // del vendedor en el mes antes de esta venta. Sin vendedor no hay comisión.
+  const commissionCtx = await sellerCommissionContext(ctx, store.sellerId || null, at);
   const reportId = ctx.newId('vta');
   const lines: SaleLine[] = [];
   const commissions: Commission[] = [];
@@ -338,7 +341,8 @@ async function createSalesReport(
       snap.balances.apply(mv);
     }
     lines.push({ productId: it.productId, qty: it.qty, unitPrice: p.priceToStore, cost: round2(cost), lots });
-    const rule = effectiveRule(p, seller);
+    const rule = ruleFromContext(commissionCtx, p);
+    if (!rule) continue;
     commissions.push({
       id: ctx.newId('com'),
       sellerId: store.sellerId,

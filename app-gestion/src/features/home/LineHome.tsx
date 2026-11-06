@@ -33,6 +33,7 @@ import { listStores, storeConsignment, storeDebt } from '../../services/stores';
 import { documentAlerts, syncDocumentAlerts } from '../../services/fiscal';
 import { MapView, type MapMarker } from '../../ui/map';
 import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Section, Sheet, Stat } from '../../ui/kit';
+import { CommissionProgress } from '../red/commission';
 import { useAction } from '../../ui/toast';
 import { DeliveryCard, ReportSalesSheet } from '../consignment/components';
 import { StoreStatusPill } from '../common';
@@ -282,6 +283,7 @@ function SellerHome() {
       </Section>
 
       <Section title="Tus comisiones" actions={<LinkButton to={p('comisiones')} variant="ghost">Ver detalle</LinkButton>}>
+        <CommissionProgress />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <Stat label="Por cobrar" value={comm.data?.totals.pagable ?? 0} format="money" icon={Coins} hint="Los locales ya pagaron" />
           <Stat label="Devengadas" value={comm.data?.totals.devengada ?? 0} format="money" hint="Se cobran cuando el local paga" />
