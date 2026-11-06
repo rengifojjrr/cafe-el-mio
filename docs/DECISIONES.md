@@ -187,3 +187,60 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
   tapaba botones y casillas del final de un formulario en el teléfono.
 - **Cifras alineadas.** Las tarjetas de cifras reservan dos líneas para la etiqueta: en una misma fila los números
   quedan a la misma altura.
+
+### Datos reales
+- **«Empezar en blanco»** vacía solo esa línea y la marca como `dataMode: 'real'`: quedan los ajustes, el almacén, las
+  zonas y una sola cuenta («Administración»). En «Entrar como…» la línea queda solo con esa cuenta.
+- **La semilla nunca borra una línea real**, aunque cambie su versión o el catálogo esté vacío: solo se recargan las
+  líneas de ejemplo. Lo cubren pruebas unitarias y una e2e que baja la versión y recarga.
+- **Copia de seguridad por línea** (JSON con fotos y PDF): aviso a los 7 días sin exportar. Al entrar en modo real se
+  pide almacenamiento persistente al navegador (`navigator.storage.persist()`) y se recomienda instalar la app: Safari
+  puede borrar los datos de un sitio que no se abre en 7 días si no está en la pantalla de inicio.
+- **Importar desde Odoo** reconoce la exportación completa (product.product, en español o inglés) y la corta que usa
+  la empresa (nombre para mostrar, cantidades y categoría). Del nombre «[REF] 6x52 Toro Maduro» salen la referencia,
+  la medida, la vitola y la capa; la familia es vitola y medida («Toro 6 × 52»). Si el nombre y la categoría dicen
+  capas distintas, gana el nombre (con aviso); sin capa, Habano (con aviso). Sin referencia, el SKU sale del nombre y
+  es siempre el mismo. Volver a importar no duplica (busca por SKU o código) y la cantidad del archivo reemplaza la del
+  almacén con un ajuste; la primera vez entra como «Inventario inicial (importado)». Cuba se rechaza.
+
+### Escáner, etiquetas, trazabilidad y recepción
+- **Escanear** usa `BarcodeDetector` si el navegador lo trae y, si no (iPhone), `@zxing/browser` en un trozo aparte
+  (≈127 KB comprimido, solo cuando se abre la cámara). Siempre se puede escribir el código o leerlo de una foto.
+- **Etiquetas** en PDF dibujadas como vectores (Code 128 o EAN-13 propios, probados contra un decodificador, y QR que
+  abre la ficha): hoja carta de 3 × 10 o etiqueta térmica de 2 × 1″.
+- **Recibir bulto por bulto**: el paso «Confirmar bultos» va entre «En aduana» y «Recibida». Entra al almacén lo
+  **contado**, un lote por producto con el costo promediado; la diferencia queda en el movimiento y en la auditoría
+  (no como merma: es un reclamo a la fábrica). «Dañado» cuenta solo lo que sirve.
+- **Contar el almacén** solo ajusta lo que se contó; lo que falta sale lote por lote, lo que sobra entra al más nuevo.
+
+### Venta en firme y precios
+- **Modalidad del local**: consignación (lo de siempre) o compra en firme, de contado o a crédito. En firme, al
+  recibir con firma nace la factura con los precios de su lista (cajas completas al precio de caja, el resto suelto),
+  la mercancía sale del almacén a «vendido» lote por lote y queda la cuenta por cobrar. Un local con producto en
+  consignación no pasa a firme hasta devolverlo o venderlo.
+- **La consignación sigue cobrando el precio al local del producto**; las listas de precios se aplican a lo que se
+  vende en firme (entregas a locales en firme y ventas rápidas).
+- **El local en firme ve solo su precio** en el catálogo; el de consignación sigue viendo el PVP y lo que gana (es su
+  margen). El PVP se esconde en la pantalla, pero todavía viaja en el producto: con servidor se quita del todo.
+- **Impuesto de venta**: solo si se pone un % en Ajustes **y** el local no tiene certificado de reventa vigente (lo que
+  se compra para revender está exento en Florida). Es una lectura, no un consejo: lo confirma la contadora.
+- **Venta rápida** sin vendedor (no hay comisión), con permiso vigente, sin tocar lo apartado para entregas ya
+  preparadas. Los pedidos por teléfono y pegados se confirman al crearlos: no esperan al vendedor.
+- **Pegar pedido** sin IA: un analizador con reglas (cantidad, caja o mazo, vitola, capa, medida, código) que pregunta
+  cuando hay dudas en vez de adivinar.
+
+### Red: comisiones, mercados, repartos, invitaciones y datos fiscales
+- **Comisión progresiva**: el % se fija al devengar, con lo que el vendedor lleva del mes (en hora de Miami) antes de
+  esa venta; lo ya devengado no se recalcula. Orden: sin vendedor no hay comisión → producto con «comisión propia» →
+  comisión especial fija del vendedor → su comisión progresiva o la de la línea → la regla del producto. Del escalón
+  más alto alcanzado sale el %, nunca por encima del tope. Vale igual para consignación y para firme.
+- **Mercados**: Miami y Houston en Ajustes; zonas, locales y vendedores llevan su mercado. El permiso de tabaco dice
+  quién lo emite (Florida DBPR o Texas Comptroller). En Dirección, con un mercado elegido, no se cuenta el almacén
+  (es de toda la línea).
+- **Repartos**: el costo (km estimados en línea recta × 1.3 × costo por km, chofer y peajes) de cada reparto terminado
+  se reparte por unidades entregadas en cada parada y después por producto; aparece en Rentabilidad y en el margen.
+- **Invitaciones**: link y QR con vencimiento. Sin servidor solo eligen la cuenta en este navegador; en otro teléfono
+  explican que hace falta la nube. La versión con servidor necesita un token firmado y de un solo uso, crear la cuenta
+  al aceptar, revocar al instante en todos los teléfonos y que la base de datos aplique los permisos.
+- **Datos fiscales**: Tax ID (EIN), certificado de reventa y la foto o PDF de cada documento; avisos 30 días antes de
+  vencer y al vencer.

@@ -109,7 +109,9 @@ test('contar el almacén: escanear, revisar contra el libro y guardar el ajuste'
   await expect(page.getByRole('cell', { name: 'Ajuste' }).first()).toBeVisible();
   // t-prd_0013 es «Toro 6 × 52 · Habano» en la semilla.
   await go(page, '/tabaco/catalogo/t-prd_0013');
-  await expect(page.getByRole('heading', { name: 'Toro 6 × 52 · Habano', level: 1 })).toBeVisible();
+  // La ficha titula con la familia; la capa va debajo, con el SKU.
+  await expect(page.getByRole('heading', { name: 'Toro 6 × 52', level: 1 })).toBeVisible();
+  await expect(page.getByText(/^Habano · SKU/)).toBeVisible();
   expect(await statValue(page, 'Disponible en almacén')).toBe(7);
 });
 
@@ -160,7 +162,8 @@ test('recibir una importación bulto por bulto: todos «Bien» menos uno con fal
   // Bulto 1: vinieron 3 mazos menos de lo que dice la lista.
   await page.getByRole('button', { name: 'Contar el bulto 1', exact: true }).click();
   const bulto = page.getByRole('dialog', { name: 'Bulto 1' });
-  const menos = bulto.getByRole('button', { name: `Quitar una unidad de Contados de ${product.name}` });
+  // El contador dice la unidad del producto: «un mazo».
+  const menos = bulto.getByRole('button', { name: `Quitar un mazo de Contados de ${product.name}` });
   for (let i = 0; i < 3; i++) await menos.click();
   await expect(bulto.getByText('Faltan 3 mazos')).toBeVisible();
   await bulto.getByLabel('Nota (opcional)').fill('Faltan 3 mazos, el bulto venía abierto');

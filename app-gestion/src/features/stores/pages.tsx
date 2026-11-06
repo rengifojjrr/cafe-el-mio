@@ -23,7 +23,7 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { Store, StoreStatus } from '../../data/types';
 import { permitState, supplyCheck } from '../../domain/compliance';
-import { creditText, hasValidResaleCert } from '../../domain/invoices';
+import { creditText } from '../../domain/invoices';
 import { searchAddress, type GeoResult } from '../../lib/geocode';
 import { fmtMoney } from '../../lib/money';
 import { addDaysToDate, fmtAgo, fmtDate, fmtDateTime, toIsoDate } from '../../lib/time';
@@ -688,17 +688,7 @@ export function StoreDetailPage() {
                 ? ([['Permiso de venta de tabaco', s.tobaccoPermit ? `${s.tobaccoPermit.number} · ${s.tobaccoPermit.issuer ?? DEFAULT_PERMIT_ISSUER} · vence el ${fmtDate(s.tobaccoPermit.expiresOn)}` : 'Sin registrar']] as [string, string][])
                 : []),
               ['Cómo compra', creditText(s)],
-              ...(firm || s.taxId || s.resaleCert
-                ? ([
-                    ['Tax ID', s.taxId || 'Sin registrar'],
-                    [
-                      'Certificado de reventa',
-                      s.resaleCert
-                        ? `${s.resaleCert.number} · ${hasValidResaleCert(s, now) ? 'vence' : 'venció'} el ${fmtDate(s.resaleCert.expiresOn)}`
-                        : 'Sin registrar',
-                    ],
-                  ] as [string, string][])
-                : []),
+              // El Tax ID y el certificado de reventa están en «Datos fiscales y documentos», más abajo.
               ...(firm
                 ? []
                 : ([

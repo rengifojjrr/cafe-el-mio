@@ -380,7 +380,7 @@ function HeroImage({ photoIds, fallback }: { photoIds: string[]; fallback: React
   if (!photoIds.length) return <>{fallback}</>;
   return (
     <div className="mx-auto my-4 grid max-w-xl place-items-center">
-      {url ? <img src={url} alt="Foto del producto" className="sombra-suave max-h-80 w-auto rounded-2xl object-contain" /> : <div className="skeleton h-64 w-full" aria-hidden />}
+      {url ? <img src={url} alt="Foto principal del producto" className="sombra-suave max-h-80 w-auto rounded-2xl object-contain" /> : <div className="skeleton h-64 w-full" aria-hidden />}
     </div>
   );
 }

@@ -81,7 +81,7 @@ export function CatalogPage() {
             ) : null}
             {isAdmin ? (
               <Button icon={Printer} onClick={() => setLabels(true)}>
-                Etiquetas
+                Imprimir etiquetas
               </Button>
             ) : null}
             {isAdmin && !actor.readOnly ? (

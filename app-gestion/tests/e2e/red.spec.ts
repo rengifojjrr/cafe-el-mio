@@ -31,7 +31,8 @@ test('Ajustes: el simulador da el % de la comisión progresiva', async ({ page }
 test('mapa: cambiar a Houston muestra los locales de Houston', async ({ page }, info) => {
   await enterAs(page, 'tabaco:admin');
   await go(page, '/tabaco/mapa');
-  await expect(page.getByLabel('Locales en el mapa: 18')).toBeVisible();
+  // Miami: los 18 de consignación y los 5 que compran en firme.
+  await expect(page.getByLabel('Locales en el mapa: 23')).toBeVisible();
   await page.getByLabel('Mercado').selectOption('houston');
   await expect(page.getByLabel('Locales en el mapa: 5')).toBeVisible();
   await expect(page.locator('.leaflet-marker-icon[title^="Tabaquería Bayou"]')).toHaveCount(1);

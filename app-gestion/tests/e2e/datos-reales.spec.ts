@@ -117,6 +117,8 @@ test('Tabaco empieza en blanco, importa el Excel de Odoo y «Restablecer demo» 
   await enterAs(page, 'tabaco:admin');
   await expect(page.locator('header [data-modo="ejemplo"]')).toBeVisible();
   await go(page, '/tabaco/catalogo');
+  // La búsqueda se recuerda en la pestaña (quedó «toro» de antes): se borra para ver todo.
+  await page.getByLabel('Buscar en el catálogo').fill('');
   await expect(page.getByText('Biscayne Robusto').first()).toBeVisible();
 });
 

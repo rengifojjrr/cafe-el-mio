@@ -52,3 +52,39 @@
 
 Portada → «Exportar (JSON)» y, en el otro teléfono, «Importar (JSON)». «Restablecer demo» vuelve a los datos de
 ejemplo con fechas de hoy. Todo vive en el navegador: lo que hace una persona no lo ve otra en otro teléfono.
+
+## Ronda 3: lo que pidió el equipo de tabaco
+
+**Para empezar con sus datos:** Tabaco · Administración → Ajustes → «Empezar en blanco» (se escribe «Tabaco») →
+Catálogo → «Importar» (el Excel o CSV que exporta Odoo). Arriba se ve «Datos reales · solo en este navegador».
+Antes de enseñar la demo otra vez: portada → «Restablecer demo» (con datos reales pide escribir «borrar»).
+
+| Quiero ver | Cuenta | Dónde |
+|---|---|---|
+| Premium o de mazo, familias con sus capas como chips | Tabaco · cualquiera | Catálogo (buscar «toro») |
+| Filtros de un toque (tipo, capa, fortaleza, con stock) y «Más filtros» | Cualquiera | Catálogo |
+| Ficha con el tabaco grande, capas de la familia, «Ver en 3D» | Cualquiera | Catálogo → Toro 6 × 52 |
+| Comparar tamaños (2 a 4, de pie y a escala) | Cualquiera | Catálogo → «Comparar» o la ficha → «Comparar con…» |
+| Alta de producto: «¿Premium o de mazo?» y «Otra variante» | Tabaco · Administración | Catálogo → «Nuevo producto» o una ficha |
+| Volver de una ficha a la lista en el mismo punto y con los filtros | Cualquiera | Catálogo (o Locales, Pedidos…) |
+| Empezar en blanco, copia de seguridad, importar una copia | Administración | Ajustes → «Datos de Tabaco» |
+| Importar productos desde Excel (Odoo) con vista previa | Administración | Catálogo → «Importar» |
+| Fotos en lote por nombre de archivo (SKU o código) | Administración | Catálogo → «Fotos en lote» |
+| Escanear (cámara, foto o a mano) y la ruta de una caja | Tabaco · Administración | Buscar código (`C-IMP-2026-001-0001`, `E-0001`) |
+| Etiquetas con código de barras y QR (carta o 2 × 1″) | Administración | Catálogo o una ficha → «Imprimir etiquetas» |
+| Recibir una importación bulto por bulto (12 bultos) | Tabaco · Administración | Almacén → Importaciones → IMP-2026-016 → «Confirmar bultos» |
+| Barra de avance de un contenedor grande (37 de 147) | Tabaco · Administración | Almacén → Importaciones → IMP-2026-015 |
+| Diferencias de la importación (PDF y CSV) | Tabaco · Administración | Una importación recibida |
+| Contar el almacén escaneando | Administración | Almacén → «Contar» |
+| Local en firme: pedido → entrega firmada → factura → pago | Administración | Bodega El Primo (pedido por teléfono) → Entregas → Cobros |
+| Venta rápida (tres toques para un mazo) y factura para compartir | Administración | Inicio o Entregas → «Venta rápida» |
+| Pegar un pedido de WhatsApp | Administración | Pedidos → «Pegar pedido» («10 toro maduro, 5 robusto habano, 2 cajas torpedo») |
+| Listas de precios (fijo o % sobre costo, por caja y desde N cajas) | Administración | Ajustes → «Listas de precios» |
+| El local en firme ve solo su precio | Otras cuentas → Ramón Quesada (Bodega El Primo) | Catálogo |
+| Factura vencida / certificado de reventa vencido | Administración | Cobros (Licorería La Bendición) / Locales (Mini Market Flagler 57) |
+| Invitar a un vendedor o a un local (link, QR, WhatsApp) | Administración | Usuarios → Tomás Garza → «Invitar», o un local |
+| Tax ID, certificado de reventa y sus archivos; avisos de vencimiento | Administración | Un local → editar; Bodega Ocho y Medio no tiene certificado |
+| Reporte para la contadora (CSV y PDF) | Administración | Contabilidad → «Reporte para la contadora» |
+| Comisión progresiva: «Vas en el N % · con X locales más pasas al M %» | Tabaco · Vendedor | Inicio; Ajustes → comisión progresiva y simulador |
+| Miami y Houston | Tabaco · Administración o Dirección | Mapa (cambiar de mercado), Rentabilidad, Dirección |
+| Repartos: ruta del camión, paradas, costos | Tabaco · Administración | Repartos; el costo aparece en Rentabilidad |

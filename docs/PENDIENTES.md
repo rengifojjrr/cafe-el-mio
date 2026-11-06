@@ -50,3 +50,55 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 - Subir un PDF desde el teléfono (Archivos, Drive o iCloud) y ubicar las firmas con el dedo.
 - Ver un contrato en PDF sin conexión: hace falta haber abierto uno antes con conexión (el motor de pdf.js se
   descarga la primera vez).
+
+## Ronda 3 (lo que quedó y por qué)
+
+### Datos reales sin servidor
+- **Todo vive en un navegador.** Lo que carga Administración en su teléfono no lo ven los vendedores ni los locales en
+  los suyos, salvo pasando la copia (Exportar / Importar). Para que el equipo trabaje junto hace falta el servidor
+  (`SUPABASE.md`): es el siguiente paso, y también lo necesitan las invitaciones de verdad.
+- **Riesgo de perder datos:** Safari puede borrar los datos de un sitio que no se abre en 7 días si no está instalado
+  en la pantalla de inicio; Chrome suele negar el almacenamiento persistente hasta instalar la app. Por eso el aviso de
+  copia a los 7 días. La copia JSON lleva datos reales de la empresa: guardarla en un lugar privado.
+- **Sin contraseñas:** cualquiera con ese navegador entra como Administración de los datos reales.
+- **Banco y tienda en línea:** conectar el banco a la contabilidad necesita servidor, seguridad y el permiso del
+  banco; la tienda al público necesita la licencia federal, control de edad (21+) y pagos. Quedan para después del
+  servidor.
+
+### Importar desde Odoo
+- Probado con la exportación corta real de la empresa (fuera del repositorio): 79 filas, 0 errores, 51 familias.
+  **No trae precios ni costos**: quedan a $25 por mazo (premium a $40) y costo 0 «de ejemplo» hasta cargarlos.
+- **Confirmar con el equipo:** que las cantidades de Odoo son mazos (no cajas) y en qué unidad cuentan los paquetes
+  premium (5 Pack, 10 Pack, Box). Hoy: mazos, y cada paquete o caja premium como una unidad.
+- Los premium importados toman el stock bajo por defecto (60) y casi todos salen «Stock bajo»; a lo importado le
+  pueden faltar campos (vitola en premium) que el formulario pide al editar.
+- Los 10 000 códigos «hechos a mano»: la app identifica por variante (código de barras o SKU) y, si se quiere, por
+  caja (trazabilidad). Un código distinto por cada mazo no está.
+
+### Escáner, etiquetas y recepción
+- Probado con la cámara falsa de Chrome y con fotos; **falta probarlo en un iPhone y un Android reales** (y la
+  linterna). Las etiquetas no se imprimieron todavía en hojas Avery 5160 ni en una térmica real.
+- La lista de empaque en Excel se probó con CSV; las reglas para reconocer productos («52 torpedo maduro») necesitan un
+  archivo real de la fábrica. Un contenedor de 147 bultos dibuja todas las filas a la vez.
+- El borrador de «Contar» vive solo en ese navegador.
+
+### Venta en firme
+- No hay devoluciones ni notas de crédito de una factura, ni anular facturas, ni límite de crédito o bloqueo de un
+  local con facturas vencidas.
+- La factura es de demostración (no es una factura fiscal). Compartir por WhatsApp sin poder adjuntar manda solo el
+  texto: el PDF se adjunta a mano.
+- «Pegar pedido» no entiende «2 cajas y 5 mazos de toro» en una línea, puede leer un precio («a $25») como cantidad y
+  no entiende decimales con coma en las medidas. Más adelante, el bot de WhatsApp con notas de voz y fotos de la lista.
+- **Impuestos:** confirmar con la contadora la regla del certificado de reventa y los impuestos al tabaco que paga el
+  distribuidor (Florida y Texas).
+
+### Red
+- Houston no tiene almacén propio: sus entregas no entran en repartos. Hace falta un punto de salida en Houston.
+- La comisión progresiva no recalcula lo ya devengado en el mes cuando se sube de escalón; en los repartos un mazo
+  cuenta como una unidad para repartir el costo.
+- La lista de locales no filtra por mercado; los avisos de documentos por vencer se crean al abrir el inicio de
+  Administración (no hay un proceso en segundo plano).
+
+### Diseño
+- Las webs de referencia (Plasencia y CAO) no se pudieron abrir desde el entorno donde se construyó (la red las
+  bloquea): la ficha sigue lo que el equipo dijo que le gustó, sin copiar textos, imágenes ni marcas.
