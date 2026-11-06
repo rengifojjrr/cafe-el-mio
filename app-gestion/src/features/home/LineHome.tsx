@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Coins,
   FileSignature,
+  FileWarning,
   MessageCircle,
   Package,
   Plus,
@@ -15,7 +16,7 @@ import {
   Truck,
   Wallet,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { permitState } from '../../domain/compliance';
 import { fmtMoney } from '../../lib/money';
@@ -29,6 +30,7 @@ import { inventoryAlerts } from '../../services/inventory';
 import { openThread } from '../../services/messages';
 import { listCommissions, summarizeCommissions } from '../../services/money';
 import { listStores, storeConsignment, storeDebt } from '../../services/stores';
+import { documentAlerts, syncDocumentAlerts } from '../../services/fiscal';
 import { MapView, type MapMarker } from '../../ui/map';
 import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Section, Sheet, Stat } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
@@ -70,6 +72,11 @@ function AdminHome() {
   const deliveries = useAsync(() => listDeliveries(ctx, { status: 'solicitada' }), [ctx]);
   const orders = useAsync(() => listReorders(ctx, { open: true }), [ctx]);
   const alerts = useAsync(() => inventoryAlerts(ctx), [ctx]);
+  const docs = useAsync(() => documentAlerts(ctx), [ctx]);
+  // Avisos de documentos por vencer en la campana (una vez por documento y vencimiento).
+  useEffect(() => {
+    void syncDocumentAlerts(ctx).catch(() => undefined);
+  }, [ctx]);
   const month = pnl.data?.[pnl.data.length - 1];
   const markers = useMemo<MapMarker[]>(() => {
     const d = map.data;
@@ -97,6 +104,7 @@ function AdminHome() {
     ...(deliveries.data ?? []).map((d) => ({ icon: Truck, text: `Preparar ${d.code} para ${d.storeName}`, to: p('entregas'), tone: 'info' as const })),
     ...(orders.data ?? []).filter((o) => o.status === 'enviado').map((o) => ({ icon: ClipboardList, text: `${o.storeName} pidió ${o.code}: espera al vendedor`, to: p('pedidos'), tone: 'warn' as const })),
     ...overdue.map((s) => ({ icon: Receipt, text: `${s.store.name} tiene un pago vencido (${fmtMoney(s.balanceDue)})`, to: p('cobros'), tone: 'danger' as const })),
+    ...(docs.data ?? []).map((d) => ({ icon: FileWarning, text: `${d.storeName}: ${d.text.charAt(0).toLowerCase()}${d.text.slice(1)}`, to: p(`locales/${d.storeId}`), tone: d.state === 'vencido' ? ('danger' as const) : ('warn' as const) })),
     ...(alerts.data ?? []).map((a) => ({ icon: AlertTriangle, text: `${a.productName}: ${a.detail}`, to: a.storeId ? p(`locales/${a.storeId}`) : p(`catalogo/${a.productId}`), tone: 'warn' as const })),
   ];
 
@@ -177,6 +185,8 @@ function SellerHome() {
   const ready = useAsync(() => listDeliveries(ctx, { status: 'preparada' }), [ctx]);
   const comm = useAsync(async () => summarizeCommissions(await listCommissions(ctx)), [ctx]);
   const alerts = useAsync(() => inventoryAlerts(ctx), [ctx]);
+  // Certificados de reventa por vencer o vencidos en sus locales (el permiso ya sale abajo).
+  const certs = useAsync(async () => (await documentAlerts(ctx)).filter((d) => d.kind === 'reventa'), [ctx]);
   const warehouse = useAsync(() => mapData(ctx), [ctx]);
   const [pick, setPick] = useState<'visita' | 'pedido' | null>(null);
   const now = ctx.now();
@@ -279,7 +289,7 @@ function SellerHome() {
         </div>
       </Section>
 
-      {(alerts.data ?? []).length || permits.length ? (
+      {(alerts.data ?? []).length || permits.length || (certs.data ?? []).length ? (
         <Section title="Atención">
           <ul className="grid gap-2">
             {(alerts.data ?? []).map((a, i) => (
@@ -298,6 +308,16 @@ function SellerHome() {
                   <AlertTriangle className={`mt-0.5 h-5 w-5 flex-none ${s.permit === 'vencido' ? 'text-danger' : 'text-warn'}`} aria-hidden />
                   <span className="text-sm">
                     <b>{s.store.name}</b> · {s.permit === 'vencido' ? 'permiso de tabaco vencido: no se le puede consignar' : `permiso de tabaco vence el ${fmtDate(s.store.tobaccoPermit!.expiresOn)}`}
+                  </span>
+                </Link>
+              </li>
+            ))}
+            {(certs.data ?? []).map((d) => (
+              <li key={`cert-${d.storeId}`}>
+                <Link to={p(`locales/${d.storeId}`)} className="glass flex items-start gap-3 p-3">
+                  <AlertTriangle className={`mt-0.5 h-5 w-5 flex-none ${d.state === 'vencido' ? 'text-danger' : 'text-warn'}`} aria-hidden />
+                  <span className="text-sm">
+                    <b>{d.storeName}</b> · {d.state === 'vencido' ? 'certificado de reventa vencido: pide el nuevo' : `certificado de reventa vence el ${fmtDate(d.expiresOn!)}`}
                   </span>
                 </Link>
               </li>

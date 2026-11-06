@@ -800,4 +800,6 @@ export interface Invitation extends Entity {
   createdAt: IsoDateTime;
   createdBy: string;
   revokedAt?: IsoDateTime;
+  /** Última vez que alguien entró con ella (en este navegador). */
+  acceptedAt?: IsoDateTime;
 }

@@ -25,13 +25,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {list.map((t) => (
           <div
             key={t.id}
-            className={`glass entrada-suave pointer-events-auto flex w-full max-w-md items-start gap-3 px-4 py-3 text-sm ${
+            className={`glass entrada-suave pointer-events-none flex w-full max-w-md items-start gap-3 px-4 py-3 text-sm ${
               t.tone === 'error' ? 'text-danger' : t.tone === 'ok' ? 'text-ok' : 'text-ink'
             }`}
           >
             {t.tone === 'error' ? <CircleAlert className="mt-0.5 h-5 w-5 flex-none" aria-hidden /> : <CheckCircle2 className="mt-0.5 h-5 w-5 flex-none" aria-hidden />}
             <p className="flex-1 font-medium text-ink">{t.text}</p>
-            <button className="text-muted" onClick={() => setList((l) => l.filter((x) => x.id !== t.id))} aria-label="Cerrar aviso">
+            {/* El aviso deja pasar los toques a lo que tapa (en el teléfono suele quedar sobre un botón o una casilla); solo la X se toca. */}
+            <button className="pointer-events-auto text-muted" onClick={() => setList((l) => l.filter((x) => x.id !== t.id))} aria-label="Cerrar aviso">
               <X className="h-4 w-4" />
             </button>
           </div>

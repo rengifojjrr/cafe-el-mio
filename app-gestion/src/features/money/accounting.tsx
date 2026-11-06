@@ -1,6 +1,6 @@
 // Contabilidad de la línea (nunca mezclada con la otra): estado de resultados por mes,
 // inventario valorado, por cobrar y por pagar, y exportación a CSV.
-import { Download, Info, Landmark, Package, Receipt, TrendingUp } from 'lucide-react';
+import { Download, FileSpreadsheet, Info, Landmark, Package, Receipt, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { fmtMoney, fmtNumber, fmtPercent } from '../../lib/money';
 import { fmtDate, fmtMonth } from '../../lib/time';
@@ -9,7 +9,7 @@ import { listCommissions, listSettlements } from '../../services/money';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { BarsChart } from '../../ui/charts';
-import { Button, Card, ErrorBox, Loading, PageHeader, Section, Stat, Tabs } from '../../ui/kit';
+import { Button, Card, ErrorBox, LinkButton, Loading, PageHeader, Section, Stat, Tabs } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { AdminOnly, AgingCards, TableWrap, csvName, downloadCsv, monthLabel } from './shared';
 
@@ -28,7 +28,7 @@ const PNL_ROWS: { key: keyof PnlMonth; label: string; strong?: boolean; minus?: 
 ];
 
 function Accounting() {
-  const { ctx, config, line } = useLine();
+  const { ctx, config, line, p } = useLine();
   const pnl = useAsync(() => pnlByMonth(ctx, 4), [ctx]);
   const val = useAsync(() => inventoryValuation(ctx), [ctx]);
   const bal = useAsync(() => balances(ctx), [ctx]);
@@ -79,6 +79,11 @@ function Accounting() {
       <PageHeader
         title="Contabilidad"
         subtitle={`Solo ${config.name}: sus ventas, costos y cuentas no se mezclan con la otra línea. Costos de ejemplo hasta cargar los reales.`}
+        actions={
+          <LinkButton to={p('contabilidad/contadora')} icon={FileSpreadsheet}>
+            Reporte para la contadora
+          </LinkButton>
+        }
       />
 
       {pnl.loading && !pnl.data ? (

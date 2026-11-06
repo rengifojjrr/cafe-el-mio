@@ -16,6 +16,7 @@ import { listStores, listZones } from '../../services/stores';
 import { Button, Card, EmptyState, ErrorBox, Field, Loading, NumberInput, PageHeader, Pill, Section, SelectInput, Sheet, TextInput } from '../../ui/kit';
 import { MapView, type MapMarker } from '../../ui/map';
 import { useAction } from '../../ui/toast';
+import { InviteButton } from '../red/invite';
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { actor } = useLine();
@@ -125,6 +126,7 @@ function UsersInner() {
                     <Button variant="ghost" icon={Power} busy={busy} onClick={() => toggle(u)}>
                       {u.active ? 'Desactivar' : 'Activar'}
                     </Button>
+                    {u.active ? <InviteButton target={{ kind: 'seller', userId: u.id }} name={u.name} /> : null}
                   </div>
                 ) : null}
               </Card>

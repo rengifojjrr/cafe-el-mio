@@ -57,7 +57,15 @@ export type Action =
   | 'settings.read'
   | 'settings.manage'
   | 'audit.read'
-  | 'direccion.read';
+  | 'direccion.read'
+  // Ronda 3 · fiscal, comisiones, mercados y repartos
+  | 'invitation.read'
+  | 'invitation.create'
+  | 'fiscal.report'
+  | 'commission.configure'
+  | 'market.manage'
+  | 'route.read'
+  | 'route.manage';
 
 export type Resource =
   | { type: 'store'; store: Pick<Store, 'id' | 'sellerId'> }
@@ -87,6 +95,11 @@ const WRITE: ReadonlySet<Action> = new Set<Action>([
   'announcement.create',
   'user.manage',
   'settings.manage',
+  // Ronda 3 · fiscal, comisiones, mercados y repartos
+  'invitation.create',
+  'commission.configure',
+  'market.manage',
+  'route.manage',
 ]);
 
 export function isWrite(action: Action): boolean {
@@ -110,6 +123,12 @@ const ADMIN_ONLY: ReadonlySet<Action> = new Set<Action>([
   'settings.read',
   'settings.manage',
   'audit.read',
+  // Ronda 3 · fiscal, comisiones, mercados y repartos
+  'fiscal.report',
+  'commission.configure',
+  'market.manage',
+  'route.read',
+  'route.manage',
 ]);
 
 /** Lo que cada rol puede hacer sin mirar el recurso. */
@@ -140,6 +159,9 @@ const ROLE_ACTIONS: Record<Exclude<Role, 'admin'>, ReadonlySet<Action>> = {
     'message.read',
     'message.send',
     'announcement.read',
+    // Ronda 3: el vendedor invita a sus locales (el servicio pide el local como recurso).
+    'invitation.read',
+    'invitation.create',
   ]),
   store: new Set<Action>([
     'product.read',
@@ -211,6 +233,14 @@ const ACTION_TEXT: Partial<Record<Action, string>> = {
   'user.manage': 'dar de alta usuarios',
   'settings.manage': 'cambiar los ajustes',
   'audit.read': 'ver la auditoría',
+  // Ronda 3 · fiscal, comisiones, mercados y repartos
+  'invitation.read': 'ver estas invitaciones',
+  'invitation.create': 'invitar a esta cuenta',
+  'fiscal.report': 'ver el reporte para la contadora',
+  'commission.configure': 'cambiar la comisión progresiva',
+  'market.manage': 'cambiar los mercados',
+  'route.read': 'ver los repartos',
+  'route.manage': 'armar repartos',
 };
 
 export function ensure(actor: Actor, action: Action, line: LineId | null, res?: Resource): void {
