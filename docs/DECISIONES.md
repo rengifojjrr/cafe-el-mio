@@ -145,3 +145,45 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
   los toques caen fuera de los botones. Pasaba en el catálogo (la silueta ensanchaba la tarjeta), en los gráficos
   (la tabla para lectores de pantalla) y en la lista de vendedores. Las listas en cuadrícula ahora tienen una
   columna que no crece más que la pantalla, y una prueba en el teléfono recorre las pantallas principales.
+
+## Ronda 3 (lo que pidió el equipo de tabaco)
+
+### Catálogo
+- **Premium o de mazo.** En tabaco, lo primero al crear un producto es elegir el tipo. Lo de mazo no tiene marca: lo
+  que importa es la medida y la capa. Capote, tripa, marca y línea solo aparecen en premium.
+- **Familias y variantes.** Cada producto es una variante (su SKU, su código, su stock y su precio) de una familia.
+  En lo de mazo, la familia es la vitola con su medida («Toro 6 × 52») y las variantes son las capas, como las
+  nombran en el almacén. El nombre se compone solo («Toro 6 × 52 · Maduro») y nunca repite lo que ya dice la
+  familia: nadie escribe «Toro Maduro» a mano para que se vea la capa. Si una familia premium pasa a tener varias
+  variantes, las hermanas también llevan su capa en el nombre.
+- **La unidad es de cada producto.** Lo de mazo se cuenta en mazos (25 tabacos por defecto) y la caja trae 50 mazos;
+  el premium puede contarse en mazos o en tabacos sueltos; el café, en unidades. El libro de movimientos guarda la
+  unidad del producto, así que las pantallas dicen «120 mazos · 3,000 tabacos» o «40 tabacos · 2 cajas». Los pedidos
+  de mazo van de a un mazo (antes, de a una caja).
+- **Capa** es una lista (Habano, Maduro, Connecticut, Natural, Corojo, Criollo, Sumatra, Rosado, Oscuro, Candela)
+  y de ella sale el color de la silueta. El texto libre de antes («Connecticut Shade (Ecuador)») queda como «Detalle
+  de la capa» en premium.
+- **Filtros de un toque.** Una fila de chips con lo que más se usa (tipo, capa, fortaleza, con stock) y «Más filtros»
+  (vitola, procedencia, marca). Dentro de un filtro se suman las opciones; entre filtros, se cruzan. Cada opción dice
+  cuántos productos quedarían. Se guardan por persona en este navegador (`localStorage`); la búsqueda, por pestaña.
+- **Volver sin perder el punto.** Antes, cada cambio de pantalla subía al principio, también al volver atrás. Ahora
+  una pantalla nueva empieza arriba y al volver se recupera la posición de esa entrada del historial (si la página
+  se recargó, por su ruta), reintentando mientras la lista carga. Vale para todas las secciones.
+- **Ficha** con el tabaco grande sobre un fondo oscuro con textura (siempre oscuro, también en modo claro), sombra
+  suave, la medida en mayúsculas espaciadas y los atributos en cuadrícula, inspirado en cómo presentan sus puros
+  las marcas grandes, sin copiar textos, imágenes ni marcas. Las capas de la familia se cambian desde la ficha.
+- **Comparar tamaños**: de 2 a 4 vitolas de pie, apoyadas en la misma base y a la misma escala (no a tamaño real:
+  la pulgada de una pantalla no mide una pulgada).
+- **«Ver en 3D»** sin three.js: un canvas dibuja el tabaco como superficie de revolución (largo, cepo, cabeza
+  redonda o en punta, anilla, color de la capa) con luz simple. Pesa 2,5 KB comprimido y se baja al tocar el botón.
+  Con «reducir movimiento» se ve la silueta.
+- **Códigos de ejemplo** con prefijo GS1 200 (uso interno): no chocan con códigos de productos reales.
+
+### Diseño
+- **Títulos en Figtree seminegrita (620).** Se probaron dos: Figtree 620 y Fraunces 600 (una serif suave). Fraunces
+  se ve elegante pero en el teléfono los títulos chicos de las tarjetas se leen peor y suma 36 KB de letra; Figtree
+  ya es la letra del texto y de la marca.
+- **Los avisos no tapan.** Un aviso abajo de la pantalla no atrapa el toque (solo su «x»): antes, durante 4 segundos,
+  tapaba botones y casillas del final de un formulario en el teléfono.
+- **Cifras alineadas.** Las tarjetas de cifras reservan dos líneas para la etiqueta: en una misma fila los números
+  quedan a la misma altura.
