@@ -1,5 +1,6 @@
 // Contabilidad por línea (nunca mezclada), rentabilidad, reportes y datos del mapa.
-import type { Market, Product, Store } from '../data/types';
+import type { Invoice, Market, Product, Store } from '../data/types';
+import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
 import { WAREHOUSE, storeLoc } from '../domain/ledger';
 import { aging, settlementBalance } from '../domain/money-rules';
 import { round2 } from '../lib/money';
@@ -12,6 +13,7 @@ import { scopedStores } from './stores';
 
 export interface PnlMonth {
   month: string;
+  /** Ventas totales: consignación (a precio al local) + en firme (facturas, sin impuesto). */
   revenue: number;
   cogs: number;
   commissions: number;
@@ -20,10 +22,20 @@ export interface PnlMonth {
   distribution: number;
   grossMargin: number;
   units: number;
+  /** Consignación: lo vendido que reportan los locales. */
+  revenueConsignment: number;
+  cogsConsignment: number;
+  commissionsConsignment: number;
+  marginConsignment: number;
+  /** Venta en firme: facturas (entregas firmadas y ventas rápidas), sin el impuesto. */
+  revenueFirm: number;
+  cogsFirm: number;
+  commissionsFirm: number;
+  marginFirm: number;
 }
 
 async function loadMoney(ctx: Ctx) {
-  const [reports, commissions, returns, settlements, payments, stores, users, zones, reorders, unmet] = await Promise.all([
+  const [reports, commissions, returns, settlements, payments, stores, users, zones, reorders, unmet, invoices] = await Promise.all([
     ctx.repo.salesReports.all(),
     ctx.repo.commissions.all(),
     ctx.repo.returns.all(),
@@ -34,15 +46,16 @@ async function loadMoney(ctx: Ctx) {
     ctx.repo.zones.all(),
     ctx.repo.reorders.all(),
     ctx.repo.unmetDemand.all(),
+    ctx.repo.invoices.all(),
   ]);
-  return { reports, commissions, returns, settlements, payments, stores, users, zones, reorders, unmet };
+  return { reports, commissions, returns, settlements, payments, stores, users, zones, reorders, unmet, invoices };
 }
 
-/** Estado de resultados por mes: ventas al precio al local, costo por lote, comisiones y mermas. */
+/** Estado de resultados por mes: ventas (en consignación y en firme), costo por lote, comisiones y mermas. */
 export async function pnlByMonth(ctx: Ctx, months = 4): Promise<PnlMonth[]> {
   guard(ctx, 'accounting.read');
-  const [{ reports, commissions, returns }, dist] = await Promise.all([loadMoney(ctx), distributionShares(ctx)]);
-  return computePnl(reports, commissions, returns, ctx.now(), months, dist.shares.map((s) => ({ at: s.date, amount: s.cost })));
+  const [{ reports, commissions, returns, invoices }, dist] = await Promise.all([loadMoney(ctx), distributionShares(ctx)]);
+  return computePnl(reports, commissions, returns, ctx.now(), months, invoices, dist.shares.map((s) => ({ at: s.date, amount: s.cost })));
 }
 
 export function computePnl(
@@ -51,6 +64,7 @@ export function computePnl(
   returns: Awaited<ReturnType<typeof loadMoney>>['returns'],
   now: Date,
   months: number,
+  invoices: readonly Invoice[] = [],
   /** Costo de distribución por fecha (repartos terminados). */
   distribution: readonly { at: string; amount: number }[] = [],
 ): PnlMonth[] {
@@ -61,19 +75,48 @@ export function computePnl(
     d.setUTCMonth(d.getUTCMonth() - i);
     keys.push(monthKey(d));
   }
-  const rows = new Map(keys.map((k) => [k, { month: k, revenue: 0, cogs: 0, commissions: 0, shrink: 0, distribution: 0, grossMargin: 0, units: 0 }]));
+  const empty = (month: string) => ({
+    month,
+    revenue: 0,
+    cogs: 0,
+    commissions: 0,
+    shrink: 0,
+    distribution: 0,
+    grossMargin: 0,
+    units: 0,
+    revenueConsignment: 0,
+    cogsConsignment: 0,
+    commissionsConsignment: 0,
+    marginConsignment: 0,
+    revenueFirm: 0,
+    cogsFirm: 0,
+    commissionsFirm: 0,
+    marginFirm: 0,
+  });
+  const rows = new Map(keys.map((k) => [k, empty(k)]));
   for (const r of reports) {
     const row = rows.get(monthKey(r.at));
     if (!row) continue;
     for (const l of r.lines) {
-      row.revenue += l.qty * l.unitPrice;
-      row.cogs += l.cost;
+      row.revenueConsignment += l.qty * l.unitPrice;
+      row.cogsConsignment += l.cost;
+      row.units += l.qty;
+    }
+  }
+  for (const inv of invoices) {
+    const row = rows.get(monthKey(inv.issuedAt));
+    if (!row) continue;
+    row.revenueFirm += inv.subtotal;
+    for (const l of inv.lines) {
+      row.cogsFirm += l.cost;
       row.units += l.qty;
     }
   }
   for (const c of commissions) {
     const row = rows.get(monthKey(c.accruedAt));
-    if (row) row.commissions += c.amount;
+    if (!row) continue;
+    if (c.invoiceId) row.commissionsFirm += c.amount;
+    else row.commissionsConsignment += c.amount;
   }
   for (const x of returns) {
     if (x.kind !== 'merma') continue;
@@ -85,15 +128,28 @@ export function computePnl(
     const row = rows.get(d.at.length === 10 ? d.at.slice(0, 7) : monthKey(d.at));
     if (row) row.distribution += d.amount;
   }
-  return [...rows.values()].map((r) => ({
-    ...r,
-    revenue: round2(r.revenue),
-    cogs: round2(r.cogs),
-    commissions: round2(r.commissions),
-    shrink: round2(r.shrink),
-    distribution: round2(r.distribution),
-    grossMargin: round2(r.revenue - r.cogs - r.commissions - r.shrink - r.distribution),
-  }));
+  return [...rows.values()].map((r) => {
+    const revenue = r.revenueConsignment + r.revenueFirm;
+    const cogs = r.cogsConsignment + r.cogsFirm;
+    const commissions = r.commissionsConsignment + r.commissionsFirm;
+    return {
+      ...r,
+      revenue: round2(revenue),
+      cogs: round2(cogs),
+      commissions: round2(commissions),
+      shrink: round2(r.shrink),
+      distribution: round2(r.distribution),
+      grossMargin: round2(revenue - cogs - commissions - r.shrink - r.distribution),
+      revenueConsignment: round2(r.revenueConsignment),
+      cogsConsignment: round2(r.cogsConsignment),
+      commissionsConsignment: round2(r.commissionsConsignment),
+      marginConsignment: round2(r.revenueConsignment - r.cogsConsignment - r.commissionsConsignment),
+      revenueFirm: round2(r.revenueFirm),
+      cogsFirm: round2(r.cogsFirm),
+      commissionsFirm: round2(r.commissionsFirm),
+      marginFirm: round2(r.revenueFirm - r.cogsFirm - r.commissionsFirm),
+    };
+  });
 }
 
 export interface Valuation {
@@ -155,8 +211,13 @@ export async function inventoryValuation(ctx: Ctx): Promise<Valuation> {
 }
 
 export interface BalanceSheet {
+  /** Liquidado sin pagar (consignación). */
   receivable: number;
   unsettledSales: number;
+  /** Facturas de venta en firme sin pagar, y lo vencido de ellas. */
+  invoicesReceivable: number;
+  invoicesOverdue: number;
+  /** Antigüedad de todo lo que se debe: liquidaciones y facturas. */
   aging: ReturnType<typeof aging>;
   payableAccrued: number;
   payableReady: number;
@@ -164,16 +225,19 @@ export interface BalanceSheet {
   collectedLast30: number;
 }
 
-/** Por cobrar a locales y por pagar a vendedores. */
+/** Por cobrar a locales (liquidaciones y facturas) y por pagar a vendedores. */
 export async function balances(ctx: Ctx): Promise<BalanceSheet> {
   guard(ctx, 'accounting.read');
-  const { reports, commissions, settlements, payments } = await loadMoney(ctx);
+  const { reports, commissions, settlements, payments, invoices } = await loadMoney(ctx);
   const now = ctx.now();
   const since = addDays(now, -30);
+  const openInvoices = invoices.filter((i) => invoiceBalance(i) > 0);
   return {
     receivable: round2(settlements.reduce((a, s) => a + settlementBalance(s), 0)),
     unsettledSales: round2(reports.filter((r) => !r.settlementId).reduce((a, r) => a + r.total, 0)),
-    aging: aging(settlements, now),
+    invoicesReceivable: round2(openInvoices.reduce((a, i) => a + invoiceBalance(i), 0)),
+    invoicesOverdue: round2(openInvoices.filter((i) => isInvoiceOverdue(i, now)).reduce((a, i) => a + invoiceBalance(i), 0)),
+    aging: aging([...settlements, ...openInvoices.map((i) => ({ amount: i.total, paid: i.paid, issuedAt: i.issuedAt }))], now),
     payableAccrued: round2(commissions.filter((c) => c.status === 'devengada').reduce((a, c) => a + c.amount, 0)),
     payableReady: round2(commissions.filter((c) => c.status === 'pagable').reduce((a, c) => a + c.amount, 0)),
     paidCommissions: round2(commissions.filter((c) => c.status === 'pagada').reduce((a, c) => a + c.amount, 0)),
@@ -232,6 +296,7 @@ export async function reports(ctx: Ctx, periodDays = 90, opts?: { marketId?: str
     ? {
         ...all,
         reports: all.reports.filter((r) => inMarket(r.storeId)),
+        invoices: all.invoices.filter((i) => inMarket(i.storeId)),
         commissions: all.commissions.filter((c) => inMarket(c.storeId)),
         stores: all.stores.filter((st) => inMarket(st.id)),
         reorders: all.reorders.filter((o) => inMarket(o.storeId)),
@@ -247,7 +312,8 @@ export async function reports(ctx: Ctx, periodDays = 90, opts?: { marketId?: str
   const recent = money.reports.filter((r) => r.at >= since);
   const commByReportProduct = new Map<string, number>();
   for (const c of money.commissions) {
-    const k = `${c.salesReportId}|${c.productId}`;
+    // Las de una venta en firme van por factura; las de consignación, por venta reportada.
+    const k = `${c.invoiceId || c.salesReportId}|${c.productId}`;
     commByReportProduct.set(k, (commByReportProduct.get(k) ?? 0) + c.amount);
   }
 
@@ -288,6 +354,24 @@ export async function reports(ctx: Ctx, periodDays = 90, opts?: { marketId?: str
     bump('store', x.storeId, store?.name ?? x.storeId, 0, 0, 0, 0, x.cost);
     bump('seller', x.sellerId, seller?.name ?? x.sellerId, 0, 0, 0, 0, x.cost);
     bump('zone', zone?.id ?? 'sin-zona', zone?.name ?? 'Sin zona', 0, 0, 0, 0, x.cost);
+  }
+  // La venta en firme también cuenta (sin el impuesto). Sin vendedor: «venta directa».
+  for (const inv of money.invoices) {
+    if (inv.issuedAt < since) continue;
+    const store = storesById.get(inv.storeId);
+    const seller = inv.sellerId ? usersById.get(inv.sellerId) : undefined;
+    const zone = store ? zonesById.get(store.zoneId) : undefined;
+    const counted = new Set<string>();
+    for (const l of inv.lines) {
+      // Un producto puede ir en dos líneas (cajas y sueltos): su comisión se cuenta una vez.
+      const key = `${inv.id}|${l.productId}`;
+      const comm = counted.has(key) ? 0 : (commByReportProduct.get(key) ?? 0);
+      counted.add(key);
+      bump('product', l.productId, pName(l.productId), l.qty, l.amount, l.cost, comm);
+      bump('store', inv.storeId, store?.name ?? inv.storeId, l.qty, l.amount, l.cost, comm);
+      bump('seller', inv.sellerId ?? 'directa', seller?.name ?? 'Venta directa', l.qty, l.amount, l.cost, comm);
+      bump('zone', zone?.id ?? 'sin-zona', zone?.name ?? 'Sin zona', l.qty, l.amount, l.cost, comm);
+    }
   }
   const finish = (dim: string): ProfitRow[] =>
     [...(profit.get(dim)?.values() ?? [])]
@@ -434,7 +518,7 @@ export interface MapData {
 export async function mapData(ctx: Ctx): Promise<MapData> {
   guard(ctx, 'map.read');
   const stores = await scopedStores(ctx);
-  const [snap, users, visits, reports, reorders, deliveries, warehouse, settlements, idx] = await Promise.all([
+  const [snap, users, visits, reports, reorders, deliveries, warehouse, settlements, idx, invoices] = await Promise.all([
     loadInventory(ctx),
     ctx.repo.users.all(),
     ctx.repo.visits.all(),
@@ -444,6 +528,7 @@ export async function mapData(ctx: Ctx): Promise<MapData> {
     ctx.repo.warehouses.get('almacen'),
     ctx.repo.settlements.all(),
     loadMarketIndex(ctx),
+    ctx.repo.invoices.all(),
   ]);
   const now = ctx.now();
   const since = addDays(now, -30);
@@ -458,13 +543,19 @@ export async function mapData(ctx: Ctx): Promise<MapData> {
       marketId: idx.storeMarket(s),
       sellerName: usersById.get(s.sellerId)?.name ?? '—',
       units: [...held.values()].reduce((a, b) => a + Math.max(0, b), 0),
-      sales30: round2(reports.filter((r) => r.storeId === s.id && r.at >= since).reduce((a, r) => a + r.total, 0)),
+      sales30: round2(
+        reports.filter((r) => r.storeId === s.id && r.at >= since).reduce((a, r) => a + r.total, 0) +
+          invoices.filter((i) => i.storeId === s.id && i.issuedAt >= since).reduce((a, i) => a + i.subtotal, 0),
+      ),
       pendingOrder:
         reorders.some((r) => r.storeId === s.id && (r.status === 'enviado' || r.status === 'confirmado' || r.status === 'preparado')) ||
         deliveries.some((d) => d.storeId === s.id && (d.status === 'solicitada' || d.status === 'preparada')),
       lastVisitAt: lastVisit?.at,
       productIds,
-      balanceDue: round2(settlements.filter((x) => x.storeId === s.id).reduce((a, x) => a + settlementBalance(x), 0)),
+      balanceDue: round2(
+        settlements.filter((x) => x.storeId === s.id).reduce((a, x) => a + settlementBalance(x), 0) +
+          invoices.filter((i) => i.storeId === s.id).reduce((a, i) => a + invoiceBalance(i), 0),
+      ),
     };
   });
   // Cada vendedor, en el punto de su última visita.

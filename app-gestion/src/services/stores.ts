@@ -1,9 +1,10 @@
 // Locales (tiendas): el vendedor los inscribe; administración los aprueba.
 import { z } from 'zod';
-import type { Contract, Photo, Store, StoreStatus, User } from '../data/types';
+import type { Contract, Invoice, Photo, SaleMode, Store, StoreStatus, User } from '../data/types';
 import { permitState, type PermitState } from '../domain/compliance';
 import { DEFAULT_PERMIT_ISSUER, normalizeEin } from '../domain/fiscal';
 import { pointInMarket } from '../domain/markets';
+import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
 import { WAREHOUSE, storeLoc } from '../domain/ledger';
 import { settlementBalance, storeEarning } from '../domain/money-rules';
 import { can } from '../domain/permissions';
@@ -34,7 +35,9 @@ export interface StoreView {
   balanceDue: number;
   /** Lo vendido que todavía no entró en una liquidación (igual se debe). */
   unsettled: number;
-  /** Todo lo que debe el local: liquidado sin pagar + vendido sin liquidar. */
+  /** Facturas de venta en firme sin pagar. */
+  invoiceBalance: number;
+  /** Todo lo que debe el local: liquidado sin pagar + vendido sin liquidar + facturas sin pagar. */
   owedTotal: number;
   overdue: boolean;
   lastVisitAt?: string;
@@ -72,7 +75,7 @@ export async function loadStoreForActor(ctx: Ctx, storeId: string): Promise<Stor
 export async function listStores(ctx: Ctx): Promise<StoreView[]> {
   const stores = await scopedStores(ctx);
   const ids = new Set(stores.map((s) => s.id));
-  const [snap, users, zones, visits, reports, settlements, reorders, contracts] = await Promise.all([
+  const [snap, users, zones, visits, reports, settlements, reorders, contracts, invoices] = await Promise.all([
     loadInventory(ctx),
     ctx.repo.users.all(),
     ctx.repo.zones.all(),
@@ -81,6 +84,7 @@ export async function listStores(ctx: Ctx): Promise<StoreView[]> {
     ctx.repo.settlements.all(),
     ctx.repo.reorders.all(),
     ctx.repo.contracts.all(),
+    ctx.repo.invoices.all(),
   ]);
   const now = ctx.now();
   const usersById = new Map(users.map((u) => [u.id, u]));
@@ -97,12 +101,15 @@ export async function listStores(ctx: Ctx): Promise<StoreView[]> {
         value += q * (snap.productsById.get(pid)?.priceToStore ?? 0);
       }
       const mySettlements = settlements.filter((s) => s.storeId === store.id);
+      const myInvoices = invoices.filter((i) => i.storeId === store.id);
       const balanceDue = round2(mySettlements.reduce((a, s) => a + settlementBalance(s), 0));
-      const overdue = mySettlements.some((s) => settlementBalance(s) > 0 && daysBetween(s.dueOn, now) > 0);
+      const invoiceDue = round2(myInvoices.reduce((a, i) => a + invoiceBalance(i), 0));
+      const overdue = mySettlements.some((s) => settlementBalance(s) > 0 && daysBetween(s.dueOn, now) > 0) || myInvoices.some((i) => isInvoiceOverdue(i, now));
       const unsettled = round2(reports.filter((r) => r.storeId === store.id && !r.settlementId).reduce((a, r) => a + r.total, 0));
       const lastVisit = visits.filter((v) => v.storeId === store.id).sort((a, b) => b.at.localeCompare(a.at))[0];
       const sales30 = round2(
-        reports.filter((r) => r.storeId === store.id && r.at >= since).reduce((a, r) => a + r.total, 0),
+        reports.filter((r) => r.storeId === store.id && r.at >= since).reduce((a, r) => a + r.total, 0) +
+          myInvoices.filter((i) => i.issuedAt >= since).reduce((a, i) => a + i.subtotal, 0),
       );
       const pendingOrders = reorders.filter((r) => r.storeId === store.id && (r.status === 'enviado' || r.status === 'confirmado' || r.status === 'preparado')).length;
       const contract = contracts.filter((c) => c.storeId === store.id && c.status !== 'anulado').sort((a, b) => b.version - a.version)[0];
@@ -115,7 +122,8 @@ export async function listStores(ctx: Ctx): Promise<StoreView[]> {
         consignmentValue: round2(value),
         balanceDue,
         unsettled,
-        owedTotal: round2(balanceDue + unsettled),
+        invoiceBalance: invoiceDue,
+        owedTotal: round2(balanceDue + unsettled + invoiceDue),
         overdue,
         lastVisitAt: lastVisit?.at,
         sales30,
@@ -215,8 +223,17 @@ const storeSchema = z.object({
     })
     .nullable()
     .optional(),
+  /** Ronda 3: cómo compra (solo administración). Si no viene, no cambia. */
+  terms: z
+    .object({
+      saleMode: z.enum(['consignacion', 'firme']),
+      creditDays: z.number().int('Los días de crédito son un número entero.').min(0, 'Los días de crédito no pueden ser negativos.').max(120, 'Máximo 120 días de crédito.').default(0),
+      priceListId: z.string().optional(),
+    })
+    .optional(),
 });
 export type StoreInput = z.input<typeof storeSchema>;
+export type StoreTerms = z.input<typeof storeSchema>['terms'];
 
 function validatePermit(ctx: Ctx, data: z.output<typeof storeSchema>): void {
   if (!ctx.config.requiresTobaccoPermit) return;
@@ -270,6 +287,38 @@ function withFiscal(store: Store, data: z.output<typeof storeSchema>): Store {
   return next;
 }
 
+export const SALE_MODE_LABEL: Record<SaleMode, string> = {
+  consignacion: 'Consignación',
+  firme: 'Compra en firme (mayoreo)',
+};
+
+/**
+ * Condiciones de compra (consignación o en firme, días de crédito y lista de precios). Solo
+ * administración; un local con producto en consignación no pasa a firme hasta devolverlo o venderlo.
+ */
+async function applyTerms(ctx: Ctx, store: Store, terms: z.output<typeof storeSchema>['terms']): Promise<boolean> {
+  if (!terms) return false;
+  const mode = terms.saleMode;
+  const creditDays = mode === 'firme' ? terms.creditDays : undefined;
+  const priceListId = terms.priceListId || undefined;
+  const changed = (store.saleMode ?? 'consignacion') !== mode || store.creditDays !== creditDays || store.priceListId !== priceListId;
+  if (!changed) return false;
+  guard(ctx, 'store.terms');
+  if (priceListId) {
+    const list = await ctx.repo.priceLists.get(priceListId);
+    if (!list || !list.active) throw new ValidationError('Elige una lista de precios activa.');
+  }
+  if (mode === 'firme' && (store.saleMode ?? 'consignacion') !== 'firme') {
+    const snap = await loadInventory(ctx);
+    const units = [...snap.balances.byProduct(storeLoc(store.id)).values()].reduce((a, b) => a + Math.max(0, b), 0);
+    if (units > 0) throw new ValidationError(`${store.name} tiene ${units} unidades en consignación. Regístralas como devolución (o como venta) antes de pasarlo a compra en firme.`);
+  }
+  store.saleMode = mode;
+  store.creditDays = creditDays;
+  store.priceListId = priceListId;
+  return true;
+}
+
 export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store> {
   guard(ctx, 'store.create');
   const data = storeSchema.parse(input);
@@ -305,6 +354,7 @@ export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store>
       statusHistory: [{ status: 'prospecto', at, by: ctx.actor.userId }],
     };
     const store = withFiscal(base, data);
+    if (ctx.actor.role === 'admin') await applyTerms(ctx, store, data.terms);
     await ctx.repo.stores.put(store);
     await audit(ctx, 'local.registrar', 'store', store.id, `Tienda registrada: ${store.name} (${store.city})`);
     await notify(ctx, 'admins', 'local_por_aprobar', `Tienda nueva: ${store.name}`, `${seller.name} la registró como prospecto en ${store.city}.`, `/${ctx.line}/locales/${store.id}`);
@@ -339,8 +389,13 @@ export async function updateStore(ctx: Ctx, storeId: string, input: StoreInput):
       marketId,
       sellerId: ctx.actor.role === 'admin' && data.sellerId ? data.sellerId : s.sellerId,
     }, data);
+    const termsChanged = ctx.actor.role === 'admin' ? await applyTerms(ctx, next, data.terms) : false;
     await ctx.repo.stores.put(next);
     await audit(ctx, 'local.editar', 'store', s.id, `Datos de ${next.name} actualizados`);
+    if (termsChanged) {
+      const how = next.saleMode === 'firme' ? `en firme, ${next.creditDays ? `a crédito ${next.creditDays} días` : 'de contado'}` : 'en consignación';
+      await audit(ctx, 'local.condiciones', 'store', s.id, `${next.name} compra ${how}`);
+    }
     return next;
   });
 }
@@ -358,13 +413,20 @@ export function allowedTransitions(status: StoreStatus): StoreStatus[] {
   return TRANSITIONS[status];
 }
 
+/** Un local que compra en firme no firma contrato de consignación: administración lo aprueba directo. */
+export function transitionsFor(store: Pick<Store, 'status' | 'saleMode'>): StoreStatus[] {
+  const base = TRANSITIONS[store.status];
+  if (store.saleMode === 'firme' && (store.status === 'prospecto' || store.status === 'contrato_enviado')) return ['activo', ...base];
+  return base;
+}
+
 /** Administración aprueba (activa), pausa, cierra o reabre un local. */
 export async function setStoreStatus(ctx: Ctx, storeId: string, status: StoreStatus, note = ''): Promise<void> {
   guard(ctx, 'store.approve');
   await mutate(ctx, async () => {
     const s = await ctx.repo.stores.get(storeId);
     if (!s) throw new NotFoundError('el local');
-    if (!TRANSITIONS[s.status].includes(status)) {
+    if (!transitionsFor(s).includes(status)) {
       throw new ValidationError(`Un local «${STORE_STATUS_LABEL[s.status]}» no puede pasar a «${STORE_STATUS_LABEL[status]}».`);
     }
     if (status === 'cerrado') {
@@ -399,7 +461,14 @@ export async function applyStoreStatus(ctx: Ctx, s: Store, status: StoreStatus, 
       };
       await ctx.repo.users.put(user);
     }
-    await notify(ctx, [s.sellerId], 'local_por_aprobar', `${s.name} quedó activo`, 'Ya puedes colocarle producto en consignación.', `/${ctx.line}/locales/${s.id}`);
+    await notify(
+      ctx,
+      [s.sellerId],
+      'local_por_aprobar',
+      `${s.name} quedó activo`,
+      s.saleMode === 'firme' ? 'Ya le puedes tomar pedidos en firme.' : 'Ya puedes colocarle producto en consignación.',
+      `/${ctx.line}/locales/${s.id}`,
+    );
   }
   await audit(ctx, `local.${status}`, 'store', s.id, `${s.name}: ${STORE_STATUS_LABEL[status]}${note ? ` (${note})` : ''}`);
 }
@@ -447,38 +516,50 @@ export interface StoreDebt {
   settled: number;
   /** Vendido y todavía sin liquidar: se debe igual, pero aún no vence. */
   unsettled: number;
+  /** Facturas de venta en firme sin pagar. */
+  invoices: number;
+  /** Cuántas facturas tienen saldo. */
+  openInvoices: number;
   total: number;
   overdue: number;
-  /** Próximo vencimiento de lo liquidado. */
+  /** Próximo vencimiento (de lo liquidado o de una factura). */
   nextDueOn?: string;
   /** Cuándo se liquida lo vendido que falta. */
   nextSettlementOn?: string;
 }
 
-/** Lo que debe un local, completo: lo liquidado sin pagar más lo vendido sin liquidar. */
+/** Lo que debe un local, completo: lo liquidado sin pagar, lo vendido sin liquidar y las facturas sin pagar. */
 export async function storeDebt(ctx: Ctx, storeId: string): Promise<StoreDebt> {
   const store = await loadStoreForActor(ctx, storeId);
   guard(ctx, 'settlement.read', { type: 'store', store });
-  const [settlements, reports, settings] = await Promise.all([
+  const [settlements, reports, settings, invoices] = await Promise.all([
     ctx.repo.settlements.where('storeId', storeId),
     ctx.repo.salesReports.where('storeId', storeId),
     ctx.repo.settings.get('settings'),
+    ctx.repo.invoices.where('storeId', storeId),
   ]);
   const now = ctx.now();
   const open = settlements.filter((s) => settlementBalance(s) > 0);
   const settled = round2(open.reduce((a, s) => a + settlementBalance(s), 0));
   const pending = reports.filter((r) => !r.settlementId);
   const unsettled = round2(pending.reduce((a, r) => a + r.total, 0));
-  const overdue = round2(open.filter((s) => daysBetween(s.dueOn, now) > 0).reduce((a, s) => a + settlementBalance(s), 0));
+  const openInv: Invoice[] = invoices.filter((i) => invoiceBalance(i) > 0);
+  const invoiceDue = round2(openInv.reduce((a, i) => a + invoiceBalance(i), 0));
+  const overdue = round2(
+    open.filter((s) => daysBetween(s.dueOn, now) > 0).reduce((a, s) => a + settlementBalance(s), 0) +
+      openInv.filter((i) => isInvoiceOverdue(i, now)).reduce((a, i) => a + invoiceBalance(i), 0),
+  );
   const last = [...settlements].sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))[0];
   const base = last?.issuedAt ?? pending.map((r) => r.at).sort()[0];
   const every = settings?.settlementEveryDays ?? 15;
   return {
     settled,
     unsettled,
-    total: round2(settled + unsettled),
+    invoices: invoiceDue,
+    openInvoices: openInv.length,
+    total: round2(settled + unsettled + invoiceDue),
     overdue,
-    nextDueOn: open.map((s) => s.dueOn).sort()[0],
+    nextDueOn: [...open.map((s) => s.dueOn), ...openInv.map((i) => i.dueOn)].sort()[0],
     nextSettlementOn: pending.length && base ? addDaysToDate(toIsoDate(base), every) : undefined,
   };
 }

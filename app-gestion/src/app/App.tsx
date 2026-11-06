@@ -29,6 +29,7 @@ const comms = () => import('../features/comms/pages');
 const admin = () => import('../features/admin/pages');
 const direccion = () => import('../features/direccion/DireccionPage');
 const red = () => import('../features/red/pages');
+const sales = () => import('../features/sales/pages');
 const LineLayoutLazy = lazy(() => import('./LineLayout').then((m) => ({ default: m.LineLayout })));
 
 function RouteError() {
@@ -88,6 +89,11 @@ const router = createHashRouter([
           { path: 'entregas/:id/imprimir', element: page(consignment, 'DeliveryNotePrintPage') },
           { path: 'pedidos', element: page(consignment, 'OrdersPage') },
           { path: 'pedir', element: page(consignment, 'StoreOrderPage') },
+          // Ronda 3 · venta en firme y precios
+          { path: 'venta-rapida', element: page(sales, 'QuickSalePage') },
+          { path: 'pedido-telefono', element: page(sales, 'PhoneOrderPage') },
+          { path: 'pegar-pedido', element: page(sales, 'PasteOrderPage') },
+          { path: 'ajustes/precios', element: page(sales, 'PriceListsPage') },
           { path: 'cobros', element: page(money, 'CollectionsPage') },
           { path: 'cuentas', element: page(money, 'StoreAccountsPage') },
           { path: 'comisiones', element: page(money, 'CommissionsPage') },

@@ -8,6 +8,7 @@ import type { LineSeedDef, ProductSeed, StoreSeed } from './engine';
 
 const BRAND = 'GM Tabacos (marca provisional)';
 let barcodeSeq = 1000;
+const FAMILY_CODE: Record<string, string> = { Torpedo: 'TRP' };
 
 const z = {
   hialeah: 't-zon_hialeah',
@@ -88,7 +89,8 @@ function mazo(
   const variantLabel = variantLabelFor('tabaco', attrs, familyName);
   return {
     key,
-    sku: `TB-MZ-${family.slice(0, 3).toUpperCase()}-${a.capa.slice(0, 3).toUpperCase()}${a.ringGauge}`,
+    // Torpedo usa TRP: con las tres primeras letras chocaba con Toro (TB-MZ-TOR-MAD52 dos veces).
+    sku: `TB-MZ-${FAMILY_CODE[family] ?? family.slice(0, 3).toUpperCase()}-${a.capa.slice(0, 3).toUpperCase()}${a.ringGauge}`,
     name: composeName(familyName, variantLabel),
     brandLine: 'De mazo (sin marca)',
     active: true,

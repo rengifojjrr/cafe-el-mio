@@ -75,6 +75,13 @@ export type Action =
   | 'data.import'
   /** Importar productos desde Excel o CSV (crea productos y su inventario inicial). */
   | 'product.import'
+  // Ronda 3 · venta en firme y precios
+  | 'invoice.read'
+  | 'sale.quick'
+  | 'order.phone'
+  | 'store.terms'
+  | 'pricelist.read'
+  | 'pricelist.manage'
   // Ronda 3 · escáner, etiquetas, trazabilidad y recepción
   | R3AlmacenAction;
 
@@ -133,6 +140,11 @@ const WRITE: ReadonlySet<Action> = new Set<Action>([
   'product.import',
   // Ronda 3 · escáner, etiquetas, trazabilidad y recepción
   ...R3_ALMACEN_WRITE,
+  // Ronda 3 · venta en firme y precios
+  'sale.quick',
+  'order.phone',
+  'store.terms',
+  'pricelist.manage',
 ]);
 
 export function isWrite(action: Action): boolean {
@@ -170,6 +182,13 @@ const ADMIN_ONLY: ReadonlySet<Action> = new Set<Action>([
   // Ronda 3 · escáner, etiquetas, trazabilidad y recepción
   ...R3_ALMACEN_WRITE,
   ...R3_ALMACEN_READ,
+  // Ronda 3 · venta en firme y precios: venta rápida, pedidos por teléfono o pegados, condiciones
+  // de compra del local y listas de precios (llevan % sobre el costo) son de administración.
+  'sale.quick',
+  'order.phone',
+  'store.terms',
+  'pricelist.read',
+  'pricelist.manage',
 ]);
 
 /** Lo que cada rol puede hacer sin mirar el recurso. */
@@ -203,6 +222,8 @@ const ROLE_ACTIONS: Record<Exclude<Role, 'admin'>, ReadonlySet<Action>> = {
     // Ronda 3: el vendedor invita a sus locales (el servicio pide el local como recurso).
     'invitation.read',
     'invitation.create',
+    // Ronda 3 · venta en firme y precios: las facturas de sus locales.
+    'invoice.read',
   ]),
   store: new Set<Action>([
     'product.read',
@@ -219,6 +240,8 @@ const ROLE_ACTIONS: Record<Exclude<Role, 'admin'>, ReadonlySet<Action>> = {
     'message.read',
     'message.send',
     'announcement.read',
+    // Ronda 3 · venta en firme y precios: sus facturas.
+    'invoice.read',
   ]),
   direccion: new Set<Action>(['direccion.read']),
 };
@@ -289,6 +312,13 @@ const ACTION_TEXT: Partial<Record<Action, string>> = {
   'product.import': 'importar productos',
   // Ronda 3 · escáner, etiquetas, trazabilidad y recepción
   ...R3_ALMACEN_TEXT,
+  // Ronda 3 · venta en firme y precios
+  'invoice.read': 'ver estas facturas',
+  'sale.quick': 'registrar ventas rápidas',
+  'order.phone': 'tomar pedidos por teléfono o pegados',
+  'store.terms': 'cambiar cómo compra el local',
+  'pricelist.read': 'ver las listas de precios',
+  'pricelist.manage': 'cambiar las listas de precios',
 };
 
 export function ensure(actor: Actor, action: Action, line: LineId | null, res?: Resource): void {

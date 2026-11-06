@@ -21,6 +21,7 @@ import { QuickOrderSheet } from '../consignment/components';
 import { CapaDot, StrengthMeter } from './list';
 import { PhotoOrderSheet } from './photo-order';
 import { LabelsSheet } from '../labels/LabelsSheet';
+import { StorePrice } from '../sales/store-price';
 
 // El visor 3D (canvas) se baja solo al tocar «Ver en 3D».
 const Cigar3D = lazy(() => import('./cigar3d').then((m) => ({ default: m.Cigar3D })));
@@ -57,6 +58,8 @@ export function ProductDetailPage() {
   const familyName = pr.familyName ?? pr.name;
   const perBundle = cigarsPerBundle(pr);
   const shade = String(a.wrapperShade ?? capaShade(a.capa));
+  // El local que compra en firme ve su precio de lista y no la consignación.
+  const firmStore = actor.role === 'store' && Boolean(v.storePrice);
 
   const facts: [string, React.ReactNode][] =
     line === 'tabaco'
@@ -205,11 +208,13 @@ export function ProductDetailPage() {
         <div className="grid content-start gap-3">
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Disponible en almacén" value={s.available} tone={s.lowStock ? 'warn' : 'data'} hint={`${unit.many}${s.reserved ? ` · ${s.reserved} apartados` : ''}`} />
-            <Stat
-              label={actor.role === 'store' ? 'Tienes en tu local' : actor.role === 'seller' ? 'En tus locales' : 'En consignación'}
-              value={s.consignment}
-              hint={actor.role === 'store' ? unit.many : `${unit.many} en ${s.storesHolding} locales`}
-            />
+            {firmStore ? null : (
+              <Stat
+                label={actor.role === 'store' ? 'Tienes en tu local' : actor.role === 'seller' ? 'En tus locales' : 'En consignación'}
+                value={s.consignment}
+                hint={actor.role === 'store' ? unit.many : `${unit.many} en ${s.storesHolding} locales`}
+              />
+            )}
           </div>
           {perBundle && s.available > 0 ? <p className="text-sm text-muted">En el almacén: {stockText(pr, s.available)}.</p> : null}
           <Card className="p-4">
@@ -234,6 +239,12 @@ export function ProductDetailPage() {
             ) : null}
           </Card>
         </div>
+        {firmStore ? (
+          <Card className="p-4">
+            <h2 className="mb-2 font-bold">Tu precio</h2>
+            <StorePrice view={v} />
+          </Card>
+        ) : (
         <Card className="p-4">
           <h2 className="mb-2 font-bold">Precios por {unit.one}</h2>
           <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
@@ -264,6 +275,7 @@ export function ProductDetailPage() {
             ) : null}
           </dl>
         </Card>
+        )}
       </div>
 
       {pr.notes || pr.pairing ? (

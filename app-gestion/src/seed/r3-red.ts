@@ -115,8 +115,9 @@ function seedFiscal({ def, t, now, line, letter, stores, admin, storeByKey, date
   stores.forEach((s, i) => {
     if (s.tobaccoPermit) s.tobaccoPermit.issuer = s.marketId === HOUSTON.id ? 'Texas Comptroller' : 'Florida DBPR';
     if (s.status === 'prospecto') return;
-    s.taxId = `00-${String(1200 + i * 7 + (line === 'tabaco' ? 0 : 500)).padStart(7, '0')}`;
-    s.resaleCert = { number: `RC-DEMO-${letter.toUpperCase()}${String(4100 + i * 3).padStart(5, '0')}`, expiresOn: dateOf(140 + ((i * 23) % 200)) };
+    // Los locales que compran en firme ya traen los suyos (uno con el certificado vencido, a propósito).
+    s.taxId ??= `00-${String(1200 + i * 7 + (line === 'tabaco' ? 0 : 500)).padStart(7, '0')}`;
+    s.resaleCert ??= { number: `RC-DEMO-${letter.toUpperCase()}${String(4100 + i * 3).padStart(5, '0')}`, expiresOn: dateOf(140 + ((i * 23) % 200)) };
   });
   const tweak = (key: string, fn: (s: Store) => void) => {
     const s = storeByKey.get(key);

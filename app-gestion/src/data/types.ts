@@ -478,8 +478,11 @@ export interface Commission extends Entity {
   sellerId: string;
   storeId: string;
   productId: string;
+  /** Venta reportada en consignación (vacío en una venta en firme). */
   salesReportId: string;
   settlementId: string | null;
+  /** Venta en firme: la factura que la generó (se vuelve pagable cuando la factura queda pagada). */
+  invoiceId?: string;
   qty: number;
   base: number;
   amount: number;

@@ -102,8 +102,10 @@ beforeAll(async () => {
 
 describe('la semilla quedó en las dos bases', () => {
   it('cada línea tiene sus datos y ningún id se repite entre líneas', async () => {
-    expect(await repos.tabaco.stores.count()).toBe(23);
-    expect(await repos.cafe.stores.count()).toBe(15);
+    // 18 en consignación + 5 en Houston + 5 que compran en firme (ronda 3).
+    expect(await repos.tabaco.stores.count()).toBe(28);
+    // 15 en consignación + 2 que compran en firme (ronda 3).
+    expect(await repos.cafe.stores.count()).toBe(17);
     const tIds = new Set([...(await repos.tabaco.products.all()), ...(await repos.tabaco.stores.all())].map((x) => x.id));
     const cIds = [...(await repos.cafe.products.all()), ...(await repos.cafe.stores.all())].map((x) => x.id);
     expect(cIds.filter((id) => tIds.has(id))).toEqual([]);

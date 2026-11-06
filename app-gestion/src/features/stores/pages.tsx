@@ -17,11 +17,13 @@ import {
   Store as StoreIcon,
   Truck,
   XCircle,
+  Zap,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { Store, StoreStatus } from '../../data/types';
-import { consignmentCheck, permitState } from '../../domain/compliance';
+import { permitState, supplyCheck } from '../../domain/compliance';
+import { creditText, hasValidResaleCert } from '../../domain/invoices';
 import { searchAddress, type GeoResult } from '../../lib/geocode';
 import { fmtMoney } from '../../lib/money';
 import { addDaysToDate, fmtAgo, fmtDate, fmtDateTime, toIsoDate } from '../../lib/time';
@@ -31,7 +33,9 @@ import { contractsForStore, issueContract } from '../../services/contracts';
 import { listMarkets } from '../../services/markets';
 import { listDeliveries, listReorders, storeVisits } from '../../services/consignment';
 import { openThread } from '../../services/messages';
+import { listInvoices, type InvoiceView } from '../../services/invoices';
 import { listSettlements } from '../../services/money';
+import { priceListOptions } from '../../services/prices';
 import {
   STORE_STATUS_LABEL,
   getStorePhoto,
@@ -44,6 +48,7 @@ import {
   setStoreStatus,
   storeConsignment,
   storeDebt,
+  transitionsFor,
   updateStore,
   type StoreView,
 } from '../../services/stores';
@@ -57,6 +62,7 @@ import {
   KeyValue,
   LinkButton,
   Loading,
+  NumberInput,
   PageHeader,
   Pill,
   Section,
@@ -75,6 +81,7 @@ import { DEFAULT_PERMIT_ISSUER } from '../../domain/fiscal';
 import { pointInMarket } from '../../domain/markets';
 import { FiscalFormCard, ResaleCertPill, StoreFiscalSection, issuerOptions, type FiscalFormValue } from '../red/fiscal';
 import { InviteButton } from '../red/invite';
+import { InvoiceItem, InvoiceSheet } from '../sales/invoices';
 
 type Filter = 'todos' | 'activos' | 'proceso' | 'pausados';
 
@@ -181,12 +188,18 @@ function StoreRow({ v }: { v: StoreView }) {
         <PermitPill state={v.permit && v.permit !== 'vigente' ? v.permit : null} />
       </div>
       <div className="grid gap-0.5 text-sm md:text-right">
-        <p>
-          <span className="text-muted">En consignación </span>
-          <span className="font-semibold tabular">
-            {v.consignmentUnits} u. · {fmtMoney(v.consignmentValue)}
-          </span>
-        </p>
+        {s.saleMode === 'firme' ? (
+          <p>
+            <span className="font-semibold text-accent">{creditText(s)}</span>
+          </p>
+        ) : (
+          <p>
+            <span className="text-muted">En consignación </span>
+            <span className="font-semibold tabular">
+              {v.consignmentUnits} u. · {fmtMoney(v.consignmentValue)}
+            </span>
+          </p>
+        )}
         <p>
           <span className="text-muted">Debe </span>
           <span className={`font-semibold tabular ${v.overdue ? 'text-danger' : v.owedTotal > 0 ? 'text-ink' : 'text-muted'}`}>
@@ -233,6 +246,10 @@ interface StoreFormState {
   /** Mercado (Miami, Houston…): las zonas y el mapa son los de ese mercado. */
   marketId: string;
   fiscal: FiscalFormValue;
+  saleMode: 'consignacion' | 'firme';
+  creditDays: number | '';
+  onCredit: boolean;
+  priceListId: string;
 }
 
 function StoreForm({ initial }: { initial?: Store }) {
@@ -269,7 +286,12 @@ function StoreForm({ initial }: { initial?: Store }) {
       resaleNumber: initial?.resaleCert?.number ?? '',
       resaleExpires: initial?.resaleCert?.expiresOn ?? addDaysToDate(toIsoDate(ctx.now()), 365),
     },
+    saleMode: initial?.saleMode ?? 'consignacion',
+    creditDays: initial?.creditDays || 15,
+    onCredit: (initial?.creditDays ?? 0) > 0,
+    priceListId: initial?.priceListId ?? '',
   }));
+  const lists = useAsync(() => (actor.role === 'admin' ? priceListOptions(ctx) : Promise.resolve([])), [ctx, actor.role]);
   const set = <K extends keyof StoreFormState>(k: K, v: StoreFormState[K]) => setF((s) => ({ ...s, [k]: v }));
 
   // Mercado: el elegido, o el de la zona, o el primero (Miami).
@@ -329,6 +351,10 @@ function StoreForm({ initial }: { initial?: Store }) {
         marketId: marketId || undefined,
         taxId: f.fiscal.taxId,
         resaleCert: f.fiscal.resaleNumber.trim() ? { number: f.fiscal.resaleNumber.trim(), expiresOn: f.fiscal.resaleExpires } : null,
+        terms:
+          actor.role === 'admin'
+            ? { saleMode: f.saleMode, creditDays: f.saleMode === 'firme' && f.onCredit ? (f.creditDays === '' ? 0 : f.creditDays) : 0, priceListId: f.priceListId || undefined }
+            : undefined,
       };
       const saved = initial ? await updateStore(ctx, initial.id, input) : await registerStore(ctx, input);
       if (photo) await setFacadePhoto(ctx, saved.id, photo);
@@ -430,6 +456,51 @@ function StoreForm({ initial }: { initial?: Store }) {
             </Card>
           ) : null}
           <FiscalFormCard value={f.fiscal} onChange={(v) => set('fiscal', v)} />
+          {actor.role === 'admin' ? (
+            <Card className="grid gap-4 p-4 sm:p-5">
+              <h2 className="font-bold">Cómo compra</h2>
+              <Tabs<'consignacion' | 'firme'>
+                label="Cómo compra el local"
+                value={f.saleMode}
+                onChange={(v) => set('saleMode', v)}
+                options={[
+                  { value: 'consignacion', label: 'Consignación' },
+                  { value: 'firme', label: 'Compra en firme (mayoreo)' },
+                ]}
+              />
+              <p className="text-sm text-muted">
+                {f.saleMode === 'firme'
+                  ? 'Pide, recibe con firma y paga: cada entrega trae su factura y la mercancía pasa a ser del local.'
+                  : 'La mercancía sigue siendo de la empresa hasta que se vende; paga lo vendido en cada liquidación.'}
+              </p>
+              {f.saleMode === 'firme' ? (
+                <>
+                  <Tabs<'contado' | 'credito'>
+                    label="Cómo paga"
+                    value={f.onCredit ? 'credito' : 'contado'}
+                    onChange={(v) => set('onCredit', v === 'credito')}
+                    options={[
+                      { value: 'contado', label: 'De contado' },
+                      { value: 'credito', label: 'A crédito' },
+                    ]}
+                  />
+                  {f.onCredit ? (
+                    <NumberInput label="Días de crédito" value={f.creditDays} onValue={(v) => set('creditDays', v)} min={1} max={120} step={1} hint="La factura vence a los N días de la entrega." />
+                  ) : null}
+                </>
+              ) : null}
+              <SelectInput
+                label="Lista de precios"
+                value={f.priceListId}
+                onChange={(e) => set('priceListId', e.target.value)}
+                options={[
+                  { value: '', label: `La de la línea${lists.data?.find((l) => l.isDefault) ? ` (${lists.data.find((l) => l.isDefault)!.name})` : ''}` },
+                  ...(lists.data ?? []).map((l) => ({ value: l.id, label: l.name })),
+                ]}
+                hint="Con estos precios se le factura lo que compra en firme (también en la venta rápida)."
+              />
+            </Card>
+          ) : null}
           <Card className="grid gap-4 p-4 sm:p-5">
             <h2 className="font-bold">Fachada y notas</h2>
             <div className="flex flex-wrap items-center gap-3">
@@ -460,7 +531,7 @@ function StoreForm({ initial }: { initial?: Store }) {
 
 // ---------- Ficha del local ----------
 
-type DetailTab = 'consignacion' | 'entregas' | 'visitas' | 'cuentas';
+type DetailTab = 'consignacion' | 'facturas' | 'entregas' | 'visitas' | 'cuentas';
 
 export function StoreDetailPage() {
   const { id = '' } = useParams();
@@ -475,8 +546,10 @@ export function StoreDetailPage() {
   const settlements = useAsync(() => listSettlements(ctx, { storeId: id }), [ctx, id]);
   const reorders = useAsync(() => listReorders(ctx, { storeId: id, open: true }), [ctx, id]);
   const debt = useAsync(() => storeDebt(ctx, id), [ctx, id]);
+  const invoices = useAsync(() => listInvoices(ctx, { storeId: id }), [ctx, id]);
   const photo = useStoredPhoto(store.data?.facadePhotoId, () => getStorePhoto(ctx, id));
-  const [tab, setTab] = useState<DetailTab>('consignacion');
+  const [tabPicked, setTab] = useState<DetailTab | null>(null);
+  const [invDetail, setInvDetail] = useState<InvoiceView | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [salesOpen, setSalesOpen] = useState(false);
@@ -492,7 +565,10 @@ export function StoreDetailPage() {
   const canWork = (isAdmin || isOwnerSeller) && !actor.readOnly;
   const contract = contracts.data?.find((c) => c.status !== 'anulado');
   const permit = config.requiresTobaccoPermit ? permitState(s, now) : null;
-  const check = consignmentCheck(line, s, now);
+  const check = supplyCheck(line, s, now);
+  const firm = s.saleMode === 'firme';
+  const tab: DetailTab = tabPicked ?? (firm ? 'facturas' : 'consignacion');
+  const invList = invoices.data ?? [];
   const units = (consignment.data ?? []).reduce((a, c) => a + c.qty, 0);
   const owed = debt.data?.total ?? 0;
   const overdue = (debt.data?.overdue ?? 0) > 0;
@@ -545,10 +621,18 @@ export function StoreDetailPage() {
       {/* Siguiente paso, grande y claro */}
       {canWork ? (
         <div className="mb-5 grid gap-2 sm:flex sm:flex-wrap">
-          {s.status === 'prospecto' ? (
+          {s.status === 'prospecto' && !firm ? (
             <Button variant="primary" big icon={FileSignature} busy={busy} onClick={prepareContract}>
               Preparar contrato
             </Button>
+          ) : null}
+          {firm && isAdmin && transitionsFor(s).includes('activo') && (s.status === 'prospecto' || s.status === 'contrato_enviado') ? (
+            <Button variant="primary" big icon={CheckCircle2} busy={busy} onClick={() => void run(() => setStoreStatus(ctx, s.id, 'activo', 'compra en firme'), `${s.name} quedó activo: ya puede comprar en firme.`)}>
+              Aprobar para comprar en firme
+            </Button>
+          ) : null}
+          {firm && !isAdmin && (s.status === 'prospecto' || s.status === 'contrato_enviado') ? (
+            <p className="text-muted">Compra en firme: no firma contrato de consignación. Administración lo aprueba.</p>
           ) : null}
           {s.status === 'contrato_enviado' && contract ? (
             <LinkButton to={p(`contratos/${contract.id}`)} variant="primary" big icon={FileSignature}>
@@ -563,8 +647,13 @@ export function StoreDetailPage() {
                 </LinkButton>
               ) : null}
               <Button big icon={Truck} onClick={() => setRequestOpen(true)} disabled={!check.ok}>
-                Pedir producto
+                {firm ? 'Tomar pedido' : 'Pedir producto'}
               </Button>
+              {isAdmin && s.status === 'activo' ? (
+                <LinkButton to={`${p('venta-rapida')}?local=${s.id}`} big icon={Zap}>
+                  Venta rápida
+                </LinkButton>
+              ) : null}
             </>
           ) : null}
           {isAdmin && s.status === 'firmado' ? (
@@ -579,9 +668,11 @@ export function StoreDetailPage() {
           <LinkButton to={p('pedir')} variant="primary" big icon={Plus}>
             Pedir más producto
           </LinkButton>
-          <Button big icon={ClipboardCheck} onClick={() => setSalesOpen(true)}>
-            Reportar ventas
-          </Button>
+          {firm ? null : (
+            <Button big icon={ClipboardCheck} onClick={() => setSalesOpen(true)}>
+              Reportar ventas
+            </Button>
+          )}
         </div>
       ) : null}
 
@@ -596,11 +687,32 @@ export function StoreDetailPage() {
               ...(config.requiresTobaccoPermit
                 ? ([['Permiso de venta de tabaco', s.tobaccoPermit ? `${s.tobaccoPermit.number} · ${s.tobaccoPermit.issuer ?? DEFAULT_PERMIT_ISSUER} · vence el ${fmtDate(s.tobaccoPermit.expiresOn)}` : 'Sin registrar']] as [string, string][])
                 : []),
-              ['Contrato', contract ? (
-                <Link key="ctr" to={p(`contratos/${contract.id}`)} className="underline">
-                  {contract.status === 'firmado' ? `Firmado el ${fmtDate(contract.signedAt!)}` : 'Por firmar'} · ver
-                </Link>
-              ) : 'Sin contrato'],
+              ['Cómo compra', creditText(s)],
+              ...(firm || s.taxId || s.resaleCert
+                ? ([
+                    ['Tax ID', s.taxId || 'Sin registrar'],
+                    [
+                      'Certificado de reventa',
+                      s.resaleCert
+                        ? `${s.resaleCert.number} · ${hasValidResaleCert(s, now) ? 'vence' : 'venció'} el ${fmtDate(s.resaleCert.expiresOn)}`
+                        : 'Sin registrar',
+                    ],
+                  ] as [string, string][])
+                : []),
+              ...(firm
+                ? []
+                : ([
+                    [
+                      'Contrato',
+                      contract ? (
+                        <Link key="ctr" to={p(`contratos/${contract.id}`)} className="underline">
+                          {contract.status === 'firmado' ? `Firmado el ${fmtDate(contract.signedAt!)}` : 'Por firmar'} · ver
+                        </Link>
+                      ) : (
+                        'Sin contrato'
+                      ),
+                    ],
+                  ] as [string, ReactNode][])),
               ['Alta', fmtDate(s.createdAt)],
             ]}
           />
@@ -629,10 +741,17 @@ export function StoreDetailPage() {
       {s.status !== 'prospecto' ? (
         <>
           <div className="mt-6 mb-3 grid grid-cols-3 gap-3">
-            <div className="glass p-3">
-              <p className="text-sm text-muted">En consignación</p>
-              <p className="glow text-xl font-bold tabular">{units} u.</p>
-            </div>
+            {firm ? (
+              <div className="glass p-3">
+                <p className="text-sm text-muted">Facturas por pagar</p>
+                <p className="glow text-xl font-bold tabular">{debt.data?.openInvoices ?? 0}</p>
+              </div>
+            ) : (
+              <div className="glass p-3">
+                <p className="text-sm text-muted">En consignación</p>
+                <p className="glow text-xl font-bold tabular">{units} u.</p>
+              </div>
+            )}
             <div className="glass p-3">
               <p className="text-sm text-muted">Debe</p>
               <p className={`text-xl font-bold tabular ${overdue ? 'text-danger' : 'text-ink'}`}>{fmtMoney(owed)}</p>
@@ -648,10 +767,11 @@ export function StoreDetailPage() {
             value={tab}
             onChange={setTab}
             options={[
-              { value: 'consignacion', label: 'Consignación' },
+              ...(firm ? [] : [{ value: 'consignacion' as const, label: 'Consignación' }]),
+              ...(firm || invList.length ? [{ value: 'facturas' as const, label: 'Facturas', count: invList.length }] : []),
               { value: 'entregas', label: 'Entregas', count: deliveries.data?.length },
               { value: 'visitas', label: 'Visitas', count: visits.data?.length },
-              { value: 'cuentas', label: 'Cuentas' },
+              ...(firm ? [] : [{ value: 'cuentas' as const, label: 'Cuentas' }]),
             ]}
           />
           <div className="mt-3">
@@ -694,6 +814,16 @@ export function StoreDetailPage() {
                   </div>
                 ) : null}
               </>
+            ) : null}
+            {tab === 'facturas' ? (
+              <ul className="grid grid-cols-1 gap-2">
+                {invList.length === 0 ? <p className="text-muted">Sin facturas todavía: nacen al recibir con firma lo que compra en firme.</p> : null}
+                {invList.slice(0, 40).map((i) => (
+                  <li key={i.id}>
+                    <InvoiceItem inv={i} onOpen={() => setInvDetail(i)} />
+                  </li>
+                ))}
+              </ul>
             ) : null}
             {tab === 'entregas' ? (
               <ul className="grid gap-2">
@@ -784,6 +914,7 @@ export function StoreDetailPage() {
 
       <StatusSheet store={s} target={statusSheet} onClose={() => setStatusSheet(null)} />
       <RequestDeliverySheet open={requestOpen} onClose={() => setRequestOpen(false)} store={s} />
+      <InvoiceSheet invoice={invDetail} onClose={() => setInvDetail(null)} />
       <ReturnSheet open={returnOpen} onClose={() => setReturnOpen(false)} store={s} lines={consignment.data ?? []} />
       <ReportSalesSheet open={salesOpen} onClose={() => setSalesOpen(false)} store={s} lines={consignment.data ?? []} />
     </>

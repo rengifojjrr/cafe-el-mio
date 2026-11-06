@@ -4,7 +4,25 @@ import { expect, test, type Page } from '@playwright/test';
 import { enterAs, go } from './helpers';
 
 const SCREENS: Record<string, string[]> = {
-  'tabaco:admin': ['/tabaco', '/tabaco/catalogo', '/tabaco/catalogo/t-prd_0001', '/tabaco/locales', '/tabaco/entregas', '/tabaco/cobros', '/tabaco/contabilidad', '/tabaco/rentabilidad', '/tabaco/usuarios', '/tabaco/contratos', '/tabaco/ajustes'],
+  'tabaco:admin': [
+    '/tabaco',
+    '/tabaco/catalogo',
+    '/tabaco/catalogo/t-prd_0001',
+    '/tabaco/locales',
+    '/tabaco/entregas',
+    '/tabaco/cobros',
+    '/tabaco/contabilidad',
+    '/tabaco/rentabilidad',
+    '/tabaco/usuarios',
+    '/tabaco/contratos',
+    '/tabaco/ajustes',
+    // Ronda 3 · venta en firme y precios
+    '/tabaco/venta-rapida',
+    '/tabaco/pedido-telefono?local=t-loc_f0001',
+    '/tabaco/pegar-pedido',
+    '/tabaco/ajustes/precios',
+    '/tabaco/locales/t-loc_f0001',
+  ],
   'tabaco:seller': ['/tabaco', '/tabaco/locales', '/tabaco/pedidos', '/tabaco/comisiones', '/tabaco/contratos'],
   'tabaco:store': ['/tabaco', '/tabaco/catalogo', '/tabaco/cuentas', '/tabaco/entregas', '/tabaco/contratos'],
   'cafe:admin': ['/cafe', '/cafe/catalogo', '/cafe/almacen', '/cafe/contabilidad'],

@@ -36,6 +36,8 @@ import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Sectio
 import { CommissionProgress } from '../red/commission';
 import { useAction } from '../../ui/toast';
 import { DeliveryCard, ReportSalesSheet } from '../consignment/components';
+import { FirmStoreHome } from '../sales/store-home';
+import { QuickActions } from '../sales/quick-actions';
 import { StoreStatusPill } from '../common';
 import { BackupNotice } from '../data/BackupNotice';
 
@@ -111,7 +113,7 @@ function AdminHome() {
     ...pendingApproval.map((s) => ({ icon: FileSignature, text: `${s.store.name} firmó: falta aprobarlo`, to: p(`locales/${s.store.id}`), tone: 'accent' as const })),
     ...(deliveries.data ?? []).map((d) => ({ icon: Truck, text: `Preparar ${d.code} para ${d.storeName}`, to: p('entregas'), tone: 'info' as const })),
     ...(orders.data ?? []).filter((o) => o.status === 'enviado').map((o) => ({ icon: ClipboardList, text: `${o.storeName} pidió ${o.code}: espera al vendedor`, to: p('pedidos'), tone: 'warn' as const })),
-    ...overdue.map((s) => ({ icon: Receipt, text: `${s.store.name} tiene un pago vencido (${fmtMoney(s.balanceDue)})`, to: p('cobros'), tone: 'danger' as const })),
+    ...overdue.map((s) => ({ icon: Receipt, text: `${s.store.name} tiene un pago vencido (${fmtMoney(s.balanceDue + s.invoiceBalance)})`, to: p('cobros'), tone: 'danger' as const })),
     ...(docs.data ?? []).map((d) => ({ icon: FileWarning, text: `${d.storeName}: ${d.text.charAt(0).toLowerCase()}${d.text.slice(1)}`, to: p(`locales/${d.storeId}`), tone: d.state === 'vencido' ? ('danger' as const) : ('warn' as const) })),
     ...(alerts.data ?? []).map((a) => ({ icon: AlertTriangle, text: `${a.productName}: ${a.detail}`, to: a.storeId ? p(`locales/${a.storeId}`) : p(`catalogo/${a.productId}`), tone: 'warn' as const })),
   ];
@@ -120,6 +122,7 @@ function AdminHome() {
     <>
       <PageHeader title="Centro de mando" subtitle={`${today(ctx.now())} · ${config.name}: locales, vendedores y almacén en el mapa.`} />
       <BackupNotice className="mb-4" firstSteps />
+      <QuickActions />
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="relative">
           {markets.length > 1 ? (
@@ -401,6 +404,8 @@ function StoreHome() {
   const [sales, setSales] = useState(false);
   const view = stores.data?.[0];
   if (!view) return stores.loading ? <Loading rows={4} /> : <EmptyState icon={StoreIcon} title="No encontré tu tienda" />;
+  // Ronda 3: el local que compra en firme ve sus facturas, no la consignación.
+  if (view.store.saleMode === 'firme') return <FirmStoreHome view={view} />;
   const s = view.store;
   const units = (lines.data ?? []).reduce((a, l) => a + l.qty, 0);
   const potential = (lines.data ?? []).reduce((a, l) => a + l.qty * l.storeEarning, 0);

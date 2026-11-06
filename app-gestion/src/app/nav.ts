@@ -20,6 +20,7 @@ import {
   Truck,
   Users,
   Wallet,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import type { Role } from '../data/types';
@@ -44,6 +45,7 @@ export const NAV: Record<Exclude<Role, 'direccion'>, NavItem[]> = {
     { path: 'locales', label: 'Locales', icon: Store, bottom: true },
     { path: 'entregas', label: 'Entregas', icon: Truck, bottom: true },
     { path: 'repartos', label: 'Repartos', icon: Route },
+    { path: 'venta-rapida', label: 'Venta rápida', icon: Zap },
     { path: 'pedidos', label: 'Pedidos', icon: ClipboardList },
     { path: 'contratos', label: 'Contratos', icon: FileSignature },
     { path: 'cobros', label: 'Cobros', icon: Receipt, bottom: true },

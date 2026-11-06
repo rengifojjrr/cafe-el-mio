@@ -211,12 +211,15 @@ export function DeliveryPdfView({
   sellerName,
   address,
   lines,
+  invoiceCode,
 }: {
   delivery: Delivery;
   storeName: string;
   sellerName: string;
   address: string;
   lines: { name: string; qty: number }[];
+  /** Venta en firme: la factura que nació al recibir. */
+  invoiceCode?: string;
 }) {
   const { ctx } = useLine();
   const template = useAsync(() => getTemplate(ctx, delivery.templateId!), [ctx, delivery.templateId]);
@@ -230,7 +233,7 @@ export function DeliveryPdfView({
       vendedor: sellerName,
       fecha: delivery.deliveredAt ? fmtDateTime(delivery.deliveredAt) : '',
       direccion_local: address,
-      detalle_entrega: [`Nota ${delivery.code}`, ...lines.map((l) => `${l.name} × ${l.qty}`)].join('\n'),
+      detalle_entrega: [`Nota ${delivery.code}${invoiceCode ? ` · Factura ${invoiceCode}` : ''}`, ...lines.map((l) => `${l.name} × ${l.qty}`)].join('\n'),
     });
   }, [template.data, delivery.id]);
   if (template.error) return <p className="rounded-xl bg-danger-soft p-3 text-danger">{template.error.message}</p>;

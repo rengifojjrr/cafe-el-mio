@@ -4,7 +4,8 @@ import { CheckCircle2, FileText, MapPin, PackageCheck, Printer, ScanBarcode, Sen
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import type { Store } from '../../data/types';
-import { consignmentCheck } from '../../domain/compliance';
+import { supplyCheck } from '../../domain/compliance';
+import { creditText } from '../../domain/invoices';
 import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitOf, unitsText } from '../../domain/products';
 import type { NewPhoto } from '../../lib/image';
 import { fmtMoney } from '../../lib/money';
@@ -24,6 +25,7 @@ import {
   requestDelivery,
   type DeliveryView,
 } from '../../services/consignment';
+import { storePrices } from '../../services/prices';
 import { loadStoreForActor, type ConsignmentLine } from '../../services/stores';
 import { Button, Pill, QtyStepper, Sheet, Tabs, TextArea, TextInput } from '../../ui/kit';
 import { PhotoPicker } from '../../ui/media';
@@ -82,6 +84,11 @@ export function DeliveryCard({ d, showStore }: { d: DeliveryView; showStore?: bo
           {DELIVERY_STATUS_LABEL[d.status]}
         </Pill>
       </div>
+      {d.firm ? (
+        <p className="mt-1 flex flex-wrap gap-1.5">
+          <Pill tone="accent">{d.invoiceCode ? `Factura ${d.invoiceCode}` : 'Venta en firme: al firmar sale la factura'}</Pill>
+        </p>
+      ) : null}
       <ul className="mt-2 grid gap-1 text-sm">
         {d.itemsView.map((i) => (
           <li key={i.productId} className="flex justify-between gap-3">
@@ -176,14 +183,14 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
             const geo = withGeo ? await askLocation() : undefined;
             await receiveDelivery(ctx, d.id, { name: who, image: sig ?? '', geo });
             onClose();
-          }, `Entregado: ${units} unidades en consignación en ${d.storeName}. Firmó ${who}.`);
+          }, d.firm ? `Entregado y facturado a ${d.storeName}: ${units} unidades. Firmó ${who}.` : `Entregado: ${units} unidades en consignación en ${d.storeName}. Firmó ${who}.`);
         }}
       >
         <p className="rounded-2xl bg-accent-soft p-3 text-ink">
           {actor.role === 'store'
             ? 'Revisa lo que llegó. Firmas tú, como dueño o encargado del local, que recibiste todo.'
             : 'Entrégale el teléfono al dueño o encargado del local: él revisa lo que llegó y firma que lo recibió todo. El vendedor no firma aquí.'}{' '}
-          Al firmar, sube lo que el local tiene en consignación y baja el almacén.
+          {d.firm ? 'Al firmar, la mercancía pasa a ser del local, baja el almacén y sale la factura.' : 'Al firmar, sube lo que el local tiene en consignación y baja el almacén.'}
         </p>
         <ul className="grid gap-1 rounded-xl bg-surface-2 p-3 text-sm">
           {d.itemsView
@@ -201,7 +208,9 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
           <input type="checkbox" className="mt-1 h-5 w-5 flex-none" checked={allGood} onChange={(e) => setAllGood(e.target.checked)} />
           <span>
             <span className="font-semibold">Recibí todo lo de esta lista, en buen estado</span>
-            <span className="block text-sm text-muted">La mercancía queda en consignación: sigue siendo de la empresa hasta que se venda.</span>
+            <span className="block text-sm text-muted">
+              {d.firm ? 'Es una compra en firme: la mercancía es del local desde ahora y se le factura a los precios de su lista.' : 'La mercancía queda en consignación: sigue siendo de la empresa hasta que se venda.'}
+            </span>
           </span>
         </label>
         <label className="flex min-h-11 items-center gap-3 text-sm">
@@ -243,10 +252,17 @@ export function QuickOrderSheet({ view, onClose }: { view: ProductView | null; o
         }}
       >
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-2xl bg-surface-2 p-3">
-            <p className="text-muted">Ganas por {unit.one}</p>
-            <p className="glow text-xl font-bold tabular">{fmtMoney(view.storeEarning)}</p>
-          </div>
+          {view.storePrice ? (
+            <div className="rounded-2xl bg-surface-2 p-3">
+              <p className="text-muted">Tu precio por {unit.one}</p>
+              <p className="glow text-xl font-bold tabular">{fmtMoney(view.storePrice.unit)}</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-surface-2 p-3">
+              <p className="text-muted">Ganas por {unit.one}</p>
+              <p className="glow text-xl font-bold tabular">{fmtMoney(view.storeEarning)}</p>
+            </div>
+          )}
           <div className="rounded-2xl bg-surface-2 p-3">
             <p className="text-muted">En el almacén</p>
             <p className={`text-xl font-bold tabular ${s.available > 0 ? 'text-ink' : 'text-warn'}`}>{s.available}</p>
@@ -261,7 +277,9 @@ export function QuickOrderSheet({ view, onClose }: { view: ProductView | null; o
           <span className="field-label">¿Cuánto quieres?</span>
           <QtyStepper label={pr.name} pack={orderStep(pr)} value={value} onChange={setQty} unit={unit.many} />
           <p className="field-hint">
-            {packText(pr)}. Ganarías {fmtMoney(value * view.storeEarning)} si lo vendes todo al PVP sugerido.
+            {view.storePrice
+              ? `${packText(pr)}: ${fmtMoney(view.storePrice.box)} la caja. Unos ${fmtMoney(value * view.storePrice.unit)} a tu precio (lista ${view.storePrice.listName}).`
+              : `${packText(pr)}. Ganarías ${fmtMoney(value * view.storeEarning)} si lo vendes todo al PVP sugerido.`}
           </p>
         </div>
         <TextArea label="Nota para tu vendedor (opcional)" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -280,17 +298,19 @@ export function QuickOrderSheet({ view, onClose }: { view: ProductView | null; o
 export function RequestDeliverySheet({ open, onClose, store }: { open: boolean; onClose: () => void; store: Store }) {
   const { ctx, line } = useLine();
   const { run, busy } = useAction();
+  const firm = store.saleMode === 'firme';
   const products = useAsync(() => (open ? listProducts(ctx) : Promise.resolve([])), [ctx, open]);
+  const prices = useAsync(() => (open && firm ? storePrices(ctx, store.id) : Promise.resolve(null)), [ctx, open, firm, store.id]);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [note, setNote] = useState('');
-  const check = consignmentCheck(line, store, ctx.now());
+  const check = supplyCheck(line, store, ctx.now());
   const items = Object.entries(qty)
     .filter(([, q]) => q > 0)
     .map(([productId, q]) => ({ productId, qty: q }));
   const byId = new Map((products.data ?? []).map((v) => [v.product.id, v.product]));
   const totalText = mixedUnitsText(items.flatMap((i) => (byId.get(i.productId) ? [{ product: byId.get(i.productId)!, qty: i.qty }] : [])));
   return (
-    <Sheet open={open} onClose={onClose} title={`Pedir producto para ${store.name}`} wide>
+    <Sheet open={open} onClose={onClose} title={firm ? `Pedido en firme de ${store.name}` : `Pedir producto para ${store.name}`} wide>
       {!check.ok ? (
         <p className="rounded-xl bg-danger-soft p-3 text-danger" role="alert">
           {check.reason}
@@ -308,14 +328,21 @@ export function RequestDeliverySheet({ open, onClose, store }: { open: boolean; 
             }, `Pedido enviado a administración: ${totalText}.`);
           }}
         >
-          <p className="text-muted">Administración lo aprueba y lo prepara. Cuando esté listo, el local firma la nota de entrega al recibir.</p>
+          <p className="text-muted">
+            {firm
+              ? `${creditText(store)} · lista ${prices.data?.listName ?? '…'}. Administración lo prepara; al recibir, el local firma y sale su factura.`
+              : 'Administración lo aprueba y lo prepara. Cuando esté listo, el local firma la nota de entrega al recibir.'}
+          </p>
           <ul className="grid gap-2">
             {(products.data ?? []).map((v) => (
               <li key={v.product.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line p-3">
                 <div className="min-w-0 flex-1 basis-48">
                   <p className="font-semibold">{v.product.name}</p>
                   <p className="text-sm text-muted">
-                    Hay {unitsText(v.product, v.stock.available)} · {fmtMoney(v.product.priceToStore)} por {unitOf(v.product).one} al local
+                    Hay {unitsText(v.product, v.stock.available)} ·{' '}
+                    {firm && prices.data?.prices[v.product.id]
+                      ? `${fmtMoney(prices.data.prices[v.product.id]!.unit)} por ${unitOf(v.product).one} · ${fmtMoney(prices.data.prices[v.product.id]!.box)} la caja`
+                      : `${fmtMoney(v.product.priceToStore)} por ${unitOf(v.product).one} al local`}
                     {v.stock.available === 0 && v.stock.nextArrival ? ` · llegan ${v.stock.nextArrival.qty} ${fmtRelativeDays(v.stock.nextArrival.eta, ctx.now())}` : ''}
                   </p>
                 </div>

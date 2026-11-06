@@ -87,7 +87,7 @@ export function isOverdue(s: Pick<Settlement, 'amount' | 'paid' | 'dueOn'>, now:
 }
 
 export function aging(
-  settlements: readonly Settlement[],
+  settlements: readonly Pick<Settlement, 'amount' | 'paid' | 'issuedAt'>[],
   now: Date,
 ): Record<AgingBucket, { amount: number; count: number }> {
   const out: Record<AgingBucket, { amount: number; count: number }> = {

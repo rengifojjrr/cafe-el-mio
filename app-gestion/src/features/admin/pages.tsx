@@ -22,6 +22,7 @@ import { CommissionSchemeSettings, SellerCommissionText, SellerSchemeButton } fr
 import { InviteButton } from '../red/invite';
 import { MarketSelect, MarketsSettings, RouteCostSettings } from '../red/markets';
 import { DataPanel } from '../data/DataPanel';
+import { FirmSalesSettings } from '../sales/price-lists';
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { actor } = useLine();
@@ -428,6 +429,8 @@ function SettingsInner() {
       <CommissionSchemeSettings scheme={settings.data.commissionScheme} />
       <MarketsSettings markets={marketsOf(settings.data)} />
       <RouteCostSettings value={settings.data.routeCostPerKm} />
+      {/* Ronda 3 · venta en firme y precios */}
+      <FirmSalesSettings />
     </>
   );
 }

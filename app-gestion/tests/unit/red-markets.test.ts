@@ -67,7 +67,8 @@ describe('semilla de la ronda 3', () => {
       expect(s.tobaccoPermit?.issuer).toBe('Texas Comptroller');
       expect(pointInMarket(HOU, s.lat, s.lng)).toBe(true);
     }
-    expect(stores.filter((s) => s.marketId === 'miami')).toHaveLength(18);
+    // Los 18 de antes y los 5 que compran en firme son de Miami.
+    expect(stores.filter((s) => s.marketId === 'miami')).toHaveLength(23);
     const sellers = (t.users as User[]).filter((u) => u.role === 'seller');
     expect(sellers.filter((u) => u.marketId === 'houston').map((u) => u.name)).toEqual(['Tomás Garza']);
     expect(marketsOf((c.settings as { markets?: Market[] }[])[0]).map((m) => m.id)).toEqual(['miami']);
@@ -130,7 +131,7 @@ describe('mercados en la app', () => {
     const all = await lineOverview(dir, 'tabaco', NOW);
     const hou = await lineOverview(dir, 'tabaco', NOW, { marketId: 'houston' });
     const mia = await lineOverview(dir, 'tabaco', NOW, { marketId: 'miami' });
-    expect(all.totalStores).toBe(23);
+    expect(all.totalStores).toBe(28);
     expect(hou.totalStores).toBe(5);
     expect(hou.activeStores).toBe(4);
     expect(hou.sales30).toBeGreaterThan(0);

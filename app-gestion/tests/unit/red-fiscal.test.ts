@@ -233,8 +233,9 @@ describe('datos fiscales en la app', () => {
     expect(r.totals.consignmentSold).toBeGreaterThan(0);
     expect(r.totals.total).toBeCloseTo(r.totals.consignmentSold + r.totals.firmSubtotal, 2);
     expect(r.rows.some((x) => x.marketName === 'Houston')).toBe(true);
-    // Bodega Ocho y Medio no tiene certificado (en la semilla): todo lo suyo sale «sin certificado».
+    // Bodega Ocho y Medio no tiene certificado (en la semilla): todo lo suyo sale «sin certificado»,
+    // lo de consignación y lo que compró en firme (por ejemplo, en una venta rápida).
     const ocho = r.rows.find((x) => x.storeName === 'Bodega Ocho y Medio');
-    if (ocho) expect(ocho.withoutCert).toBeCloseTo(ocho.consignmentSold, 2);
+    if (ocho) expect(ocho.withoutCert).toBeCloseTo(ocho.consignmentSold + ocho.firmSubtotal, 2);
   });
 });

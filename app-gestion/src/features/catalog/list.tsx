@@ -26,6 +26,7 @@ import { Button, EmptyState, ErrorBox, LinkButton, Loading, PageHeader, Pill, Sh
 import { ProductThumb } from '../../ui/media';
 import { QuickOrderSheet } from '../consignment/components';
 import { LabelsSheet } from '../labels/LabelsSheet';
+import { StorePrice } from '../sales/store-price';
 
 export function CatalogPage() {
   const { ctx, actor, config, p, line } = useLine();
@@ -381,7 +382,10 @@ function FamilyCard({ family, now, onOrder }: { family: Family<ProductView>; now
         ) : null}
 
         <div className="mt-auto grid gap-1 pt-1 text-sm">
-          {actor.role === 'store' ? (
+          {first.storePrice ? (
+            // El local que compra en firme ve solo su precio (nunca el PVP ni «lo que gana»).
+            <StorePrice view={first} />
+          ) : actor.role === 'store' ? (
             <p className="flex justify-between gap-2">
               <span className="font-semibold text-ink">Ganas por {unit.one}</span>
               <span className="glow font-bold tabular">{priceRange(family.variants.map((v) => v.storeEarning))}</span>
