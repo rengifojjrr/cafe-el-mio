@@ -1,11 +1,13 @@
-// La semilla cuando alguna línea tiene datos reales: esas líneas NUNCA se borran ni se vuelven a
-// sembrar; solo se (re)cargan las de ejemplo, y las cuentas de «Entrar como…» de las reales se
-// conservan. Se baja solo si hay datos reales (no pesa en la portada de la demo).
+// El arranque de las líneas. Lo normal: toda línea que no tiene datos reales se vacía y queda en
+// blanco, ya como datos reales (sin nada inventado; en Café, los 9 cafés de El Mío sin precio).
+// Las líneas reales NUNCA se borran ni se vuelven a sembrar y conservan sus cuentas de «Entrar
+// como…». Solo las pruebas automáticas (re)cargan datos de ejemplo.
 import type { DirectoryAccount, LineId, User } from '../data/types';
+import { LINES } from '../data/types';
 import { getCoreRepo, getLineRepo } from '../data';
 import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from '../seed/version';
 import { emitAll } from './bus';
-import { seedInWorker } from './session';
+import { findAccount, seedInWorker } from './session';
 
 /** La cuenta de Administración de una línea con datos reales, para «Entrar como…». */
 export function realAdminAccount(line: LineId, admin: Pick<User, 'id' | 'name'>): DirectoryAccount {
@@ -23,6 +25,42 @@ export function realAdminAccount(line: LineId, admin: Pick<User, 'id' | 'name'>)
 export async function syncRealLines(real: readonly LineId[], reseed: LineId[], now: Date, name?: string): Promise<void> {
   if (reseed.length) await seedDemoLines(reseed, now, name);
   if (await keepRealLines(real, now)) emitAll();
+}
+
+/**
+ * Deja en blanco las líneas que no son reales (un navegador nuevo, o uno con la demo de antes) y
+ * cuida las reales. Lo de ejemplo de esas líneas se borra entero; la otra línea no se toca.
+ */
+export async function startLinesBlank(blank: readonly LineId[], real: readonly LineId[], now: Date, name?: string): Promise<void> {
+  if (blank.length) await blankLines(blank, now, name);
+  if ((await keepRealLines([...real, ...blank], now, name)) || blank.length) emitAll();
+}
+
+async function blankLines(lines: readonly LineId[], now: Date, name?: string): Promise<void> {
+  const { buildBlankLine } = await import('../seed/blank');
+  const admins = new Map<LineId, User>();
+  for (const line of lines) {
+    const tables = buildBlankLine(line, now);
+    // `load` vacía cada tabla de la línea y deja solo esto (todo o nada).
+    await getLineRepo(line).load(tables);
+    admins.set(line, (tables.users as User[])[0]!);
+  }
+  const core = getCoreRepo();
+  await core.transaction(async () => {
+    // «Entrar como…»: de esas líneas queda solo su Administración.
+    for (const acc of await core.directory.all()) {
+      if (acc.line !== null && lines.includes(acc.line)) await core.directory.remove(acc.id);
+    }
+    for (const [line, admin] of admins) await core.directory.put(realAdminAccount(line, admin));
+    const eco = await core.settings.get('ecosystem');
+    await core.settings.put({
+      id: 'ecosystem',
+      name: name ?? eco?.name ?? DEFAULT_ECOSYSTEM_NAME,
+      theme: eco?.theme ?? 'dark',
+      seededAt: now.toISOString(),
+      seedVersion: SEED_VERSION,
+    });
+  });
 }
 
 /** Recarga los datos de ejemplo de algunas líneas (en un Web Worker si se puede). */
@@ -47,7 +85,7 @@ async function seedDemoLines(lines: LineId[], now: Date, keepName?: string): Pro
  * que ya no existen y, si falta, se vuelve a poner la de Administración. También se asegura que
  * existan la sesión y los ajustes del ecosistema. Devuelve true si cambió algo.
  */
-async function keepRealLines(real: readonly LineId[], now: Date): Promise<boolean> {
+async function keepRealLines(real: readonly LineId[], now: Date, name?: string): Promise<boolean> {
   const core = getCoreRepo();
   const [directory, settings, session] = await Promise.all([core.directory.all(), core.settings.get('ecosystem'), core.session.get('session')]);
   let changed = false;
@@ -76,7 +114,7 @@ async function keepRealLines(real: readonly LineId[], now: Date): Promise<boolea
   if (!settings || settings.seedVersion !== SEED_VERSION) {
     await core.settings.put({
       id: 'ecosystem',
-      name: settings?.name ?? DEFAULT_ECOSYSTEM_NAME,
+      name: settings?.name ?? name ?? DEFAULT_ECOSYSTEM_NAME,
       theme: settings?.theme ?? 'dark',
       seededAt: settings?.seededAt ?? now.toISOString(),
       seedVersion: SEED_VERSION,
@@ -86,6 +124,13 @@ async function keepRealLines(real: readonly LineId[], now: Date): Promise<boolea
   if (!session) {
     await core.session.put({ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null });
     changed = true;
+  } else if (real.length === LINES.length) {
+    // Si la cuenta con la que se entró (o la que se miraba) ya no existe, se vuelve a la portada.
+    const gone = async (id: string | null) => id !== null && !(await findAccount(id));
+    if ((await gone(session.accountId)) || (await gone(session.viewAsAccountId))) {
+      await core.session.put({ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null });
+      changed = true;
+    }
   }
   return changed;
 }

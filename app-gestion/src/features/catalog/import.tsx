@@ -329,7 +329,7 @@ function ColumnsStep({
               step={0.01}
               value={shown(opts.defaultCost)}
               onValue={(v) => set('defaultCost', v === '' ? null : v)}
-              hint="Si lo dejas vacío, el costo queda en 0 marcado como de ejemplo."
+              hint="Si lo dejas vacío, el costo queda en 0 marcado como provisional."
             />
           ) : null}
           <TextInput

@@ -116,7 +116,7 @@ function Accounting() {
     <>
       <PageHeader
         title="Contabilidad"
-        subtitle={`Solo ${config.name}: sus ventas, costos y cuentas no se mezclan con la otra línea. Costos de ejemplo hasta cargar los reales.`}
+        subtitle={`Solo ${config.name}: sus ventas, costos y cuentas no se mezclan con la otra línea. Un costo que no se cargó cuenta como 0: el margen de ese producto sale de más.`}
         actions={
           <LinkButton to={p('contabilidad/contadora')} icon={FileSpreadsheet}>
             Reporte para la contadora

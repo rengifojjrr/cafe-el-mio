@@ -1,55 +1,33 @@
-// Portada del ecosistema: las dos líneas como protagonistas, «Entrar como…», el recorrido
-// guiado, el QR del link, instalar, restablecer y exportar o importar la demo.
-import {
-  ArrowRightLeft,
-  Compass,
-  Crown,
-  Download,
-  LogIn,
-  Moon,
-  Pencil,
-  RotateCcw,
-  Smartphone,
-  Sun,
-  Upload,
-} from 'lucide-react';
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+// Portada del ecosistema: las dos líneas como protagonistas, «Entrar como…», el QR del link,
+// instalar y la copia de todo (exportar o importar). Sin datos de ejemplo: lo que se ve es lo
+// que la empresa cargó en este navegador.
+import { Crown, Download, LogIn, Moon, Pencil, Smartphone, Sun, Upload } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { LineId } from '../../data/types';
 import { lineConfig } from '../../lines/config';
 import { PUBLIC_URL, brandProductPhoto } from '../../lib/assets';
 import { useInstall } from '../../lib/pwa';
 import { lineTeaser } from '../../services/teaser';
-import { enterAs, exportState, getEcosystem, getLineDataMode, importState, resetDemo, saveEcosystem } from '../../services/session';
+import { enterAs, exportState, getEcosystem, importState, saveEcosystem } from '../../services/session';
 import { AccountPicker } from '../../app/AccountPicker';
 import { useAsync } from '../../app/hooks';
 import { CigarSilhouette, LineMark } from '../../ui/brand';
-import { Button, SampleBadge, Sheet, TextInput } from '../../ui/kit';
+import { Button, Sheet, TextInput } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
-import { useTour } from '../tour/TourProvider';
-
-// Con datos reales (Ronda 3): el aviso de cada línea y las confirmaciones fuertes se bajan solo entonces.
-const RealModeSheets = lazy(() => import('./real-mode').then((m) => ({ default: m.RealModeSheets })));
-const DataBadge = lazy(() => import('../../ui/data-badge').then((m) => ({ default: m.DataBadge })));
 
 export function Portada() {
   const eco = useAsync(getEcosystem, []);
-  const modes = useAsync(() => Promise.all([getLineDataMode('tabaco'), getLineDataMode('cafe')]), []);
   const nav = useNavigate();
-  const tour = useTour();
   const { push } = useToast();
   const { run, busy } = useAction();
   const [picker, setPicker] = useState<LineId | 'all' | null>(null);
-  const [tourPick, setTourPick] = useState(false);
   const [rename, setRename] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
   const [pendingImport, setPendingImport] = useState<File | null>(null);
   const [install, setInstall] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const name = eco.data?.name ?? 'Grupo Miami · Tabaco & Café';
   const [first, ...restName] = name.split('·');
-  const realLines = (['tabaco', 'cafe'] as const).filter((_, i) => modes.data?.[i] === 'real');
-  const isReal = (l: LineId) => realLines.includes(l);
 
   useEffect(() => {
     delete document.documentElement.dataset.line;
@@ -70,20 +48,26 @@ export function Portada() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `demo-grupo-miami-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `copia-grupo-miami-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const doImport = async (file: File) => {
-    await run(async () => importState(await file.text()), 'Listo: la demo quedó como en el respaldo.');
+    setPendingImport(null);
+    try {
+      const { blanked } = await importState(await file.text());
+      const names = blanked.map((l) => lineConfig(l).name).join(' y ');
+      push('ok', blanked.length ? `Listo. ${names} venía con datos de ejemplo de antes: ${blanked.length > 1 ? 'quedaron' : 'quedó'} en blanco.` : 'Listo: todo quedó como en la copia.');
+    } catch (e) {
+      push('error', errorText(e));
+    }
   };
 
   return (
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-5 lg:px-8">
         <span className="font-display text-xl font-semibold">Grupo Miami</span>
-        {realLines.length ? null : <SampleBadge />}
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="ghost"
@@ -108,11 +92,6 @@ export function Portada() {
             <Button variant="primary" big icon={LogIn} onClick={() => setPicker('all')}>
               Entrar como…
             </Button>
-            {realLines.length < 2 ? (
-              <Button big icon={Compass} onClick={() => setTourPick(true)}>
-                Recorrido guiado
-              </Button>
-            ) : null}
             <Button big icon={Crown} onClick={() => void goDireccion()}>
               Dirección
             </Button>
@@ -121,39 +100,38 @@ export function Portada() {
 
         <section className="mt-10 grid gap-4 lg:grid-cols-2" aria-label="Las dos líneas">
           {(['tabaco', 'cafe'] as const).map((l) => (
-            <LineCard key={l} line={l} real={isReal(l)} badge={realLines.length > 0} onEnter={() => setPicker(l)} onTour={() => tour.start(l)} />
+            <LineCard key={l} line={l} onEnter={() => setPicker(l)} />
           ))}
         </section>
 
         <section className="mt-10 grid gap-4 md:grid-cols-[1fr_auto]">
           <div className="glass grid gap-3 p-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <h2 className="text-lg font-bold">La demo</h2>
-              <p className="text-muted">Todo vive en este navegador: las firmas y los pagos son de ejemplo. Para llevar el mismo estado a otro teléfono, expórtalo y vuelve a importarlo allá.</p>
+              <h2 className="text-lg font-bold">Tus datos</h2>
+              <p className="text-muted">
+                Todo vive en este navegador, sin servidor: lo que cargas aquí no lo ve otro teléfono. Instala la app y exporta una copia seguido; con ella pasas todo a otro
+                teléfono. Guárdala en un lugar privado: lleva los datos de la empresa.
+              </p>
             </div>
             <Button icon={Smartphone} onClick={() => setInstall(true)}>
               Instalar en el teléfono
             </Button>
-            <Button icon={RotateCcw} onClick={() => setConfirmReset(true)}>
-              Restablecer demo
-            </Button>
-            <Button icon={Download} onClick={() => void run(doExport, 'Respaldo descargado.')}>
-              Exportar (JSON)
+            <Button icon={Download} onClick={() => void run(doExport, 'Copia descargada.')}>
+              Exportar copia (JSON)
             </Button>
             <Button icon={Upload} onClick={() => fileRef.current?.click()} busy={busy}>
-              Importar (JSON)
+              Importar copia (JSON)
             </Button>
             <input
               ref={fileRef}
               type="file"
               accept="application/json,.json"
               className="sr-only"
-              aria-label="Elegir respaldo JSON"
+              aria-label="Elegir copia JSON"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                // Con datos reales, el respaldo completo los reemplaza: se pregunta antes.
-                if (f && realLines.length) setPendingImport(f);
-                else if (f) void doImport(f);
+                // La copia completa reemplaza las dos líneas: se pregunta antes.
+                if (f) setPendingImport(f);
                 e.target.value = '';
               }}
             />
@@ -163,75 +141,31 @@ export function Portada() {
       </main>
 
       <Sheet open={picker !== null} onClose={() => setPicker(null)} title="Entrar como…">
-        <p className="mb-4 text-muted">Elige cualquier rol para recorrer la app con sus ojos. Siempre tendrás a mano «Cambiar de rol».</p>
+        <p className="mb-4 text-muted">Elige con qué cuenta entrar. Todavía no hay contraseñas: cualquiera con este navegador puede entrar. Siempre tendrás a mano «Cambiar de rol».</p>
         <AccountPicker onDone={() => setPicker(null)} only={picker === 'all' || picker === null ? undefined : picker} />
-      </Sheet>
-
-      <Sheet open={tourPick} onClose={() => setTourPick(false)} title="Recorrido guiado">
-        <p className="mb-4 text-muted">Siete pasos por línea. La app cambia sola de cuenta en cada paso.</p>
-        <div className="grid gap-2">
-          {(['tabaco', 'cafe'] as const).filter((l) => !isReal(l)).map((l) => (
-            <button
-              key={l}
-              type="button"
-              data-line={l}
-              className="flex min-h-16 items-center justify-between rounded-2xl border border-line bg-surface px-4 text-left hover:border-accent"
-              onClick={() => {
-                setTourPick(false);
-                tour.start(l);
-              }}
-            >
-              <LineMark line={l} size="sm" />
-              <ArrowRightLeft className="h-5 w-5 text-accent" aria-hidden />
-            </button>
-          ))}
-        </div>
       </Sheet>
 
       <RenameSheet open={rename} onClose={() => setRename(false)} current={name} />
       <InstallSheet open={install} onClose={() => setInstall(false)} />
 
-      {realLines.length ? (
-        <Suspense fallback={null}>
-          <RealModeSheets
-            realLines={realLines}
-            ecoName={eco.data?.name}
-            resetOpen={confirmReset}
-            importFile={pendingImport}
-            onClose={() => {
-              setConfirmReset(false);
-              setPendingImport(null);
-            }}
-          />
-        </Suspense>
-      ) : (
-        <Sheet open={confirmReset} onClose={() => setConfirmReset(false)} title="Restablecer la demo">
-          <p className="text-muted">Se borra todo lo que se hizo en este navegador y se cargan otra vez los datos de ejemplo, con fechas de hoy.</p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button
-              variant="danger"
-              icon={RotateCcw}
-              busy={busy}
-              onClick={() =>
-                void run(async () => {
-                  await resetDemo(new Date(), eco.data?.name);
-                  setConfirmReset(false);
-                }, 'Listo: datos de ejemplo cargados de nuevo.')
-              }
-            >
-              Sí, restablecer
-            </Button>
-            <Button variant="ghost" onClick={() => setConfirmReset(false)}>
-              Cancelar
-            </Button>
-          </div>
-        </Sheet>
-      )}
+      <Sheet open={pendingImport !== null} onClose={() => setPendingImport(null)} title="Importar la copia">
+        <p className="text-ink">
+          La copia reemplaza las dos líneas: Tabaco y Café se cambian por lo del archivo «{pendingImport?.name}». Lo de ahora se pierde, salvo que lo exportes antes.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button variant="danger" icon={Upload} busy={busy} onClick={() => pendingImport && void doImport(pendingImport)}>
+            Sí, importar
+          </Button>
+          <Button variant="ghost" onClick={() => setPendingImport(null)}>
+            Cancelar
+          </Button>
+        </div>
+      </Sheet>
     </div>
   );
 }
 
-function LineCard({ line, real, badge, onEnter, onTour }: { line: LineId; real: boolean; badge: boolean; onEnter: () => void; onTour: () => void }) {
+function LineCard({ line, onEnter }: { line: LineId; onEnter: () => void }) {
   const cfg = lineConfig(line);
   const teaser = useAsync(() => lineTeaser(line), [line]);
   const t = teaser.data;
@@ -239,13 +173,6 @@ function LineCard({ line, real, badge, onEnter, onTour }: { line: LineId; real: 
     <article data-line={line} className="relative isolate overflow-hidden rounded-[28px] border border-line bg-bg p-6 sm:p-7" aria-label={`Línea ${cfg.name}`}>
       <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden style={{ background: 'radial-gradient(40rem 22rem at 100% 0%, var(--bg-glow), transparent 65%)' }} />
       <LineMark line={line} size="lg" />
-      {badge ? (
-        <Suspense fallback={null}>
-          <span className="ml-3 inline-flex align-middle">
-            <DataBadge real={real} />
-          </span>
-        </Suspense>
-      ) : null}
       <p className="mt-3 max-w-[40ch] text-muted">{cfg.tagline}</p>
       <div className="mt-5 h-16 sm:h-20" aria-hidden>
         {line === 'tabaco' ? (
@@ -270,11 +197,6 @@ function LineCard({ line, real, badge, onEnter, onTour }: { line: LineId; real: 
         <Button variant="primary" icon={LogIn} onClick={onEnter}>
           Entrar a {cfg.name}
         </Button>
-        {real ? null : (
-          <Button variant="ghost" icon={Compass} onClick={onTour}>
-            Recorrido de 7 pasos
-          </Button>
-        )}
       </div>
     </article>
   );

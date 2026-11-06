@@ -1,5 +1,5 @@
-// Datos reales: empezar en blanco, importar los productos desde el Excel de Odoo y volver a
-// los datos de ejemplo con «Restablecer demo».
+// Datos reales: empezar en blanco, importar los productos desde el Excel de Odoo y la copia de
+// seguridad de la línea. (El arranque sin datos de ejemplo se prueba en sin-demo.spec.ts.)
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { enterAs, go, toast } from './helpers';
@@ -20,11 +20,9 @@ async function fitsPhone(page: Page, project: string): Promise<void> {
   expect(w.scroll, 'la pantalla es más ancha que el teléfono').toBeLessThanOrEqual(w.client + 1);
 }
 
-test('Tabaco empieza en blanco, importa el Excel de Odoo y «Restablecer demo» vuelve a los ejemplos', async ({ page }, info) => {
+test('Tabaco empieza en blanco, importa el Excel de Odoo y guarda y recupera su copia', async ({ page }, info) => {
   const tag = info.project.name;
   await enterAs(page, 'tabaco:admin');
-  // La cabecera dice de dónde son los datos (en el teléfono, corto).
-  await expect(page.locator('header [data-modo="ejemplo"]')).toBeVisible();
 
   // Ajustes → Empezar en blanco (escribiendo «Tabaco»).
   await go(page, '/tabaco/ajustes');
@@ -38,8 +36,8 @@ test('Tabaco empieza en blanco, importa el Excel de Odoo y «Restablecer demo» 
   await sheet.getByLabel('Para confirmar, escribe Tabaco').fill('Tabaco');
   await confirm.click();
   await toast(page, /quedó en blanco/);
-  await expect(page.locator('header [data-modo="real"]')).toBeVisible();
-  await expect(page.locator('header [data-modo="real"]')).toContainText('Datos reales');
+  // En Ajustes, el panel de datos dice que son reales y que viven solo en este navegador.
+  await expect(page.locator('[aria-label="Datos de Tabaco"] [data-modo="real"]')).toContainText('Datos reales · solo en este navegador');
   await shot(page, `ajustes-real-${tag}`);
 
   // El inicio propone empezar por el catálogo; el catálogo queda vacío.
@@ -48,15 +46,6 @@ test('Tabaco empieza en blanco, importa el Excel de Odoo y «Restablecer demo» 
   await go(page, '/tabaco/catalogo');
   await expect(page.getByRole('heading', { name: 'Catálogo', level: 1 })).toBeVisible();
   await expect(page.getByText('Aún no hay productos')).toBeVisible();
-  await expect(page.locator('header [data-modo="real"]')).toBeVisible();
-
-  // En la portada: Tabaco sin recorrido (Café sí lo tiene).
-  await go(page, '/');
-  const tabacoCard = page.getByRole('article', { name: 'Línea Tabaco' });
-  await expect(tabacoCard.getByText(/Datos reales/)).toBeVisible();
-  await expect(tabacoCard.getByRole('button', { name: 'Recorrido de 7 pasos' })).toHaveCount(0);
-  await expect(page.getByRole('article', { name: 'Línea Café' }).getByRole('button', { name: 'Recorrido de 7 pasos' })).toBeVisible();
-  await shot(page, `portada-real-${tag}`);
 
   // Catálogo → Importar el Excel de Odoo (inventado).
   await go(page, '/tabaco/catalogo');
@@ -100,67 +89,9 @@ test('Tabaco empieza en blanco, importa el Excel de Odoo y «Restablecer demo» 
   await expect(restore).toContainText('18 productos');
   await restore.getByRole('button', { name: 'Sí, reemplazar' }).click();
   await toast(page, /Tabaco quedó como en la copia/);
-  await expect(page.locator('header [data-modo="real"]')).toBeVisible();
-
-  // Restablecer demo: con datos reales hay que escribir «borrar».
-  await go(page, '/');
-  await page.getByRole('button', { name: 'Restablecer demo' }).click();
-  const reset = page.getByRole('dialog', { name: 'Restablecer la demo' });
-  await expect(reset.getByText('Tabaco tiene datos reales de tu empresa.')).toBeVisible();
-  await expect(reset.getByRole('button', { name: 'Sí, restablecer' })).toBeDisabled();
-  await reset.getByLabel('Para confirmar, escribe borrar').fill('borrar');
-  await reset.getByRole('button', { name: 'Sí, restablecer' }).click();
-  await toast(page, /datos de ejemplo cargados/);
-  await expect(page.getByRole('banner').getByText('Datos de ejemplo')).toBeVisible();
-  await expect(tabacoCard.getByText(/Datos reales/)).toHaveCount(0);
-  await expect(tabacoCard.getByRole('button', { name: 'Recorrido de 7 pasos' })).toBeVisible();
-  await enterAs(page, 'tabaco:admin');
-  await expect(page.locator('header [data-modo="ejemplo"]')).toBeVisible();
   await go(page, '/tabaco/catalogo');
-  // La búsqueda se recuerda en la pestaña (quedó «toro» de antes): se borra para ver todo.
   await page.getByLabel('Buscar en el catálogo').fill('');
-  await expect(page.getByText('Biscayne Robusto').first()).toBeVisible();
-});
-
-test('una semilla nueva no borra los datos reales: solo recarga la línea de ejemplo', async ({ page }) => {
-  await enterAs(page, 'tabaco:admin');
-  await go(page, '/tabaco/ajustes');
-  await page.getByRole('button', { name: 'Empezar en blanco' }).click();
-  await page.getByRole('dialog', { name: 'Empezar en blanco' }).getByLabel('Para confirmar, escribe Tabaco').fill('tabaco');
-  await page.getByRole('dialog', { name: 'Empezar en blanco' }).getByRole('button', { name: 'Empezar en blanco' }).click();
-  await toast(page, /quedó en blanco/);
-  // Como si saliera una versión nueva de la semilla, y Café (de ejemplo) hubiera cambiado.
-  await page.evaluate(async () => {
-    const open = (name: string) =>
-      new Promise<IDBDatabase>((resolve, reject) => {
-        const r = indexedDB.open(name);
-        r.onsuccess = () => resolve(r.result);
-        r.onerror = () => reject(r.error);
-      });
-    const done = (tx: IDBTransaction) => new Promise<void>((resolve) => (tx.oncomplete = () => resolve()));
-    const core = await open('eco-core');
-    const t1 = core.transaction('settings', 'readwrite');
-    const get = t1.objectStore('settings').get('ecosystem');
-    get.onsuccess = () => t1.objectStore('settings').put({ ...get.result, seedVersion: get.result.seedVersion - 1 });
-    await done(t1);
-    core.close();
-    const cafe = await open('eco-cafe');
-    const t2 = cafe.transaction('products', 'readwrite');
-    const keys = t2.objectStore('products').getAllKeys();
-    keys.onsuccess = () => t2.objectStore('products').delete(keys.result[0]!);
-    await done(t2);
-    cafe.close();
-  });
-  await page.goto('./#/');
-  await page.reload();
-  const cafeCard = page.getByRole('article', { name: 'Línea Café' });
-  await expect(cafeCard.getByText('9', { exact: true })).toBeVisible();
-  await expect(cafeCard.getByText('Datos de ejemplo')).toBeVisible();
-  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText(/Datos reales/)).toBeVisible();
-  await enterAs(page, 'tabaco:admin');
-  await expect(page.locator('header [data-modo="real"]')).toBeVisible();
-  await go(page, '/tabaco/catalogo');
-  await expect(page.getByText('Aún no hay productos')).toBeVisible();
+  await expect(page.getByTestId('resultados')).toContainText('18 productos');
 });
 
 test('café: importar con los atributos de la variante (molido y peso)', async ({ page }, info) => {

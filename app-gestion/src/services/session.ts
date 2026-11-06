@@ -1,5 +1,5 @@
-// Lo común del ecosistema (eco-core): la sesión, «Entrar como…», el nombre del ecosistema,
-// restablecer la demo y exportar o importar su estado.
+// Lo común del ecosistema (eco-core): la sesión, «Entrar como…», el nombre del ecosistema, el
+// arranque de las líneas y exportar o importar todo.
 import type { ContractTemplate, DirectoryAccount, EcosystemSettings, LineId, Photo, SessionState, User } from '../data/types';
 import { LINES } from '../data/types';
 import { getCoreRepo, getDbPrefix, getLineRepo } from '../data';
@@ -14,6 +14,29 @@ let seeding: Promise<void> | null = null;
 
 export type DataMode = 'demo' | 'real';
 
+/**
+ * La app ya no trae datos de ejemplo. Solo las pruebas automáticas los cargan, y lo piden con esta
+ * marca en el navegador (Playwright la pone en cada prueba) o con `allowDemoData` (Vitest).
+ */
+export const DEMO_FLAG = 'pruebas:datos-de-ejemplo';
+
+let demoOverride: boolean | null = null;
+
+/** Para las pruebas unitarias: con `true`, la app se comporta como antes y carga los ejemplos. */
+export function allowDemoData(allow: boolean | null): void {
+  demoOverride = allow;
+}
+
+/** ¿Estas pruebas piden los datos de ejemplo? Fuera de las pruebas, siempre no. */
+export function demoRequested(): boolean {
+  if (demoOverride !== null) return demoOverride;
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(DEMO_FLAG) === '1';
+  } catch {
+    return false;
+  }
+}
+
 /** ¿La línea tiene datos de ejemplo o los datos reales de la empresa? (Sin ajustes: ejemplo.) */
 export async function getLineDataMode(line: LineId): Promise<DataMode> {
   const s = await getLineRepo(line).settings.get('settings');
@@ -21,9 +44,8 @@ export async function getLineDataMode(line: LineId): Promise<DataMode> {
 }
 
 /**
- * Si no hay datos (o son de una versión vieja de la semilla), carga los de ejemplo.
- * Devuelve siempre la misma promesa: quien necesita datos (entrar, listar cuentas, la sesión)
- * espera a que termine la primera carga.
+ * Deja las dos líneas listas para usar. Devuelve siempre la misma promesa: quien necesita datos
+ * (entrar, listar cuentas, la sesión) espera a que termine la primera vez.
  */
 export function ensureSeeded(now = new Date()): Promise<void> {
   if (!seeding) {
@@ -39,12 +61,23 @@ export function ensureSeeded(now = new Date()): Promise<void> {
  * Lo que hace `ensureSeeded`, sin recordar el resultado (las pruebas lo llaman directo).
  *
  * Regla de oro: una línea con datos reales (`dataMode: 'real'`) NUNCA se borra ni se vuelve a
- * sembrar, aunque cambie la versión de la semilla o su catálogo esté vacío. Solo se (re)cargan
- * las líneas de ejemplo, y las cuentas de «Entrar como…» de las líneas reales se conservan.
+ * sembrar. Toda línea que no es real (un navegador nuevo, o uno que todavía tiene la demo de
+ * antes) se vacía y queda en blanco, ya como datos reales (ver seed-real.ts).
+ *
+ * Con `demo` (solo las pruebas automáticas) se comporta como antes: (re)carga los datos de
+ * ejemplo de las líneas que no son reales.
  */
-export async function seedIfNeeded(now = new Date()): Promise<void> {
+export async function seedIfNeeded(now = new Date(), opts: { demo?: boolean } = {}): Promise<void> {
   const core = getCoreRepo();
   const settings = await core.settings.get('ecosystem');
+  if (!(opts.demo ?? demoRequested())) {
+    const real: LineId[] = [];
+    const blank: LineId[] = [];
+    for (const line of LINES) ((await getLineDataMode(line)) === 'real' ? real : blank).push(line);
+    const { startLinesBlank } = await import('./seed-real');
+    await startLinesBlank(blank, real, now, settings?.name);
+    return;
+  }
   const stale = !settings || settings.seedVersion !== SEED_VERSION;
   const real: LineId[] = [];
   const reseed: LineId[] = [];
@@ -62,7 +95,7 @@ export async function seedIfNeeded(now = new Date()): Promise<void> {
   await syncRealLines(real, reseed, now, settings?.name);
 }
 
-/** Borra todo y vuelve a cargar los datos de ejemplo (fechas relativas a hoy). */
+/** Borra todo y carga los datos de ejemplo (fechas relativas a hoy). Solo lo usan las pruebas. */
 export async function resetDemo(now = new Date(), keepName?: string): Promise<void> {
   const name = keepName ?? DEFAULT_ECOSYSTEM_NAME;
   if (typeof window !== 'undefined' && typeof Worker === 'function') {
@@ -314,8 +347,12 @@ async function importSchema() {
   });
 }
 
-/** Carga un respaldo JSON. El archivo es información, no instrucciones: se valida antes de usarlo. */
-export async function importState(json: string): Promise<void> {
+/**
+ * Carga un respaldo JSON. El archivo es información, no instrucciones: se valida antes de usarlo.
+ * Una línea que en el respaldo era de ejemplo (de antes de quitar la demo) no se carga: queda en
+ * blanco. Devuelve cuáles quedaron así.
+ */
+export async function importState(json: string): Promise<{ blanked: LineId[] }> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -329,12 +366,30 @@ export async function importState(json: string): Promise<void> {
       if (typeof row.id !== 'string') throw new Error('El respaldo tiene registros sin identificador.');
     }
   }
+  const allowDemo = demoRequested();
+  const blanked: LineId[] = [];
+  const blankAdmins: DirectoryAccount[] = [];
   for (const line of LINES) {
     const tables = { ...data.lines[line] };
+    const real = (tables.settings?.[0] as { dataMode?: unknown } | undefined)?.dataMode === 'real';
+    if (!real && !allowDemo) {
+      const [{ buildBlankLine }, { realAdminAccount }] = await Promise.all([import('../seed/blank'), import('./seed-real')]);
+      const blank = buildBlankLine(line, new Date());
+      await getLineRepo(line).load(blank);
+      blankAdmins.push(realAdminAccount(line, (blank.users as User[])[0]!));
+      blanked.push(line);
+      continue;
+    }
     tables.photos = (tables.photos ?? []).map((p) => ({ ...p, blob: dataUrlToBlob(String(p.blob)) }));
     tables.templates = (tables.templates ?? []).map((t) => ({ ...t, pdf: dataUrlToBlob(String(t.pdf)) }));
     await getLineRepo(line).load(tables);
   }
-  await getCoreRepo().load({ ...data.core, session: [{ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null }] });
+  // De las líneas que quedaron en blanco, en «Entrar como…» queda solo su Administración.
+  const directory = [
+    ...data.core.directory.filter((a) => a.line === null || !blanked.includes(a.line as LineId)),
+    ...blankAdmins,
+  ];
+  await getCoreRepo().load({ ...data.core, directory, session: [{ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null }] });
   emitAll();
+  return { blanked };
 }

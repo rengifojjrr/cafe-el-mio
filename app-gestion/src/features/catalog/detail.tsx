@@ -60,6 +60,8 @@ export function ProductDetailPage() {
   const shade = String(a.wrapperShade ?? capaShade(a.capa));
   // El local que compra en firme ve su precio de lista y no la consignación.
   const firmStore = actor.role === 'store' && Boolean(v.storePrice);
+  // Sin precio al local todavía (los cafés de El Mío al empezar): nada de «$0.00» ni márgenes.
+  const priced = pr.priceToStore > 0;
 
   const facts: [string, React.ReactNode][] =
     line === 'tabaco'
@@ -140,7 +142,13 @@ export function ProductDetailPage() {
           </>
         }
       />
-      {!pr.active ? <p className="mb-4 rounded-xl bg-surface-2 p-3 text-sm text-muted">Este producto está inactivo: no aparece para vendedores ni locales.</p> : null}
+      {!pr.active ? (
+        <p className="mb-4 rounded-xl bg-surface-2 p-3 text-sm text-muted">
+          {pr.priceToStore > 0
+            ? 'Este producto está inactivo: no aparece para vendedores ni locales.'
+            : 'Le falta el precio al local (y el costo): ponlos con «Editar» y actívalo. Mientras tanto no aparece para vendedores ni locales.'}
+        </p>
+      ) : null}
 
       <section className="hero-producto mb-4 p-4 sm:p-7" aria-label={`Presentación de ${pr.name}`}>
         <div className="flex flex-wrap items-center gap-2">
@@ -249,13 +257,13 @@ export function ProductDetailPage() {
           <h2 className="mb-2 font-bold">Precios por {unit.one}</h2>
           <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
             <dt className="text-muted">Precio al local</dt>
-            <dd className="text-right font-semibold tabular">{fmtMoney(pr.priceToStore)}</dd>
+            <dd className="text-right font-semibold tabular">{priced ? fmtMoney(pr.priceToStore) : 'Sin precio'}</dd>
             <dt className="text-muted">Por caja</dt>
-            <dd className="text-right tabular">{fmtMoney(pr.boxPrice && pr.boxPrice > 0 ? pr.boxPrice : pr.priceToStore * pr.packSize)}</dd>
+            <dd className="text-right tabular">{priced ? fmtMoney(pr.boxPrice && pr.boxPrice > 0 ? pr.boxPrice : pr.priceToStore * pr.packSize) : '—'}</dd>
             <dt className="text-muted">PVP sugerido</dt>
             <dd className="text-right font-semibold tabular">{fmtMoney(pr.suggestedRetail)}</dd>
             <dt className="text-muted">El local gana</dt>
-            <dd className="text-right font-bold tabular text-ok">{fmtMoney(storeEarning(pr))}</dd>
+            <dd className="text-right font-bold tabular text-ok">{priced ? fmtMoney(storeEarning(pr)) : '—'}</dd>
             {v.sellerCommissionRule ? (
               <>
                 <dt className="text-muted">{actor.role === 'seller' ? 'Tu comisión' : 'Comisión del vendedor'}</dt>
@@ -265,9 +273,9 @@ export function ProductDetailPage() {
                 </dd>
               </>
             ) : null}
-            {hasCost(pr) ? (
+            {hasCost(pr) && priced ? (
               <>
-                <dt className="text-muted">Costo{pr.sampleCost ? ' (de ejemplo)' : ''}</dt>
+                <dt className="text-muted">Costo{pr.sampleCost ? ' (provisional)' : ''}</dt>
                 <dd className="text-right tabular">{fmtMoney(pr.cost)}</dd>
                 <dt className="text-muted">Margen</dt>
                 <dd className="text-right font-semibold tabular">{fmtMoney(pr.priceToStore - pr.cost - (v.sellerCommissionPerUnit ?? 0))}</dd>

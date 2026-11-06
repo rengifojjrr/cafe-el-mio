@@ -147,38 +147,15 @@ test('liquidar y registrar el pago (tabaco)', async ({ page }, info) => {
   await expect(page.getByRole('listitem').filter({ hasText: code! }).first()).toBeVisible();
 });
 
-test('recorrido guiado: 7 pasos de Tabaco, cambiando de cuenta solo', async ({ page }) => {
-  await page.goto('./#/');
-  await page.getByRole('button', { name: 'Recorrido guiado' }).first().click();
-  await page.getByRole('dialog', { name: 'Recorrido guiado' }).getByRole('button').filter({ hasText: /Tabaco/ }).click();
-  const panel = page.getByTestId('recorrido');
-  for (let i = 1; i <= 7; i++) {
-    await expect(panel).toContainText(`paso ${i} de 7`);
-    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
-    if (i < 7) await panel.getByRole('button', { name: /Siguiente/ }).click();
-  }
-  await panel.getByRole('button', { name: 'Terminar', exact: true }).click();
-  await expect(panel).toBeHidden();
-});
-
 test('Dirección: las dos líneas lado a lado y una línea en solo mirar', async ({ page }, info) => {
   await enterAs(page, 'direccion');
   await expect(page.getByText('Suma informativa').first()).toBeVisible();
-  await capture(page, info, 'E5-direccion-recorrido');
+  await capture(page, info, 'E5-direccion');
   await page.getByRole('button', { name: /Abrir Tabaco como Administración/ }).click();
   await expect(page.getByText(/Solo mirar/).first()).toBeVisible();
   await go(page, '/tabaco/catalogo');
   await expect(page.getByRole('heading', { name: 'Catálogo' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Nuevo producto' })).toHaveCount(0);
-});
-
-test('restablecer la demo vuelve a cargar los datos de ejemplo', async ({ page }) => {
-  await page.goto('./#/');
-  await page.getByRole('button', { name: 'Restablecer demo' }).click();
-  await page.getByRole('button', { name: 'Sí, restablecer' }).click();
-  await toast(page, /datos de ejemplo cargados/);
-  // 21 productos de tabaco desde la ronda 3 (12 premium y 9 de mazo).
-  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('21')).toBeVisible();
 });
 
 test('el local pide desde la ficha del producto: cuánto y listo', async ({ page }) => {

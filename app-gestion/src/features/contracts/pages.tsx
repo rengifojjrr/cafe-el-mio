@@ -35,7 +35,7 @@ function ContractDocument({ contract }: { contract: Contract }) {
       ) : null}
       <p className="mt-8 text-xs text-papel-suave">
         Contrato v{contract.version} · plantilla v{contract.templateVersion} · emitido el {fmtDate(contract.createdAt)}
-        {contract.signedAt ? ` · firmado el ${fmtDateTime(contract.signedAt)}` : ''}. Firma de demostración registrada en la aplicación.
+        {contract.signedAt ? ` · firmado el ${fmtDateTime(contract.signedAt)}` : ''}. Firma electrónica registrada en la aplicación.
       </p>
     </article>
   );
@@ -148,7 +148,7 @@ function SignForm({ contract, managerName, sellerName }: { contract: Contract; m
       <h2 className="flex items-center gap-2 font-display text-2xl font-semibold">
         <FileSignature className="h-6 w-6 text-accent" aria-hidden /> Firmar en este teléfono
       </h2>
-      <p className="mt-1 text-muted">Firman los dos: primero el encargado del local y después el vendedor, en nombre de la empresa. Es una firma de demostración: queda el trazo, el nombre, la fecha y la hora.</p>
+      <p className="mt-1 text-muted">Firman los dos: primero el encargado del local y después el vendedor, en nombre de la empresa. Queda el trazo, el nombre, la fecha y la hora.</p>
       <form
         className="mt-5 grid gap-5"
         onSubmit={(e) => {

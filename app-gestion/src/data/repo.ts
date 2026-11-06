@@ -98,7 +98,7 @@ export interface LineRepo {
   readonly audit: AppendOnlyLog<AuditEntry>;
   /** Todo o nada: si algo falla adentro, no queda nada a medias. */
   transaction<R>(fn: () => Promise<R>): Promise<R>;
-  /** Vacía la base (para «Restablecer demo» e «Importar»). */
+  /** Vacía la base (para las pruebas y para «Importar»). */
   clearAll(): Promise<void>;
   /** Volcado completo, para exportar. */
   dump(): Promise<Record<string, unknown[]>>;

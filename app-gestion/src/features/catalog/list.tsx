@@ -3,7 +3,7 @@
 // a la vista sin entrar a la ficha.
 import { AlertTriangle, BookOpen, Eye, EyeOff, FileSpreadsheet, Images, Plus, Printer, Ruler, Search, ShoppingBag, SlidersHorizontal, Truck, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import {
   type CatalogFilters,
   type Facet,
@@ -31,15 +31,21 @@ import { StorePrice } from '../sales/store-price';
 export function CatalogPage() {
   const { ctx, actor, config, p, line } = useLine();
   const isAdmin = actor.role === 'admin';
+  const [params] = useSearchParams();
   const [q, setQ] = useBackState(`catalogo-q:${actor.accountId}:${line}`, '');
   const [rawFilters, setFilters] = usePersistentState<CatalogFilters>(`catalogo-filtros:${actor.accountId}:${line}`, {}, 'local');
   const filters = useMemo(() => sanitizeFilters(rawFilters), [rawFilters]);
-  const [showInactive, setShowInactive] = useBackState(`catalogo-inactivos:${actor.accountId}:${line}`, false);
+  // «?inactivos=1» (desde el aviso de inicio): se abre mostrando los desactivados.
+  const [showInactive, setShowInactive] = useBackState(`catalogo-inactivos:${actor.accountId}:${line}`, isAdmin && params.get('inactivos') === '1');
   const [ordering, setOrdering] = useState<ProductView | null>(null);
   const [choosing, setChoosing] = useState<Family<ProductView> | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [labels, setLabels] = useState(false);
-  const { data, error, loading } = useAsync(() => listProducts(ctx, { includeInactive: isAdmin && showInactive }), [ctx, showInactive, isAdmin]);
+  // Administración trae también los desactivados: así sabe cuántos hay aunque no los muestre.
+  const listed = useAsync(() => listProducts(ctx, { includeInactive: isAdmin }), [ctx, isAdmin]);
+  const { error, loading } = listed;
+  const data = useMemo(() => (listed.data ? (showInactive ? listed.data : listed.data.filter((v) => v.product.active)) : undefined), [listed.data, showInactive]);
+  const hiddenInactive = listed.data && data ? listed.data.length - data.length : 0;
   const now = ctx.now();
 
   const filterKeys = config.filterFields;
@@ -150,9 +156,13 @@ export function CatalogPage() {
       {data && families.length === 0 ? (
         <EmptyState
           icon={BookOpen}
-          title={data.length ? 'Nada coincide' : 'Aún no hay productos'}
+          title={data.length ? 'Nada coincide' : hiddenInactive ? 'Todo está desactivado' : 'Aún no hay productos'}
           action={
-            active || q ? (
+            !data.length && hiddenInactive ? (
+              <Button variant="primary" icon={Eye} onClick={() => setShowInactive(true)}>
+                Ver {hiddenInactive === 1 ? 'el desactivado' : `los ${hiddenInactive} desactivados`}
+              </Button>
+            ) : active || q ? (
               <Button
                 onClick={() => {
                   setFilters({});
@@ -164,7 +174,13 @@ export function CatalogPage() {
             ) : null
           }
         >
-          {data.length ? 'Prueba con otra palabra o quita algún filtro.' : isAdmin ? 'Toca «Nuevo producto» para armar el catálogo.' : 'Administración todavía no cargó productos.'}
+          {data.length
+            ? 'Prueba con otra palabra o quita algún filtro.'
+            : hiddenInactive
+              ? 'Los productos que no tienen precio al local (como los cafés de El Mío al empezar) quedan desactivados hasta que se lo pongas.'
+              : isAdmin
+                ? 'Toca «Nuevo producto» o «Importar» para armar el catálogo.'
+                : 'Administración todavía no cargó productos.'}
         </EmptyState>
       ) : null}
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -310,8 +326,11 @@ function uniq(values: string[]): string[] {
 }
 
 function priceRange(values: number[]): string {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  // Sin precio todavía (por ejemplo, los cafés de El Mío al empezar): no se muestra «$0.00».
+  const priced = values.filter((v) => v > 0);
+  if (priced.length === 0) return 'Sin precio';
+  const min = Math.min(...priced);
+  const max = Math.max(...priced);
   return min === max ? fmtMoney(min) : `${fmtMoney(min)} a ${fmtMoney(max)}`;
 }
 

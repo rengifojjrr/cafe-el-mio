@@ -1,4 +1,4 @@
-// «Entrar como…»: elegir cualquier rol de cualquiera de las dos apps (sin contraseñas: es demo).
+// «Entrar como…»: elegir cualquier cuenta de cualquiera de las dos apps (todavía sin contraseñas).
 import { ChevronDown, Crown, Store as StoreIcon, Truck, UserCog } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -26,7 +26,7 @@ export function AccountPicker({ onDone, only }: { onDone?: () => void; only?: Li
   if (data.primary.length === 0) {
     return (
       <div className="grid gap-3">
-        <p className="text-muted">Preparando los datos de ejemplo… tarda unos segundos la primera vez.</p>
+        <p className="text-muted">Preparando la app… tarda unos segundos la primera vez.</p>
         <Loading rows={3} />
       </div>
     );
@@ -49,15 +49,16 @@ export function AccountPicker({ onDone, only }: { onDone?: () => void; only?: Li
   ].filter((g) => !only || g.key === only) as { key: LineId | 'eco'; items: AccountOption[] }[];
 
   return (
-    <div className="grid gap-5">
+    // grid-cols-1 en cada nivel: sin eso, la columna crece al ancho del texto y la fila se sale del teléfono.
+    <div className="grid grid-cols-1 gap-5">
       {groups.map((g) => (
-        <div key={g.key} data-line={g.key === 'eco' ? undefined : g.key} className="grid gap-2">
+        <div key={g.key} data-line={g.key === 'eco' ? undefined : g.key} className="grid grid-cols-1 gap-2">
           {g.key !== 'eco' ? (
             <div className="px-1">
               <LineMark line={g.key} size="sm" />
             </div>
           ) : null}
-          <ul className="grid gap-2">
+          <ul className="grid grid-cols-1 gap-2">
             {g.items.map((acc) => {
               const Icon = ROLE_ICON[acc.role];
               return (
@@ -89,7 +90,7 @@ export function AccountPicker({ onDone, only }: { onDone?: () => void; only?: Li
                 <ChevronDown className={`transition-transform ${open === g.key ? 'rotate-180' : ''}`} aria-hidden />
               </button>
               {open === g.key ? (
-                <ul className="mt-1 grid gap-1.5">
+                <ul className="mt-1 grid grid-cols-1 gap-1.5">
                   {data.others[g.key].map((acc) => (
                     <li key={acc.id}>
                       <button type="button" onClick={() => void go(acc)} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left hover:bg-accent-soft">

@@ -6,9 +6,8 @@ import { Link, NavLink, Navigate, Outlet, useNavigate, useParams } from 'react-r
 import { isLineId, lineConfig } from '../lines/config';
 import { lineCtx } from '../services/context';
 import { unreadNotifications } from '../services/messages';
-import { directorOpenLine, getEcosystem, getLineDataMode, leave, listAccounts, resolveActor, saveEcosystem, viewAs } from '../services/session';
+import { directorOpenLine, getEcosystem, leave, listAccounts, resolveActor, saveEcosystem, viewAs } from '../services/session';
 import { LineMark } from '../ui/brand';
-import { DataBadge } from '../ui/data-badge';
 import { Button, Loading, Sheet } from '../ui/kit';
 import { errorText, useToast } from '../ui/toast';
 import { useAsync } from './hooks';
@@ -83,7 +82,6 @@ function Shell({ state }: { state: LineState }) {
   const items = NAV[role];
   const unread = useAsync(() => unreadNotifications(ctx), [ctx]);
   const eco = useAsync(getEcosystem, []);
-  const mode = useAsync(() => getLineDataMode(line), [line]);
   const isDirector = account.role === 'direccion';
   const canViewAs = (account.role === 'admin' && account.line === line) || isDirector;
 
@@ -162,11 +160,6 @@ function Shell({ state }: { state: LineState }) {
             </p>
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-1">
-            {mode.data ? (
-              <span className="inline-flex min-w-0">
-                <DataBadge real={mode.data === 'real'} compact />
-              </span>
-            ) : null}
             {canViewAs && !actor.readOnly ? (
               <Button variant="ghost" icon={Eye} onClick={() => setViewSheet(true)} className="hidden sm:inline-flex">
                 Ver como…

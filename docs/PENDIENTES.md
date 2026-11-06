@@ -104,3 +104,19 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 ### Diseño
 - Las webs de referencia (Plasencia y CAO) no se pudieron abrir desde el entorno donde se construyó (la red las
   bloquea): la ficha sigue lo que el equipo dijo que le gustó, sin copiar textos, imágenes ni marcas.
+
+## Sin datos de ejemplo (6 de noviembre de 2026)
+
+- **La ubicación del almacén** quedó en el punto de partida (Doral) y no hay pantalla para cambiarla: el mapa y los km de
+  los repartos salen de ahí. Hace falta «Dirección del almacén» en Ajustes, con la misma búsqueda que usa «Registrar
+  tienda».
+- **Los valores de partida de Ajustes** son números para empezar, no de la empresa: comisión progresiva de Tabaco
+  (7 %, 8 % y 10 % con tope de 10 %), costo por km de los repartos ($0.65 Tabaco, $0.60 Café), frecuencia de
+  liquidación y la plantilla del contrato (que sigue diciendo que la revisa un abogado antes de usarla).
+- **El importador de Odoo todavía inventa precios** cuando el archivo no los trae ($25 por mazo, $40 premium, costo 0
+  provisional). Es el mismo tipo de número que se acaba de quitar. Lo coherente: que entren sin precio y desactivados,
+  como los cafés de El Mío. Queda para decidir con el equipo.
+- **Vendedores y locales no tienen nada que ver** hasta que Administración los cree, y aun así solo en el navegador
+  donde los creó: para trabajar en equipo hace falta el servidor (`SUPABASE.md`).
+- Quien escriba la marca `pruebas:datos-de-ejemplo` en su navegador ve la demo, pero solo en líneas que no son reales:
+  no puede tapar ni borrar datos de la empresa.

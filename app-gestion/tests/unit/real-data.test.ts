@@ -96,7 +96,7 @@ describe('empezar en blanco', () => {
 describe('la semilla nunca borra una línea con datos reales', () => {
   it('con el catálogo vacío, la línea real se queda como está', async () => {
     expect(await getLineRepo('tabaco').products.count()).toBe(0);
-    await seedIfNeeded(NOW);
+    await seedIfNeeded(NOW, { demo: true });
     expect(await getLineRepo('tabaco').products.count()).toBe(0);
     expect(await getLineDataMode('tabaco')).toBe('real');
     expect(await getLineRepo('tabaco').users.count()).toBe(1);
@@ -112,7 +112,7 @@ describe('la semilla nunca borra una línea con datos reales', () => {
     const cafeProducts = await getLineRepo('cafe').products.all();
     await getLineRepo('cafe').products.remove(cafeProducts[0]!.id);
 
-    await seedIfNeeded(NOW);
+    await seedIfNeeded(NOW, { demo: true });
 
     const tabaco = await getLineRepo('tabaco').products.all();
     expect(tabaco.map((p) => p.id)).toEqual([real.id]);
@@ -129,7 +129,7 @@ describe('la semilla nunca borra una línea con datos reales', () => {
     const core = getCoreRepo();
     const admin = (await getLineRepo('tabaco').users.all())[0]!;
     await core.directory.remove('tabaco:admin');
-    await seedIfNeeded(NOW);
+    await seedIfNeeded(NOW, { demo: true });
     expect(await core.directory.get('tabaco:admin')).toMatchObject({ role: 'admin', line: 'tabaco', userId: admin.id, primary: true });
   });
 });
@@ -224,7 +224,7 @@ describe('restablecer la demo', () => {
     await core.settings.put({ ...eco, seedVersion: SEED_VERSION - 1 });
     const first = (await getLineRepo('tabaco').products.all())[0]!;
     await getLineRepo('tabaco').products.remove(first.id);
-    await seedIfNeeded(NOW);
+    await seedIfNeeded(NOW, { demo: true });
     expect(await getLineRepo('tabaco').products.count()).toBe(21);
     expect((await core.settings.get('ecosystem'))?.seedVersion).toBe(SEED_VERSION);
   });

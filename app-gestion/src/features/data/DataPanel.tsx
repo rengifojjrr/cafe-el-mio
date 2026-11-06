@@ -162,7 +162,8 @@ function StartBlankSheet({ open, real, onClose, onDone }: { open: boolean; real:
           visitas, ventas, devoluciones, pedidos, cobros, comisiones, mensajes, avisos, listas de precios, facturas, repartos, invitaciones y plantillas.
         </p>
         <p>
-          Quedan los ajustes de la línea, el almacén, las zonas y una sola cuenta: «Administración» (le cambias el nombre en Usuarios). {other} no se toca.
+          Quedan los ajustes de la línea, el almacén, las zonas y una sola cuenta: «Administración» (le cambias el nombre en Usuarios).
+          {line === 'cafe' ? ' Vuelven los 9 cafés de El Mío, sin precio al local ni costo y desactivados.' : ''} {other} no se toca.
         </p>
         {real ? (
           <div className="rounded-2xl border border-danger bg-danger-soft p-3">

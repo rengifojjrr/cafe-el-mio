@@ -261,3 +261,36 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
   al aceptar, revocar al instante en todos los teléfonos y que la base de datos aplique los permisos.
 - **Datos fiscales**: Tax ID (EIN), certificado de reventa y la foto o PDF de cada documento; avisos 30 días antes de
   vencer y al vencer.
+
+## Sin datos de ejemplo (6 de noviembre de 2026)
+
+Pedido: «borra toda la info que es demo». Se eligió: todo vacío para todos, y en Café se quedan los 9 cafés de El Mío
+solo con lo real.
+
+- **La app publicada ya no trae datos de ejemplo.** Al abrir, toda línea que no tiene datos reales (un navegador
+  nuevo, o uno con la demo de antes) se vacía y queda en blanco, ya como datos reales. La regla de oro sigue: una línea
+  real nunca se borra ni se vuelve a sembrar. Lo de ejemplo de un navegador viejo se pierde entero, también lo que
+  alguien hubiera cargado encima de la demo sin «Empezar en blanco».
+- **Qué trae una línea en blanco:** los ajustes de partida (los mismos que traía la semilla: mercados Miami y Houston,
+  comisión progresiva de Tabaco 7–10 %, costo por km, frecuencia de liquidación, plantilla del contrato), el almacén
+  con su nombre y un punto en el mapa (sin la dirección de ejemplo), las zonas y una sola cuenta, «Administración».
+  Sin listas de precios. Son configuración, no movimientos inventados, pero los números son de partida: Administración
+  los revisa. Se arma sin el simulador de la semilla (`src/seed/blank.ts`): una prueba unitaria compara sus ajustes
+  con los de la semilla para que no se separen.
+- **Café: los 9 cafés de El Mío solo con lo real**: nombre, fotos, descripción, atributos y el PVP de la tienda de la
+  marca. Costo y precio al local en 0, sin el código de barras de ejemplo, sin stock y desactivados. **Ningún producto
+  se activa sin precio al local** (se entregaría a $0); el formulario ya exigía un precio mayor que cero. Donde falta el
+  precio, la pantalla dice «Sin precio» en vez de $0.00, y el catálogo de Administración avisa «Todo está desactivado»
+  con un botón para verlos. «Empezar en blanco» en Café los vuelve a poner, como en una línea nueva.
+- **La demo queda solo para las pruebas automáticas.** Playwright pone la marca `pruebas:datos-de-ejemplo` en el
+  `localStorage` de cada prueba (`DEMO_STORAGE` en `playwright.config.ts`) y Vitest llama `allowDemoData(true)`. Las
+  pruebas de `sin-demo.spec.ts` y `sin-demo.test.ts` corren sin ella. Quien ponga la marca a mano ve la demo solo en
+  líneas que no son reales.
+- **Se quitaron** «Restablecer demo», el recorrido guiado, la insignia «Datos de ejemplo» (portada, cabecera y
+  Dirección) y los textos de demostración de contratos, notas de entrega y facturas («Firma electrónica registrada en
+  la aplicación»; la factura dice solo que la app anota los pagos y no mueve dinero). El panel «Datos de…» de Ajustes
+  sigue diciendo «Datos reales · solo en este navegador».
+- **Copias:** la copia de una línea que era de ejemplo ya no se importa (lo dice al elegirla). Un respaldo completo con
+  una línea de ejemplo carga lo real y deja esa línea en blanco, y lo avisa.
+- **El aviso de copia** no cuenta los cafés de El Mío sin precio: no los cargó la empresa. El inicio de una línea sin
+  nada con precio propone «Importar productos» (y en Café, «Ponerles precio»).

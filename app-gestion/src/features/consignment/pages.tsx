@@ -295,7 +295,7 @@ export function DeliveryNotePrintPage() {
               </p>
             </div>
           ) : null}
-          <p className="mt-8 text-xs text-papel-suave">Firma de demostración registrada en la aplicación.</p>
+          <p className="mt-8 text-xs text-papel-suave">Firma electrónica registrada en la aplicación.</p>
         </article>
       )}
     </>

@@ -1,6 +1,6 @@
 // Aviso de copia de seguridad pendiente: con datos reales, si pasaron 7 días o más desde la
 // última «Exportar» de la línea (o si nunca se exportó y ya hay algo cargado).
-import { Download, FileSpreadsheet, ShieldAlert } from 'lucide-react';
+import { Download, FileSpreadsheet, ShieldAlert, Tag } from 'lucide-react';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { downloadText } from '../../lib/download';
@@ -35,16 +35,25 @@ export function BackupNotice({ className = '', firstSteps }: { className?: strin
   const status = useAsync(() => (canExport ? backupStatus(ctx) : Promise.resolve(null)), [ctx, canExport]);
   const { exportNow, busy } = useExportLine();
   const s = status.data;
-  // Recién empezado en blanco: lo primero es cargar el catálogo.
-  if (firstSteps && s?.mode === 'real' && s.products === 0) {
+  // Recién empezado en blanco (nada con precio todavía): lo primero es el catálogo.
+  if (firstSteps && s?.mode === 'real' && s.products === s.unpriced) {
     return (
       <div className={`flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-accent-soft p-4 ${className}`}>
         <FileSpreadsheet className="h-6 w-6 flex-none text-accent" aria-hidden />
         <div className="min-w-0 flex-1 basis-56">
           <p className="font-bold text-ink">{config.name} está en blanco, lista para tus datos.</p>
-          <p className="text-sm text-ink">Empieza por el catálogo: importa tus productos desde el Excel de Odoo (o cualquier .xlsx o .csv).</p>
+          <p className="text-sm text-ink">
+            {s.unpriced
+              ? `Ya están ${s.unpriced === 1 ? 'el producto' : `los ${s.unpriced} productos`} de la marca, sin precio y desactivados: ponles precio al local y costo, y actívalos. O importa tus productos desde Excel o CSV.`
+              : 'Empieza por el catálogo: importa tus productos desde el Excel de Odoo (o cualquier .xlsx o .csv).'}
+          </p>
         </div>
-        <LinkButton to={p('catalogo/importar')} variant="primary" icon={FileSpreadsheet}>
+        {s.unpriced ? (
+          <LinkButton to={p('catalogo?inactivos=1')} variant="primary" icon={Tag}>
+            Ponerles precio
+          </LinkButton>
+        ) : null}
+        <LinkButton to={p('catalogo/importar')} variant={s.unpriced ? 'secondary' : 'primary'} icon={FileSpreadsheet}>
           Importar productos
         </LinkButton>
       </div>

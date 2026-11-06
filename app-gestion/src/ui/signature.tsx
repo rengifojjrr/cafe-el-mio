@@ -1,4 +1,4 @@
-// Firma de demostración en pantalla (signature_pad). Devuelve el trazo como PNG.
+// Firma en pantalla (signature_pad). Devuelve el trazo como PNG.
 import { Eraser } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type SignaturePadType from 'signature_pad';

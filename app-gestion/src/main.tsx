@@ -25,8 +25,8 @@ function Boot({ message }: { message: string }) {
   );
 }
 
-// La app se muestra enseguida; la primera vez, los datos de ejemplo se cargan en segundo plano
-// y las pantallas se actualizan solas cuando terminan.
+// La app se muestra enseguida; la primera vez, las dos líneas se preparan en blanco en segundo
+// plano (y lo de ejemplo de una versión vieja se borra) y las pantallas se actualizan solas.
 root.render(
   <StrictMode>
     <App />

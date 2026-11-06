@@ -6,8 +6,8 @@ import { getLineRepo } from '../data';
 export async function lineTeaser(line: LineId): Promise<{ products: number; activeStores: number; sellers: number; pendingOrders: number } | null> {
   const repo = getLineRepo(line);
   const [products, stores, users, reorders] = await Promise.all([repo.products.all(), repo.stores.all(), repo.users.all(), repo.reorders.all()]);
-  // Todavía se están cargando los datos de ejemplo.
-  if (products.length === 0) return null;
+  // La línea todavía se está preparando (la primera vez que se abre la app).
+  if (!(await repo.settings.get('settings'))) return null;
   return {
     products: products.filter((p) => p.active).length,
     activeStores: stores.filter((s) => s.status === 'activo').length,

@@ -135,7 +135,7 @@ export async function invoicePdf(d: InvoicePdfData): Promise<Uint8Array> {
       y -= 15;
     }
   }
-  page.drawText(clean(regular, 'Documento de demostración con datos de ejemplo. La app solo anota los pagos: no cobra ni mueve dinero.'), {
+  page.drawText(clean(regular, 'La app solo anota los pagos: no cobra ni mueve dinero.'), {
     x: M,
     y: M - 14,
     size: 8,

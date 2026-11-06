@@ -8,7 +8,6 @@ import type {
   AuditEntry,
   Commission,
   CommissionPayout,
-  CommissionScheme,
   Delivery,
   DeliveryRoute,
   Invitation,
@@ -34,6 +33,7 @@ import { seededRandom } from '../lib/ids';
 import { round2 } from '../lib/money';
 import { ZONE, fmtDate, toIsoDate } from '../lib/time';
 import type { LineSeedDef, SeedTables } from './engine';
+import { HOUSTON_SELLER_SCHEME, TABACO_SCHEME } from './schemes';
 
 /** Lo común a cada parte: las tablas, fechas relativas a hoy, ids nuevos y la auditoría. */
 interface Seed {
@@ -177,28 +177,8 @@ function seedInvitations({ line, users, admin, storeByKey, sellerByKey, ago, id 
 
 // ---------- Comisión progresiva (tabaco) ----------
 
-/** Comisión progresiva de Tabaco: base 7 %, escalones por locales activos y por lo vendido en el mes, tope 10 %. */
-export const TABACO_SCHEME: CommissionScheme = {
-  basePercent: 7,
-  capPercent: 10,
-  tiers: [
-    { metric: 'locales', min: 5, percent: 8 },
-    { metric: 'locales', min: 8, percent: 10 },
-    { metric: 'ventas', min: 4000, percent: 8 },
-    { metric: 'ventas', min: 7000, percent: 9 },
-  ],
-};
-
-/** Tomás Garza abre Houston: su propia comisión, que premia sumar locales. */
-export const HOUSTON_SELLER_SCHEME: CommissionScheme = {
-  basePercent: 8,
-  capPercent: 10,
-  tiers: [
-    { metric: 'locales', min: 6, percent: 9 },
-    { metric: 'locales', min: 10, percent: 10 },
-    { metric: 'ventas', min: 3000, percent: 9 },
-  ],
-};
+// Las comisiones de partida viven en schemes.ts: también las usa la línea en blanco.
+export { HOUSTON_SELLER_SCHEME, TABACO_SCHEME } from './schemes';
 
 /** Productos con comisión propia (los de monto fijo por unidad). */
 const CUSTOM_COMMISSION_SKUS = ['TB-EVE-COR42', 'TB-COR-PET42'];

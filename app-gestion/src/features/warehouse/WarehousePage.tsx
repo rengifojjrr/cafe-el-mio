@@ -77,7 +77,7 @@ function Warehouse() {
     <>
       <PageHeader
         title={wh.data?.name ?? 'Almacén'}
-        subtitle={`${wh.data?.address ?? ''} · Las existencias salen del libro de movimientos; nadie las edita a mano.`}
+        subtitle={`${wh.data?.address ? `${wh.data.address} · ` : ''}Las existencias salen del libro de movimientos; nadie las edita a mano.`}
         actions={
           !actor.readOnly ? (
             <LinkButton to={p('almacen/contar')} icon={ClipboardCheck}>

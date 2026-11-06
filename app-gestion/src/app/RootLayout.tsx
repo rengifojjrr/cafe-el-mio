@@ -7,7 +7,6 @@ import { getEcosystem } from '../services/session';
 import { Sheet } from '../ui/kit';
 import { AccountPicker } from './AccountPicker';
 import { useAsync } from './hooks';
-import { TourProvider } from '../features/tour/TourProvider';
 
 export function RootLayout() {
   const eco = useAsync(getEcosystem, []);
@@ -27,7 +26,7 @@ export function RootLayout() {
   const printing = loc.pathname.endsWith('/imprimir');
 
   return (
-    <TourProvider>
+    <>
       <Outlet />
       {!onHome && !printing ? (
         <button
@@ -41,10 +40,10 @@ export function RootLayout() {
         </button>
       ) : null}
       <Sheet open={open} onClose={() => setOpen(false)} title="Cambiar de rol">
-        <p className="mb-4 text-muted">Elige con qué cuenta quieres ver la app. Es una demo: no hay contraseñas.</p>
+        <p className="mb-4 text-muted">Elige con qué cuenta entrar. Todavía no hay contraseñas: cualquiera con este navegador puede entrar con cualquier cuenta.</p>
         <AccountPicker onDone={() => setOpen(false)} />
       </Sheet>
-    </TourProvider>
+    </>
   );
 }
 

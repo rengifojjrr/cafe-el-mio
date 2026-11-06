@@ -10,15 +10,16 @@ import { normalize } from '../domain/products';
 import { daysBetween, fmtDate, toIsoDate } from '../lib/time';
 import { emitAll } from './bus';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
+import { BLANK_ADMIN_NAME } from '../seed/version';
 import { realAdminAccount } from './seed-real';
-import { type DataMode, blobToDataUrl, dataUrlToBlob } from './session';
+import { type DataMode, blobToDataUrl, dataUrlToBlob, demoRequested } from './session';
 
 const BACKUP_APP = 'grupo-miami-ecosistema';
 const BACKUP_KIND = 'linea';
 const BACKUP_VERSION = 1;
 
 /** Nombre de la única cuenta que queda al empezar en blanco (se puede cambiar en Usuarios). */
-export const BLANK_ADMIN_NAME = 'Administración';
+export { BLANK_ADMIN_NAME };
 
 /** Días sin exportar a partir de los cuales se avisa. */
 export const BACKUP_EVERY_DAYS = 7;
@@ -30,7 +31,8 @@ const LINE_NAME: Record<LineId, string> = { tabaco: 'Tabaco', cafe: 'Café' };
 /**
  * Vacía la línea para cargar los datos reales de la empresa. Quedan los ajustes (marcados como
  * datos reales), el almacén, las zonas y UNA cuenta de Administración (la de quien lo hace,
- * renombrada «Administración»). La auditoría de la línea también se vacía y empieza con
+ * renombrada «Administración»). En Café vuelven los 9 cafés de El Mío sin precio al local ni costo
+ * y desactivados, como en una línea nueva. La auditoría de la línea también se vacía y empieza con
  * «Empezó en blanco con datos reales». La otra línea no se toca.
  */
 export async function startBlank(ctx: Ctx, confirmation: string): Promise<void> {
@@ -58,8 +60,12 @@ export async function startBlank(ctx: Ctx, confirmation: string): Promise<void> 
     entityId: 'settings',
     summary: 'Empezó en blanco con datos reales',
   };
+  // Los cafés de El Mío (y los datos de partida) se bajan solo aquí, no en cada pantalla.
+  const { blankAuditSummary, elMioProducts } = await import('../seed/blank');
+  first.summary = blankAuditSummary(ctx.line);
   // Todo o nada: `load` vacía cada tabla de la línea y deja solo esto.
-  await repo.load({ settings: [nextSettings], warehouses: [warehouse], users: [admin], zones, audit: [first] });
+  const products = ctx.line === 'cafe' ? elMioProducts(nowIso(ctx)) : [];
+  await repo.load({ settings: [nextSettings], warehouses: [warehouse], users: [admin], zones, audit: [first], products });
   // En «Entrar como…» esta línea queda solo con su cuenta de Administración.
   const core = getCoreRepo();
   await core.transaction(async () => {
@@ -82,6 +88,8 @@ export interface BackupStatus {
   due: boolean;
   /** Productos en el catálogo (con datos reales y 0, se sugiere importarlos). */
   products: number;
+  /** De esos, los que todavía no tienen precio al local (los cafés de El Mío al empezar). */
+  unpriced: number;
 }
 
 export async function backupStatus(ctx: Ctx): Promise<BackupStatus> {
@@ -89,13 +97,17 @@ export async function backupStatus(ctx: Ctx): Promise<BackupStatus> {
   const s = await getSettings(ctx);
   const mode: DataMode = s.dataMode === 'real' ? 'real' : 'demo';
   const daysSince = s.lastExportAt ? daysBetween(s.lastExportAt, ctx.now()) : null;
-  const products = await ctx.repo.products.count();
+  const all = await ctx.repo.products.all();
+  const products = all.length;
+  const unpriced = all.filter((p) => !(p.priceToStore > 0)).length;
   let due = false;
   if (mode === 'real') {
     if (daysSince !== null) due = daysSince >= BACKUP_EVERY_DAYS;
-    else due = products > 0 || (await ctx.repo.stores.count()) > 0;
+    // Nunca se exportó: se avisa cuando ya hay algo cargado por la empresa (los cafés de El Mío
+    // que trae una línea nueva, sin precio, no cuentan).
+    else due = products - unpriced > 0 || (await ctx.repo.stores.count()) > 0;
   }
-  return { mode, lastExportAt: s.lastExportAt, daysSince, due, products };
+  return { mode, lastExportAt: s.lastExportAt, daysSince, due, products, unpriced };
 }
 
 /**
@@ -187,6 +199,10 @@ function checkBackup(ctx: Ctx, json: string): CheckedBackup {
       userIds.has(a.userId),
   );
   const mode: DataMode = (settings[0] as Partial<LineSettings>).dataMode === 'real' ? 'real' : 'demo';
+  // La app ya no tiene datos de ejemplo: una copia de la demo de antes no se carga.
+  if (mode === 'demo' && !demoRequested()) {
+    throw new ValidationError(`Esta copia es de los datos de ejemplo de antes, no de tu empresa: ya no se carga. Elige una copia con los datos reales de ${LINE_NAME[data.line]}.`);
+  }
   return {
     summary: {
       line: data.line,

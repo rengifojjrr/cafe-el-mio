@@ -245,6 +245,10 @@ export async function setProductActive(ctx: Ctx, id: string, active: boolean): P
   await mutate(ctx, async () => {
     const p = await ctx.repo.products.get(id);
     if (!p) throw new NotFoundError('el producto');
+    // Un producto sin precio al local (los cafés de El Mío al empezar) no se activa: se entregaría a $0.
+    if (active && !(p.priceToStore > 0)) {
+      throw new ValidationError(`${p.name} todavía no tiene precio al local: ponlo con «Editar» antes de activarlo.`);
+    }
     p.active = active;
     p.updatedAt = nowIso(ctx);
     await ctx.repo.products.put(p);

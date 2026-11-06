@@ -411,10 +411,3 @@ export function KeyValue({ items }: { items: [string, ReactNode][] }) {
   );
 }
 
-export function SampleBadge() {
-  return (
-    <span className="pill pill-warn" title="Todo lo que ves son datos inventados para la demostración.">
-      Datos de ejemplo
-    </span>
-  );
-}
