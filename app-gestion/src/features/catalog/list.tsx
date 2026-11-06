@@ -1,7 +1,7 @@
 // Catálogo: una tarjeta por familia (por ejemplo «Toro 6 × 52») con sus capas como chips,
 // filtros de un toque que se recuerdan por persona, y la capa, la fortaleza y la procedencia
 // a la vista sin entrar a la ficha.
-import { AlertTriangle, BookOpen, Eye, EyeOff, Plus, Ruler, Search, ShoppingBag, SlidersHorizontal, Truck, X } from 'lucide-react';
+import { AlertTriangle, BookOpen, Eye, EyeOff, FileSpreadsheet, Images, Plus, Ruler, Search, ShoppingBag, SlidersHorizontal, Truck, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
@@ -77,9 +77,17 @@ export function CatalogPage() {
               </LinkButton>
             ) : null}
             {isAdmin && !actor.readOnly ? (
-              <LinkButton to={p('catalogo/nuevo')} variant="primary" icon={Plus}>
-                Nuevo producto
-              </LinkButton>
+              <>
+                <LinkButton to={p('catalogo/nuevo')} variant="primary" icon={Plus}>
+                  Nuevo producto
+                </LinkButton>
+                <LinkButton to={p('catalogo/importar')} icon={FileSpreadsheet}>
+                  Importar
+                </LinkButton>
+                <LinkButton to={p('catalogo/fotos')} icon={Images}>
+                  Fotos en lote
+                </LinkButton>
+              </>
             ) : null}
           </>
         }

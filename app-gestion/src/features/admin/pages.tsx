@@ -21,6 +21,7 @@ import { listMarkets } from '../../services/markets';
 import { CommissionSchemeSettings, SellerCommissionText, SellerSchemeButton } from '../red/commission';
 import { InviteButton } from '../red/invite';
 import { MarketSelect, MarketsSettings, RouteCostSettings } from '../red/markets';
+import { DataPanel } from '../data/DataPanel';
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { actor } = useLine();
@@ -534,6 +535,7 @@ function SettingsForm({ settings, products }: { settings: LineSettings; products
           </Button>
         }
       />
+      <DataPanel />
       <fieldset disabled={actor.readOnly} className="m-0 min-w-0 border-0 p-0">
         <Section title="Empresa y almacén">
           <Card className="grid gap-4 p-5 md:grid-cols-2">

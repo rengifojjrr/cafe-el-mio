@@ -85,7 +85,7 @@ export function AccountPicker({ onDone, only }: { onDone?: () => void; only?: Li
           {g.key !== 'eco' && data.others[g.key].length ? (
             <div>
               <button type="button" className="btn btn-ghost w-full justify-between text-sm" aria-expanded={open === g.key} onClick={() => setOpen(open === g.key ? null : (g.key as LineId))}>
-                Otras cuentas de ejemplo ({data.others[g.key].length})
+                Otras cuentas ({data.others[g.key].length})
                 <ChevronDown className={`transition-transform ${open === g.key ? 'rotate-180' : ''}`} aria-hidden />
               </button>
               {open === g.key ? (

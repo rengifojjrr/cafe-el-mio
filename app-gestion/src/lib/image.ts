@@ -4,18 +4,28 @@ import type { Photo } from '../data/types';
 
 export type NewPhoto = Omit<Photo, 'id' | 'ownerType' | 'ownerId' | 'createdAt'>;
 
-export async function compressImage(file: Blob, max = 1600, quality = 0.82): Promise<NewPhoto> {
+/** Recorte cuadrado al centro: qué parte de la foto se toma (en píxeles de la original). */
+export function centerSquare(width: number, height: number): { sx: number; sy: number; side: number } {
+  const side = Math.min(width, height);
+  return { sx: Math.floor((width - side) / 2), sy: Math.floor((height - side) / 2), side };
+}
+
+/** `square`: recorta al centro para que quede cuadrada (fotos en lote). */
+export async function compressImage(file: Blob, max = 1600, quality = 0.82, square = false): Promise<NewPhoto> {
   if (!file.type.startsWith('image/')) throw new Error('El archivo no es una imagen.');
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const crop = square ? centerSquare(bitmap.width, bitmap.height) : null;
+  const sw = crop ? crop.side : bitmap.width;
+  const sh = crop ? crop.side : bitmap.height;
+  const scale = Math.min(1, max / Math.max(sw, sh));
+  const width = Math.max(1, Math.round(sw * scale));
+  const height = Math.max(1, Math.round(sh * scale));
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('El navegador no pudo procesar la foto.');
-  ctx.drawImage(bitmap, 0, 0, width, height);
+  ctx.drawImage(bitmap, crop?.sx ?? 0, crop?.sy ?? 0, sw, sh, 0, 0, width, height);
   bitmap.close?.();
   const toBlob = (type: string) => new Promise<Blob | null>((res) => canvas.toBlob(res, type, quality));
   let blob = await toBlob('image/webp');

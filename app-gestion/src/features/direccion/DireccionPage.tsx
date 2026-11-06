@@ -9,7 +9,7 @@ import { lineConfig } from '../../lines/config';
 import { fmtMoney, fmtNumber, fmtPercent } from '../../lib/money';
 import { monthLabel } from '../money/shared';
 import { lineMarkets, lineOverview, type LineOverview } from '../../services/direccion';
-import { directorOpenLine, findAccount, getSession, leave } from '../../services/session';
+import { directorOpenLine, findAccount, getLineDataMode, getSession, leave } from '../../services/session';
 import { useAsync } from '../../app/hooks';
 import { LineMark } from '../../ui/brand';
 import { LinesChart } from '../../ui/charts';
@@ -65,6 +65,7 @@ function Overview() {
     for (const m of lists.flat()) if (!byId.has(m.id)) byId.set(m.id, m);
     return [...byId.values()];
   }, []);
+  const modes = useAsync(async () => ({ tabaco: await getLineDataMode('tabaco'), cafe: await getLineDataMode('cafe') }), []);
   const data = useAsync(async () => {
     const now = new Date();
     const opts = { marketId: market || null };
@@ -90,7 +91,13 @@ function Overview() {
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-5 lg:px-8">
         <LineMark line="eco" size="sm" />
-        <SampleBadge />
+        {modes.data && (modes.data.tabaco === 'real' || modes.data.cafe === 'real') ? (
+          <span className="pill pill-ok">
+            Tabaco: {modes.data.tabaco === 'real' ? 'datos reales' : 'de ejemplo'} · Café: {modes.data.cafe === 'real' ? 'datos reales' : 'de ejemplo'}
+          </span>
+        ) : (
+          <SampleBadge />
+        )}
         <div className="ml-auto">
           <Button variant="ghost" icon={LogOut} onClick={() => void exit()}>
             Salir

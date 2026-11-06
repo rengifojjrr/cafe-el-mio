@@ -30,6 +30,8 @@ test('registrar tienda → contrato y firma → colocar producto (tabaco)', asyn
   await page.getByLabel('Número del permiso').fill('TP-E2E-1234');
   await page.getByRole('button', { name: 'Registrar tienda' }).last().click();
   await toast(page, /prospecto/);
+  // En el teléfono el aviso tapa la casilla del consentimiento y se queda con el toque: se cierra.
+  await page.getByRole('status').getByRole('button', { name: 'Cerrar aviso' }).first().click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
 
   await page.getByRole('button', { name: 'Preparar contrato' }).click();
