@@ -62,6 +62,7 @@ const router = createHashRouter([
           { index: true, element: page(home, 'LineHome') },
           { path: 'catalogo', element: page(catalog, 'CatalogPage') },
           { path: 'catalogo/nuevo', element: page(catalog, 'ProductFormPage') },
+          { path: 'catalogo/comparar', element: page(catalog, 'ComparePage') },
           { path: 'catalogo/:id', element: page(catalog, 'ProductDetailPage') },
           { path: 'catalogo/:id/editar', element: page(catalog, 'ProductFormPage') },
           { path: 'almacen', element: page(warehouse, 'WarehousePage') },

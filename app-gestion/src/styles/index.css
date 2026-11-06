@@ -16,6 +16,10 @@
   --color-faint: var(--faint);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-hero-tinta: var(--hero-tinta);
+  --color-hero-tenue: var(--hero-tenue);
+  --color-hero-chip: var(--hero-chip);
+  --color-hero-linea: var(--hero-linea);
   --color-glass: var(--glass);
   --color-accent: var(--accent);
   --color-accent-hi: var(--accent-hi);
@@ -334,6 +338,60 @@
     color: var(--accent);
     background: var(--accent-soft);
     border-color: transparent;
+  }
+
+  /* Chip de filtro o de variante: se toca, se ve si está elegido (aria-pressed). */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.5rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-size: 0.9rem;
+    font-weight: 650;
+    white-space: nowrap;
+    transition: background-color 120ms, border-color 120ms;
+  }
+  .chip:hover:not([disabled]) {
+    border-color: var(--line-strong);
+  }
+  .chip[aria-pressed='true'] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--ink);
+  }
+  .chip[disabled] {
+    opacity: 0.45;
+  }
+  .chip-count {
+    color: var(--faint);
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+  /* Una fila que se desliza de lado sin ensanchar la página. */
+  .scroll-x {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+  /* Fondo de la ficha del tabaco: oscuro, con textura de hoja y una luz suave arriba. */
+  .hero-producto {
+    position: relative;
+    overflow: hidden;
+    border-radius: 24px;
+    background: var(--hero-luz), var(--hero-textura), var(--hero-fondo);
+    color: var(--hero-tinta);
+  }
+  .hero-producto .sombra-suave {
+    filter: drop-shadow(0 18px 22px var(--hero-sombra));
   }
 
   .row-link {

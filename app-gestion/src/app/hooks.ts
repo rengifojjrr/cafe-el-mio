@@ -86,3 +86,56 @@ export function useCountUp(value: number, duration = 700): number {
   }, [value, duration, reduced]);
   return shown;
 }
+
+type StorageKind = 'local' | 'session';
+
+function storageOf(kind: StorageKind): Storage | null {
+  try {
+    return kind === 'local' ? window.localStorage : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readStored<T>(kind: StorageKind, key: string, initial: T): T {
+  try {
+    const raw = storageOf(kind)?.getItem(key);
+    return raw === null || raw === undefined ? initial : (JSON.parse(raw) as T);
+  } catch {
+    return initial;
+  }
+}
+
+/**
+ * Estado que sobrevive a ir a otra pantalla y volver (filtros, pestañas, búsqueda).
+ * `session`: mientras la pestaña esté abierta; `local`: se recuerda por persona en este navegador.
+ * Si el navegador no deja guardar, funciona igual, solo que sin recordar.
+ */
+export function usePersistentState<T>(key: string, initial: T, kind: StorageKind = 'session'): [T, (v: T | ((prev: T) => T)) => void] {
+  const [value, setValue] = useState<T>(() => readStored(kind, key, initial));
+  const keyRef = useRef(key);
+  // Si cambia la clave (otra cuenta u otra línea), se carga lo guardado para esa clave.
+  useEffect(() => {
+    if (keyRef.current !== key) {
+      keyRef.current = key;
+      setValue(readStored(kind, key, initial));
+    }
+    // `initial` cambia en cada render si es un objeto: solo importa la clave.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, kind]);
+  const set = useCallback(
+    (v: T | ((prev: T) => T)) => {
+      setValue((prev) => {
+        const next = typeof v === 'function' ? (v as (p: T) => T)(prev) : v;
+        try {
+          storageOf(kind)?.setItem(keyRef.current, JSON.stringify(next));
+        } catch {
+          // Sin almacenamiento (modo privado): no se recuerda, pero la pantalla funciona.
+        }
+        return next;
+      });
+    },
+    [kind],
+  );
+  return [value, set];
+}

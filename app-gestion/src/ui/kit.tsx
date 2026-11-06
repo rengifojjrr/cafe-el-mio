@@ -270,6 +270,14 @@ export function TextArea({ label, hint, error, ...rest }: TextareaHTMLAttributes
 }
 
 /** Cantidad con botones grandes: suma por caja y deja escribir unidades sueltas. */
+/** Lo que suma o resta un toque del contador: «una caja», «un mazo», «un tabaco» o «una unidad». */
+function stepWord(pack: number, unit?: string): string {
+  if (pack > 1) return 'una caja';
+  if (unit === 'mazos') return 'un mazo';
+  if (unit === 'tabacos') return 'un tabaco';
+  return 'una unidad';
+}
+
 export function QtyStepper({
   value,
   onChange,
@@ -288,7 +296,7 @@ export function QtyStepper({
   const clamp = (v: number) => Math.max(0, max !== undefined ? Math.min(max, v) : v);
   return (
     <div className="flex items-center gap-2" role="group" aria-label={label}>
-      <button type="button" className="btn btn-secondary btn-icon" onClick={() => onChange(clamp(value - pack))} aria-label={`Quitar ${pack > 1 ? 'una caja' : 'una unidad'} de ${label}`} disabled={value <= 0}>
+      <button type="button" className="btn btn-secondary btn-icon" onClick={() => onChange(clamp(value - pack))} aria-label={`Quitar ${stepWord(pack, unit)} de ${label}`} disabled={value <= 0}>
         <Minus aria-hidden />
       </button>
       <input
@@ -301,7 +309,7 @@ export function QtyStepper({
         aria-label={`Cantidad de ${label}`}
         onChange={(e) => onChange(clamp(Math.floor(Number(e.target.value) || 0)))}
       />
-      <button type="button" className="btn btn-secondary btn-icon" onClick={() => onChange(clamp(value + pack))} aria-label={`Agregar ${pack > 1 ? 'una caja' : 'una unidad'} de ${label}`} disabled={max !== undefined && value >= max}>
+      <button type="button" className="btn btn-secondary btn-icon" onClick={() => onChange(clamp(value + pack))} aria-label={`Agregar ${stepWord(pack, unit)} de ${label}`} disabled={max !== undefined && value >= max}>
         <Plus aria-hidden />
       </button>
       {pack > 1 ? (

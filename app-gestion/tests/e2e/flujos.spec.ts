@@ -172,7 +172,7 @@ test('restablecer la demo vuelve a cargar los datos de ejemplo', async ({ page }
   await page.getByRole('button', { name: 'Restablecer demo' }).click();
   await page.getByRole('button', { name: 'Sí, restablecer' }).click();
   await toast(page, /datos de ejemplo cargados/);
-  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('12')).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('21')).toBeVisible();
 });
 
 test('el local pide desde la ficha del producto: cuánto y listo', async ({ page }) => {

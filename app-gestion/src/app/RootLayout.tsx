@@ -1,8 +1,8 @@
 // Lo que acompaña a todas las pantallas: el botón flotante «Cambiar de rol», los avisos
 // emergentes, el recorrido guiado y el tema (oscuro o claro).
 import { Repeat } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Outlet, useLocation } from 'react-router';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { Outlet, useLocation, useNavigationType } from 'react-router';
 import { getEcosystem } from '../services/session';
 import { Sheet } from '../ui/kit';
 import { AccountPicker } from './AccountPicker';
@@ -19,9 +19,9 @@ export function RootLayout() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  useEffect(() => {
-    window.scrollTo({ top: 0 });
-  }, [loc.pathname]);
+  const navType = useNavigationType();
+  // Las entradas sin estado (carga inicial, recargar, dirección escrita) se recuerdan por su ruta.
+  useScrollMemory(loc.key === 'default' ? `ruta:${loc.pathname}${loc.search}` : loc.key, loc.pathname, navType);
 
   const onHome = loc.pathname === '/';
   const printing = loc.pathname.endsWith('/imprimir');
@@ -46,4 +46,72 @@ export function RootLayout() {
       </Sheet>
     </TourProvider>
   );
+}
+
+/**
+ * Al ir a una pantalla nueva se empieza arriba; al volver (atrás del navegador o del teléfono)
+ * se recupera el punto donde estaba la lista. Las listas cargan sus datos un momento después,
+ * así que se reintenta hasta que la página tenga altura suficiente (o la persona se mueva).
+ */
+const SCROLL_KEY = 'pos-pantallas';
+
+function readPositions(): Record<string, number> {
+  try {
+    return JSON.parse(window.sessionStorage.getItem(SCROLL_KEY) ?? '{}') as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+function useScrollMemory(key: string, pathname: string, navType: string) {
+  // useLayoutEffect: el oyente de la pantalla anterior se quita en el mismo paso del cambio. Si no,
+  // al abrir una pantalla más corta el navegador recorta la posición y pisaba la de la lista.
+  useLayoutEffect(() => {
+    let frame = 0;
+    const save = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        try {
+          const all = readPositions();
+          all[key] = window.scrollY;
+          const keys = Object.keys(all);
+          if (keys.length > 60) delete all[keys[0]!];
+          window.sessionStorage.setItem(SCROLL_KEY, JSON.stringify(all));
+        } catch {
+          // Sin almacenamiento: no se recuerda la posición.
+        }
+      });
+    };
+    let tries = 0;
+    let timer = 0;
+    let userMoved = false;
+    const stopOnUser = () => {
+      userMoved = true;
+    };
+    const target = navType === 'POP' ? readPositions()[key] : undefined;
+    if (target !== undefined) {
+      const restore = () => {
+        if (userMoved) return;
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        window.scrollTo({ top: Math.min(target, Math.max(0, max)) });
+        if (max < target && tries++ < 30) timer = window.setTimeout(restore, 80);
+      };
+      restore();
+      window.addEventListener('wheel', stopOnUser, { passive: true, once: true });
+      window.addEventListener('touchstart', stopOnUser, { passive: true, once: true });
+    } else if (navType !== 'REPLACE') {
+      // Pantalla nueva: arriba. Cambiar solo los filtros de la dirección («replace») no mueve la página.
+      window.scrollTo({ top: 0 });
+    }
+    window.addEventListener('scroll', save, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', save);
+      window.removeEventListener('wheel', stopOnUser);
+      window.removeEventListener('touchstart', stopOnUser);
+      window.clearTimeout(timer);
+      cancelAnimationFrame(frame);
+    };
+    // Cada entrada del historial tiene su clave; la ruta y el tipo de navegación vienen con ella.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, pathname]);
 }

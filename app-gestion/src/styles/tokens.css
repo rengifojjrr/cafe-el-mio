@@ -82,6 +82,16 @@
   --capa-veta: rgba(0, 0, 0, 0.18);
   --capa-brillo: rgba(255, 255, 255, 0.16);
   --ceniza: #b9b4ad;
+  /* Ficha del producto: fondo oscuro con textura (siempre oscuro, también en modo claro). */
+  --hero-fondo: linear-gradient(160deg, #1a1410 0%, #0d0b09 70%);
+  --hero-luz: radial-gradient(120% 70% at 50% -10%, rgba(255, 214, 160, 0.16), transparent 60%);
+  --hero-textura: repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.018) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(25deg, rgba(0, 0, 0, 0.14) 0 1px, transparent 1px 13px);
+  --hero-tinta: #f3e9dc;
+  --hero-tenue: rgba(243, 233, 220, 0.66);
+  --hero-sombra: rgba(0, 0, 0, 0.55);
+  --hero-chip: rgba(255, 240, 220, 0.08);
+  --hero-linea: rgba(255, 240, 220, 0.16);
   --anilla: #d9a441;
   --anilla-hondo: #8f6417;
   --anilla-tinta: #1a1208;
