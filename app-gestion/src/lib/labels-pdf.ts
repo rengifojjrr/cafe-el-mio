@@ -5,6 +5,7 @@ import { PDFDocument, StandardFonts, grayscale, type PDFFont, type PDFPage } fro
 import QRCode from 'qrcode';
 import { barcodeKindFor, code128Modules, darkRuns, ean13GuardModules, ean13Modules } from './barcode-draw';
 import { cleanCode } from './barcode';
+import { fit, pdfText } from './pdf-text';
 
 export type LabelFormat = 'carta' | 'termica';
 
@@ -38,30 +39,6 @@ function sheetFor(format: LabelFormat): Sheet {
     for (let col = 0; col < 3; col++) slots.push([0.1875 * PT + col * 2.75 * PT, 11 * PT - 0.5 * PT - (row + 1) * PT]);
   }
   return { page: [8.5 * PT, 11 * PT], label: [2.625 * PT, 1 * PT], slots, pad: 5 };
-}
-
-const FRACTIONS: Record<string, string> = { '⅛': ' 1/8', '⅜': ' 3/8', '⅝': ' 5/8', '⅞': ' 7/8', '″': '"', '′': "'", '–': '-', '—': '-' };
-
-/** Deja solo lo que la letra estándar del PDF sabe dibujar (las fracciones raras pasan a «1/8»). */
-function pdfText(font: PDFFont, text: string): string {
-  let out = '';
-  for (const ch of text.replace(/[⅛⅜⅝⅞″′–—]/g, (c) => FRACTIONS[c] ?? '')) {
-    try {
-      font.encodeText(ch);
-      out += ch;
-    } catch {
-      out += '';
-    }
-  }
-  return out.replace(/\s+/g, ' ').trim();
-}
-
-/** Corta el texto con «…» para que entre en el ancho. */
-function fit(font: PDFFont, text: string, size: number, width: number): string {
-  if (font.widthOfTextAtSize(text, size) <= width) return text;
-  let t = text;
-  while (t.length > 1 && font.widthOfTextAtSize(`${t}…`, size) > width) t = t.slice(0, -1);
-  return `${t.trimEnd()}…`;
 }
 
 interface BarcodePlan {

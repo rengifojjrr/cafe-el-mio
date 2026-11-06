@@ -1,10 +1,11 @@
 // Una llegada (importación o tanda de tostado): lo que trae, sus cajas con trazabilidad (opcional)
 // y, en una importación, la lista de empaque y la confirmación bulto por bulto.
-import { Boxes, CalendarClock, Plus, Printer, ScanBarcode } from 'lucide-react';
+import { Boxes, CalendarClock, ClipboardCheck, FileSpreadsheet, Keyboard, Pencil, Plus, Printer, ScanBarcode } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import type { Arrival, CaseUnit, Product } from '../../data/types';
 import { unitsText } from '../../domain/products';
+import { receivedFromBales } from '../../domain/receiving';
 import { arrivalStatusLabel } from '../../lines/config';
 import type { LabelFormat } from '../../lib/labels-pdf';
 import { fmtMoney } from '../../lib/money';
@@ -12,13 +13,15 @@ import { fmtDate, fmtRelativeDays, toIsoDate } from '../../lib/time';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { registerCases } from '../../services/cases';
-import { arrivalDetail, type ArrivalDetail } from '../../services/receiving';
+import { BEFORE_CONFIRMING, arrivalDetail, startBaleCheck, type ArrivalDetail } from '../../services/receiving';
 import { Button, Card, EmptyState, ErrorBox, Loading, NumberInput, PageHeader, Pill, Section, SelectInput, Sheet, Tabs, TextInput } from '../../ui/kit';
 import { ScanButton } from '../../ui/scanner';
 import { useAction } from '../../ui/toast';
 import { RoleGate } from '../common';
 import { buildLabelsUrl, FORMAT_OPTIONS, PdfReady } from '../labels/LabelsSheet';
 import { caseLabel } from '../labels/specs';
+import { ConfirmSection, DifferencesSection } from './bales';
+import { PackingListSheet } from './packing';
 
 export function ArrivalPage() {
   return (
@@ -49,7 +52,13 @@ function ArrivalScreen() {
           </Pill>
         }
       />
-      <Summary d={d} />
+      {/* Mientras se confirman los bultos, el avance va primero y lo que trae, después. */}
+      {a.kind === 'import' && a.status === 'confirmando' ? <ConfirmSection d={d} /> : null}
+      <div className={a.status === 'confirmando' ? 'mt-7' : ''}>
+        <Summary d={d} />
+      </div>
+      {a.kind === 'import' ? <PackingSection d={d} /> : null}
+      {d.report && d.report.checked > 0 ? <DifferencesSection d={d} report={d.report} /> : null}
       {a.kind === 'import' ? <CasesSection d={d} /> : null}
     </>
   );
@@ -60,19 +69,29 @@ function Summary({ d }: { d: ArrivalDetail }) {
   const a = d.arrival;
   const done = a.status === 'recibida';
   const cost = a.items.reduce((s, i) => s + i.qty * i.unitCost, 0);
+  // Con lista de empaque, al recibir entra lo contado (puede ser distinto de la lista).
+  const received = done && a.bales?.length ? new Map(receivedFromBales(a.bales).map((r) => [r.productId, r.qty])) : null;
   return (
     <Card className="p-4 sm:p-5">
       <p className="flex flex-wrap items-center gap-2 text-ink">
         <CalendarClock className="h-5 w-5 text-accent" aria-hidden />
         {done ? `Recibida el ${fmtDate(a.receivedAt ?? a.eta)}` : `${a.kind === 'roast' ? 'Tueste' : 'Llega'} el ${fmtDate(a.eta)}, ${fmtRelativeDays(a.eta, ctx.now())}`}
       </p>
-      <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Lo que trae">
         {a.items.map((i) => {
           const pr = d.products.get(i.productId);
+          const got = received?.get(i.productId);
           return (
-            <li key={i.productId} className="flex min-w-0 items-baseline justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
-              <span className="min-w-0 break-words">{pr?.name ?? i.productId}</span>
-              <span className="font-semibold whitespace-nowrap tabular">{pr ? unitsText(pr, i.qty) : i.qty}</span>
+            <li key={i.productId} className="grid min-w-0 gap-0.5 rounded-xl bg-surface-2 px-3 py-2" aria-label={pr?.name ?? i.productId}>
+              <span className="flex min-w-0 items-baseline justify-between gap-3">
+                <span className="min-w-0 break-words">{pr?.name ?? i.productId}</span>
+                <span className="font-semibold whitespace-nowrap tabular">{pr ? unitsText(pr, i.qty) : i.qty}</span>
+              </span>
+              {got !== undefined ? (
+                <span className={`text-sm ${got === i.qty ? 'text-ok' : 'text-warn'}`} data-testid="entro">
+                  Entró al almacén: {pr ? unitsText(pr, got) : got}
+                </span>
+              ) : null}
             </li>
           );
         })}
@@ -82,6 +101,80 @@ function Summary({ d }: { d: ArrivalDetail }) {
         {a.notes ? ` · ${a.notes}` : ''}
       </p>
     </Card>
+  );
+}
+
+// ---------- Lista de empaque ----------
+
+function PackingSection({ d }: { d: ArrivalDetail }) {
+  const { ctx, actor } = useLine();
+  const { run, busy } = useAction();
+  const [sheet, setSheet] = useState<'archivo' | 'mano' | 'editar' | null>(null);
+  const a = d.arrival;
+  const bales = a.bales ?? [];
+  const editable = !actor.readOnly && BEFORE_CONFIRMING.includes(a.status);
+  if (a.status === 'confirmando') return null;
+  if (!bales.length) {
+    if (!editable) return null;
+    return (
+      <Section title="Lista de empaque">
+        <EmptyState
+          icon={FileSpreadsheet}
+          title="Sin lista de empaque"
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="primary" icon={FileSpreadsheet} onClick={() => setSheet('archivo')}>
+                Cargar lista de empaque
+              </Button>
+              <Button icon={Keyboard} onClick={() => setSheet('mano')}>
+                Escribirla a mano
+              </Button>
+            </div>
+          }
+        >
+          Con la lista de la fábrica (bulto, vitola, capa, mazos y costo) se confirma bulto por bulto al llegar. Sin lista, se recibe todo de una vez.
+        </EmptyState>
+        {sheet ? <PackingListSheet arrival={a} products={d.products} start={sheet} onClose={() => setSheet(null)} /> : null}
+      </Section>
+    );
+  }
+  const units = bales.reduce((s, b) => s + b.items.reduce((t, i) => t + i.qty, 0), 0);
+  const mixed = bales.filter((b) => b.items.length > 1).length;
+  return (
+    <Section
+      title="Lista de empaque"
+      actions={
+        editable ? (
+          <Button icon={Pencil} onClick={() => setSheet('editar')}>
+            Cambiar la lista
+          </Button>
+        ) : null
+      }
+    >
+      <Card className="grid gap-3 p-4">
+        <p className="font-semibold text-ink">
+          {bales.length} bulto{bales.length === 1 ? '' : 's'} · {units} en total{mixed ? ` · ${mixed} mixto${mixed === 1 ? '' : 's'}` : ''}
+        </p>
+        <ul className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+          {bales.slice(0, 6).map((b) => (
+            <li key={b.id} className="min-w-0 break-words text-muted">
+              <b className="text-ink">Bulto {b.number}:</b> {b.items.map((i) => `${d.products.get(i.productId)?.name ?? i.productId} × ${i.qty}`).join(', ')}
+            </li>
+          ))}
+          {bales.length > 6 ? <li className="text-muted">y {bales.length - 6} bultos más</li> : null}
+        </ul>
+        {editable ? (
+          a.status === 'aduana' ? (
+            <Button variant="primary" big icon={ClipboardCheck} busy={busy} onClick={() => void run(() => startBaleCheck(ctx, a.id), `${a.code}: a confirmar bulto por bulto.`)}>
+              Confirmar bultos
+            </Button>
+          ) : (
+            <p className="text-sm text-muted">Cuando la importación esté en aduana, toca «Confirmar bultos» para revisarla bulto por bulto al llegar.</p>
+          )
+        ) : null}
+      </Card>
+      {sheet ? <PackingListSheet arrival={a} products={d.products} start={sheet} onClose={() => setSheet(null)} /> : null}
+    </Section>
   );
 }
 

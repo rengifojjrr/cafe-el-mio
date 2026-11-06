@@ -2,8 +2,9 @@
 // tostado), lotes con costo y vencimiento, y el libro de movimientos.
 import { AlertTriangle, ArrowRight, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, Flame, FolderOpen, PackageCheck, Plus, Scale, Ship, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import type { Arrival, ArrivalStatus, Product } from '../../data/types';
+import { mixedUnitsText } from '../../domain/products';
 import { arrivalStatusLabel } from '../../lines/config';
 import { fmtMoney } from '../../lib/money';
 import { addDaysToDate, fmtDate, fmtDateTime, fmtRelativeDays, toIsoDate } from '../../lib/time';
@@ -23,6 +24,7 @@ import {
   warehouseShrink,
 } from '../../services/inventory';
 import { Button, Card, EmptyState, ErrorBox, LinkButton, Loading, NumberInput, PageHeader, Pill, SelectInput, Sheet, Stat, Tabs, TextArea, TextInput } from '../../ui/kit';
+import { startBaleCheck } from '../../services/receiving';
 import { useAction } from '../../ui/toast';
 import { MOVEMENT_LABEL, RoleGate, locationLabel } from '../common';
 
@@ -265,13 +267,17 @@ function ShrinkSheet({ product, onClose }: { product: Product | null; onClose: (
 // ---------- Llegadas ----------
 
 function nextStatus(a: Arrival): ArrivalStatus | null {
-  const flow: ArrivalStatus[] = a.kind === 'import' ? ['produccion', 'transito', 'aduana', 'recibida'] : ['programado', 'tostado', 'recibida'];
+  // Con lista de empaque, entre «En aduana» y «Recibida» se confirman los bultos.
+  const flow: ArrivalStatus[] =
+    a.kind === 'import' ? (a.bales?.length ? ['produccion', 'transito', 'aduana', 'confirmando', 'recibida'] : ['produccion', 'transito', 'aduana', 'recibida']) : ['programado', 'tostado', 'recibida'];
   const i = flow.indexOf(a.status);
   return i >= 0 && i < flow.length - 1 ? flow[i + 1]! : null;
 }
 
 function ArrivalsTab({ arrivals, loading, products }: { arrivals?: Arrival[]; loading: boolean; products: Product[] }) {
   const { ctx, line, config, actor, p } = useLine();
+  const nav = useNavigate();
+  const byId = new Map(products.map((x) => [x.id, x]));
   const { run, busy } = useAction();
   const [create, setCreate] = useState(false);
   const names = new Map(products.map((p) => [p.id, p.name]));
@@ -298,8 +304,11 @@ function ArrivalsTab({ arrivals, loading, products }: { arrivals?: Arrival[]; lo
           const next = nextStatus(a);
           const done = a.status === 'recibida';
           const units = a.items.reduce((s, i) => s + i.qty, 0);
+          const bales = a.bales ?? [];
+          const checked = bales.filter((b) => b.status !== 'pendiente').length;
+          const unitsLabel = mixedUnitsText(a.items.flatMap((i) => (byId.get(i.productId) ? [{ product: byId.get(i.productId)!, qty: i.qty }] : [])));
           return (
-            <li key={a.id} className="glass p-4">
+            <li key={a.id} className="glass p-4" aria-label={`Importación ${a.code}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="font-bold text-ink">
@@ -307,10 +316,16 @@ function ArrivalsTab({ arrivals, loading, products }: { arrivals?: Arrival[]; lo
                   </p>
                   <p className="text-sm text-muted">
                     {a.productionLine ? `${a.productionLine} · ` : ''}
-                    {a.originCountry} · {units} unidades
+                    {a.originCountry} · {unitsLabel}
+                    {bales.length ? ` · ${bales.length} bultos` : ''}
                   </p>
+                  {a.status === 'confirmando' && bales.length ? (
+                    <p className="mt-1 text-sm font-semibold text-accent">
+                      {checked} de {bales.length} bultos revisados
+                    </p>
+                  ) : null}
                 </div>
-                <Pill tone={done ? 'ok' : a.status === 'aduana' || a.status === 'tostado' ? 'accent' : 'info'} dot>
+                <Pill tone={done ? 'ok' : a.status === 'aduana' || a.status === 'tostado' || a.status === 'confirmando' ? 'accent' : 'info'} dot>
                   {arrivalStatusLabel(line, a.status)}
                 </Pill>
               </div>
@@ -338,7 +353,32 @@ function ArrivalsTab({ arrivals, loading, products }: { arrivals?: Arrival[]; lo
                 <LinkButton to={p(`almacen/llegadas/${a.id}`)} variant="ghost" icon={FolderOpen} aria-label={`Abrir ${a.code}`}>
                   Abrir
                 </LinkButton>
-                {!done && canWrite ? (
+                {!done && canWrite && bales.length ? (
+                  // Con lista de empaque se recibe después de confirmar los bultos, en su pantalla.
+                  a.status === 'confirmando' ? (
+                    <LinkButton to={p(`almacen/llegadas/${a.id}`)} variant="primary" icon={ClipboardCheck}>
+                      Seguir con los bultos
+                    </LinkButton>
+                  ) : next === 'confirmando' ? (
+                    <Button
+                      variant="primary"
+                      icon={ClipboardCheck}
+                      busy={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          await startBaleCheck(ctx, a.id);
+                          nav(p(`almacen/llegadas/${a.id}`));
+                        }, `${a.code}: a confirmar bulto por bulto.`)
+                      }
+                    >
+                      Confirmar bultos
+                    </Button>
+                  ) : next ? (
+                    <Button icon={ArrowRight} busy={busy} onClick={() => void run(() => setArrivalStatus(ctx, a.id, next), `${a.code}: ${arrivalStatusLabel(line, next)}.`)}>
+                      Pasar a «{arrivalStatusLabel(line, next)}»
+                    </Button>
+                  ) : null
+                ) : !done && canWrite ? (
                   <>
                     {next && next !== 'recibida' ? (
                       <Button icon={ArrowRight} busy={busy} onClick={() => void run(() => setArrivalStatus(ctx, a.id, next), `${a.code}: ${arrivalStatusLabel(line, next)}.`)}>
