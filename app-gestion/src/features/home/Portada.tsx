@@ -13,7 +13,7 @@ import {
   Sun,
   Upload,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { LineId } from '../../data/types';
 import { lineConfig } from '../../lines/config';
@@ -24,15 +24,17 @@ import { enterAs, exportState, getEcosystem, getLineDataMode, importState, reset
 import { AccountPicker } from '../../app/AccountPicker';
 import { useAsync } from '../../app/hooks';
 import { CigarSilhouette, LineMark } from '../../ui/brand';
-import { Button, DataBadge, SampleBadge, Sheet, TextInput } from '../../ui/kit';
+import { Button, SampleBadge, Sheet, TextInput } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
 import { useTour } from '../tour/TourProvider';
 
-const LINE_IDS: LineId[] = ['tabaco', 'cafe'];
+// Con datos reales (Ronda 3): el aviso de cada línea y las confirmaciones fuertes se bajan solo entonces.
+const RealModeSheets = lazy(() => import('./real-mode').then((m) => ({ default: m.RealModeSheets })));
+const DataBadge = lazy(() => import('../../ui/data-badge').then((m) => ({ default: m.DataBadge })));
 
 export function Portada() {
   const eco = useAsync(getEcosystem, []);
-  const modes = useAsync(async () => ({ tabaco: await getLineDataMode('tabaco'), cafe: await getLineDataMode('cafe') }), []);
+  const modes = useAsync(() => Promise.all([getLineDataMode('tabaco'), getLineDataMode('cafe')]), []);
   const nav = useNavigate();
   const tour = useTour();
   const { push } = useToast();
@@ -41,18 +43,13 @@ export function Portada() {
   const [tourPick, setTourPick] = useState(false);
   const [rename, setRename] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [typedReset, setTypedReset] = useState('');
   const [pendingImport, setPendingImport] = useState<File | null>(null);
   const [install, setInstall] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const name = eco.data?.name ?? 'Grupo Miami · Tabaco & Café';
   const [first, ...restName] = name.split('·');
-  const isReal = (l: LineId) => modes.data?.[l] === 'real';
-  const realLines = LINE_IDS.filter(isReal);
-  const demoLines = LINE_IDS.filter((l) => !isReal(l));
-  const realNames = realLines.map((l) => lineConfig(l).name).join(' y ');
-  // Borrar datos reales pide escribir «borrar»: no se hace con un toque.
-  const resetLocked = realLines.length > 0 && typedReset.trim().toLowerCase() !== 'borrar';
+  const realLines = (['tabaco', 'cafe'] as const).filter((_, i) => modes.data?.[i] === 'real');
+  const isReal = (l: LineId) => realLines.includes(l);
 
   useEffect(() => {
     delete document.documentElement.dataset.line;
@@ -86,7 +83,7 @@ export function Portada() {
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-5 lg:px-8">
         <span className="font-display text-xl font-semibold">Grupo Miami</span>
-        {realLines.length === 0 ? <SampleBadge /> : null}
+        {realLines.length ? null : <SampleBadge />}
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="ghost"
@@ -111,7 +108,7 @@ export function Portada() {
             <Button variant="primary" big icon={LogIn} onClick={() => setPicker('all')}>
               Entrar como…
             </Button>
-            {demoLines.length ? (
+            {realLines.length < 2 ? (
               <Button big icon={Compass} onClick={() => setTourPick(true)}>
                 Recorrido guiado
               </Button>
@@ -123,8 +120,9 @@ export function Portada() {
         </section>
 
         <section className="mt-10 grid gap-4 lg:grid-cols-2" aria-label="Las dos líneas">
-          <LineCard line="tabaco" real={isReal('tabaco')} onEnter={() => setPicker('tabaco')} onTour={() => tour.start('tabaco')} />
-          <LineCard line="cafe" real={isReal('cafe')} onEnter={() => setPicker('cafe')} onTour={() => tour.start('cafe')} />
+          {(['tabaco', 'cafe'] as const).map((l) => (
+            <LineCard key={l} line={l} real={isReal(l)} badge={realLines.length > 0} onEnter={() => setPicker(l)} onTour={() => tour.start(l)} />
+          ))}
         </section>
 
         <section className="mt-10 grid gap-4 md:grid-cols-[1fr_auto]">
@@ -136,13 +134,7 @@ export function Portada() {
             <Button icon={Smartphone} onClick={() => setInstall(true)}>
               Instalar en el teléfono
             </Button>
-            <Button
-              icon={RotateCcw}
-              onClick={() => {
-                setTypedReset('');
-                setConfirmReset(true);
-              }}
-            >
+            <Button icon={RotateCcw} onClick={() => setConfirmReset(true)}>
               Restablecer demo
             </Button>
             <Button icon={Download} onClick={() => void run(doExport, 'Respaldo descargado.')}>
@@ -159,7 +151,7 @@ export function Portada() {
               aria-label="Elegir respaldo JSON"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                // Con datos reales, importar el respaldo completo los reemplaza: se pregunta antes.
+                // Con datos reales, el respaldo completo los reemplaza: se pregunta antes.
                 if (f && realLines.length) setPendingImport(f);
                 else if (f) void doImport(f);
                 e.target.value = '';
@@ -178,7 +170,7 @@ export function Portada() {
       <Sheet open={tourPick} onClose={() => setTourPick(false)} title="Recorrido guiado">
         <p className="mb-4 text-muted">Siete pasos por línea. La app cambia sola de cuenta en cada paso.</p>
         <div className="grid gap-2">
-          {demoLines.map((l) => (
+          {(['tabaco', 'cafe'] as const).filter((l) => !isReal(l)).map((l) => (
             <button
               key={l}
               type="button"
@@ -199,77 +191,61 @@ export function Portada() {
       <RenameSheet open={rename} onClose={() => setRename(false)} current={name} />
       <InstallSheet open={install} onClose={() => setInstall(false)} />
 
-      <Sheet open={confirmReset} onClose={() => setConfirmReset(false)} title="Restablecer la demo">
-        <p className="text-muted">Se borra todo lo que se hizo en este navegador y se cargan otra vez los datos de ejemplo, con fechas de hoy.</p>
-        {realLines.length ? (
-          <div className="mt-4 grid gap-3">
-            <div className="rounded-2xl border border-danger bg-danger-soft p-4" role="alert">
-              <p className="font-bold text-danger">{realNames} tiene datos reales de tu empresa.</p>
-              <p className="mt-1 text-ink">
-                Restablecer los borra de este navegador y no se pueden recuperar sin una copia. Si no la tienes, cancela y toca «Exportar (JSON)».
-              </p>
-            </div>
-            <TextInput label="Para confirmar, escribe borrar" value={typedReset} onChange={(e) => setTypedReset(e.target.value)} autoComplete="off" />
-          </div>
-        ) : null}
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button
-            variant="danger"
-            icon={RotateCcw}
-            busy={busy}
-            disabled={resetLocked}
-            onClick={() =>
-              void run(async () => {
-                await resetDemo(new Date(), eco.data?.name);
-                setConfirmReset(false);
-              }, 'Listo: datos de ejemplo cargados de nuevo.')
-            }
-          >
-            Sí, restablecer
-          </Button>
-          <Button variant="ghost" onClick={() => setConfirmReset(false)}>
-            Cancelar
-          </Button>
-        </div>
-      </Sheet>
-
-      <Sheet open={pendingImport !== null} onClose={() => setPendingImport(null)} title="Importar el respaldo">
-        <p className="text-ink">
-          El respaldo reemplaza las dos líneas. {realNames} tiene datos reales: se cambian por los del archivo «{pendingImport?.name}».
-        </p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button
-            variant="danger"
-            icon={Upload}
-            busy={busy}
-            onClick={() => {
-              const f = pendingImport;
+      {realLines.length ? (
+        <Suspense fallback={null}>
+          <RealModeSheets
+            realLines={realLines}
+            ecoName={eco.data?.name}
+            resetOpen={confirmReset}
+            importFile={pendingImport}
+            onClose={() => {
+              setConfirmReset(false);
               setPendingImport(null);
-              if (f) void doImport(f);
             }}
-          >
-            Sí, importar
-          </Button>
-          <Button variant="ghost" onClick={() => setPendingImport(null)}>
-            Cancelar
-          </Button>
-        </div>
-      </Sheet>
+          />
+        </Suspense>
+      ) : (
+        <Sheet open={confirmReset} onClose={() => setConfirmReset(false)} title="Restablecer la demo">
+          <p className="text-muted">Se borra todo lo que se hizo en este navegador y se cargan otra vez los datos de ejemplo, con fechas de hoy.</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button
+              variant="danger"
+              icon={RotateCcw}
+              busy={busy}
+              onClick={() =>
+                void run(async () => {
+                  await resetDemo(new Date(), eco.data?.name);
+                  setConfirmReset(false);
+                }, 'Listo: datos de ejemplo cargados de nuevo.')
+              }
+            >
+              Sí, restablecer
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmReset(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }
 
-function LineCard({ line, real, onEnter, onTour }: { line: LineId; real: boolean; onEnter: () => void; onTour: () => void }) {
+function LineCard({ line, real, badge, onEnter, onTour }: { line: LineId; real: boolean; badge: boolean; onEnter: () => void; onTour: () => void }) {
   const cfg = lineConfig(line);
   const teaser = useAsync(() => lineTeaser(line), [line]);
   const t = teaser.data;
   return (
     <article data-line={line} className="relative isolate overflow-hidden rounded-[28px] border border-line bg-bg p-6 sm:p-7" aria-label={`Línea ${cfg.name}`}>
       <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden style={{ background: 'radial-gradient(40rem 22rem at 100% 0%, var(--bg-glow), transparent 65%)' }} />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <LineMark line={line} size="lg" />
-        <DataBadge real={real} />
-      </div>
+      <LineMark line={line} size="lg" />
+      {badge ? (
+        <Suspense fallback={null}>
+          <span className="ml-3 inline-flex align-middle">
+            <DataBadge real={real} />
+          </span>
+        </Suspense>
+      ) : null}
       <p className="mt-3 max-w-[40ch] text-muted">{cfg.tagline}</p>
       <div className="mt-5 h-16 sm:h-20" aria-hidden>
         {line === 'tabaco' ? (

@@ -203,6 +203,13 @@ describe('vista previa del Excel corto (sin precios ni costos)', () => {
     expect(enCajas.rows.find((x) => x.sku === 'ABC-203')?.qty).toBe(20);
   });
 
+  it('si dos productos del catálogo comparten el SKU, esa fila no se carga (no adivina cuál)', async () => {
+    const twin = (id: string) => ({ id, sku: 'ABC-101', unitName: 'mazo', packSize: 50, name: id, attrs: {}, photoIds: [] }) as unknown as Product;
+    const p = plan(await xlsxTable(), tabacoOpts(), [twin('uno'), twin('dos')]);
+    expect(p.rows.find((r) => r.sku === 'ABC-101')).toMatchObject({ status: 'error', errors: [expect.stringMatching(/más de un producto con el SKU ABC-101/)] });
+    expect(p.counts.conErrores).toBe(1);
+  });
+
   it('con «Procedencia: Cuba» no se carga ninguna fila', async () => {
     const opts = tabacoOpts({ origin: 'Cuba' });
     const table = await xlsxTable();

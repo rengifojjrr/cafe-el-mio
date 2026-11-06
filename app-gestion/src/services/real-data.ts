@@ -10,7 +10,8 @@ import { normalize } from '../domain/products';
 import { daysBetween, fmtDate, toIsoDate } from '../lib/time';
 import { emitAll } from './bus';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
-import { type DataMode, blobToDataUrl, dataUrlToBlob, realAdminAccount } from './session';
+import { realAdminAccount } from './seed-real';
+import { type DataMode, blobToDataUrl, dataUrlToBlob } from './session';
 
 const BACKUP_APP = 'grupo-miami-ecosistema';
 const BACKUP_KIND = 'linea';
@@ -79,6 +80,8 @@ export interface BackupStatus {
   daysSince: number | null;
   /** Hay que avisar: datos reales y 7 días o más sin copia (o nunca, si ya hay algo cargado). */
   due: boolean;
+  /** Productos en el catálogo (con datos reales y 0, se sugiere importarlos). */
+  products: number;
 }
 
 export async function backupStatus(ctx: Ctx): Promise<BackupStatus> {
@@ -86,12 +89,13 @@ export async function backupStatus(ctx: Ctx): Promise<BackupStatus> {
   const s = await getSettings(ctx);
   const mode: DataMode = s.dataMode === 'real' ? 'real' : 'demo';
   const daysSince = s.lastExportAt ? daysBetween(s.lastExportAt, ctx.now()) : null;
+  const products = await ctx.repo.products.count();
   let due = false;
   if (mode === 'real') {
     if (daysSince !== null) due = daysSince >= BACKUP_EVERY_DAYS;
-    else due = (await ctx.repo.products.count()) > 0 || (await ctx.repo.stores.count()) > 0;
+    else due = products > 0 || (await ctx.repo.stores.count()) > 0;
   }
-  return { mode, lastExportAt: s.lastExportAt, daysSince, due };
+  return { mode, lastExportAt: s.lastExportAt, daysSince, due, products };
 }
 
 /**

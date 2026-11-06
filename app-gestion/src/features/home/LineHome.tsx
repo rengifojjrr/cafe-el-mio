@@ -104,7 +104,7 @@ function AdminHome() {
   return (
     <>
       <PageHeader title="Centro de mando" subtitle={`${today(ctx.now())} · ${config.name}: locales, vendedores y almacén en el mapa.`} />
-      <BackupNotice className="mb-4" />
+      <BackupNotice className="mb-4" firstSteps />
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="relative">
           <MapView

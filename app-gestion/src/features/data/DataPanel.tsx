@@ -10,7 +10,8 @@ import { LINE_CONFIG } from '../../lines/config';
 import { type PersistState, isIos, isStandalone, isStoragePersisted, requestPersistentStorage } from '../../lib/storage';
 import { fmtDateTime } from '../../lib/time';
 import { type LineBackupSummary, backupStatus, importLine, previewLineBackup, startBlank } from '../../services/real-data';
-import { Button, Card, DataBadge, LinkButton, Sheet, TextInput } from '../../ui/kit';
+import { DataBadge } from '../../ui/data-badge';
+import { Button, Card, LinkButton, Sheet, TextInput } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
 import { BackupNotice, useExportLine } from './BackupNotice';
 

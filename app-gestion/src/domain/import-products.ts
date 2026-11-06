@@ -7,6 +7,8 @@
 // Premium: paquetes con marca («Brisa Azul Box Hab», «Brisa Azul 5 Pack»).
 // Café: los valores de la variante vienen aparte («Molido: Espresso, Peso: 10 oz»).
 import type { LineId, Product, ProductKind } from '../data/types';
+import { cleanCode, isValidEan13 } from '../lib/barcode';
+import { fmtMoney, round2 } from '../lib/money';
 import { headerKey, parseNumber, type SheetTable } from '../lib/sheets';
 import { isCubanOrigin } from './compliance';
 import { capaLabel, capaShade, composeName, countText, familyIdFor, normalize, sizeText, slug, unitNames, variantLabelFor } from './products';
@@ -510,9 +512,6 @@ export interface ImportPlan {
   notices: string[];
 }
 
-const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
 function hash4(text: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
@@ -532,18 +531,6 @@ export function derivedSku(name: string): string {
   const base = `SIN-REF-${slug(canonical).toUpperCase()}`;
   if (base.length <= 40) return base;
   return `${base.slice(0, 35).replace(/-+$/, '')}-${hash4(canonical)}`;
-}
-
-/** El código de barras tal como sirve: letras, números y guiones. */
-function cleanBarcode(raw: string): string {
-  return raw.trim().replace(/[\s]+/g, '').toUpperCase();
-}
-
-function isEan13Ok(code: string): boolean {
-  if (!/^\d{13}$/.test(code)) return true;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) sum += Number(code[i]) * (i % 2 === 0 ? 1 : 3);
-  return (10 - (sum % 10)) % 10 === Number(code[12]);
 }
 
 function titleCase(text: string): string {
@@ -685,8 +672,14 @@ export function buildImportPlan(
     const i = map[f];
     return i === undefined || i < 0 ? '' : (row[i] ?? '').trim();
   };
-  const bySku = new Map(existing.map((p) => [p.sku.toLowerCase(), p]));
-  const byBarcode = new Map(existing.filter((p) => p.barcode).map((p) => [p.barcode!.toUpperCase(), p]));
+  // null: dos productos del catálogo comparten ese SKU o código; no se adivina cuál actualizar.
+  const index = (pairs: [string, Product][]) => {
+    const m = new Map<string, Product | null>();
+    for (const [k, p] of pairs) m.set(k, m.has(k) && m.get(k)?.id !== p.id ? null : p);
+    return m;
+  };
+  const bySku = index(existing.map((p) => [p.sku.toLowerCase(), p]));
+  const byBarcode = index(existing.filter((p) => p.barcode).map((p) => [p.barcode!.toUpperCase(), p]));
   const seenSku = new Map<string, number>();
   const seenBarcode = new Map<string, number>();
   const rows: ImportRow[] = [];
@@ -733,18 +726,24 @@ export function buildImportPlan(
       warnings.unshift(`Sin referencia: queda con el SKU ${sku}.`);
     }
     if (sku.length > 40) errors.push('La referencia tiene más de 40 caracteres.');
-    let barcode: string | undefined = cleanBarcode(cell(cells, 'barcode')) || undefined;
-    if (barcode && (/E\+/i.test(barcode) || !/^[0-9A-Z-]{4,32}$/.test(barcode))) {
-      warnings.push(`El código de barras «${cell(cells, 'barcode')}» no sirve (¿Excel lo cortó?): no se guardó.`);
+    // Como lo guarda y lo busca el lector: sin espacios ni guiones.
+    const rawCode = cell(cells, 'barcode');
+    let barcode: string | undefined = cleanCode(rawCode) || undefined;
+    if (barcode && (/E\+/i.test(rawCode) || !/^[0-9A-Z]{4,32}$/.test(barcode))) {
+      warnings.push(`El código de barras «${rawCode}» no sirve (¿Excel lo cortó?): no se guardó.`);
       barcode = undefined;
-    } else if (barcode && !isEan13Ok(barcode)) {
+    } else if (barcode && /^\d{13}$/.test(barcode) && !isValidEan13(barcode)) {
       warnings.push(`El código de barras ${barcode} no es un EAN-13 válido: revisa el último dígito.`);
     }
 
     // ¿Ya existe? Por SKU o por código de barras: volver a importar nunca duplica.
     const skuKey = sku.toLowerCase();
-    const matchSku = sku ? bySku.get(skuKey) : undefined;
-    const matchCode = barcode ? byBarcode.get(barcode) : undefined;
+    const skuHit = sku ? bySku.get(skuKey) : undefined;
+    const codeHit = barcode ? byBarcode.get(barcode) : undefined;
+    if (skuHit === null) errors.push(`Hay más de un producto con el SKU ${sku} en el catálogo: corrígelo antes de importar.`);
+    if (codeHit === null) errors.push(`Hay más de un producto con el código ${barcode} en el catálogo: corrígelo antes de importar.`);
+    const matchSku = skuHit ?? undefined;
+    const matchCode = codeHit ?? undefined;
     if (matchSku && matchCode && matchSku.id !== matchCode.id) {
       errors.push(`El SKU ${sku} es de «${matchSku.name}» y el código ${barcode} de «${matchCode.name}».`);
     }
@@ -770,15 +769,15 @@ export function buildImportPlan(
     const priceToStore = round2(priceFromFile ? filePrice : match ? match.priceToStore : fallback);
     let suggestedRetail = round2(priceToStore * opts.pvpFactor);
     if (match && match.suggestedRetail >= priceToStore) suggestedRetail = match.suggestedRetail;
-    if (!priceFromFile && map.price !== undefined) warnings.push(match ? 'Sin precio en el archivo: se deja el de hoy.' : `Sin precio: queda en ${money.format(priceToStore)}.`);
+    if (!priceFromFile && map.price !== undefined) warnings.push(match ? 'Sin precio en el archivo: se deja el de hoy.' : `Sin precio: queda en ${fmtMoney(priceToStore)}.`);
     if (!(priceToStore > 0)) errors.push('Falta el precio al local.');
     const fileCost = parseNumber(cell(cells, 'cost'));
     const costFromFile = fileCost > 0;
     const cost = round2(costFromFile ? fileCost : match ? match.cost : (opts.defaultCost ?? 0));
     if (!costFromFile && map.cost !== undefined && (!match || match.sampleCost)) {
-      warnings.push(opts.defaultCost && !match ? `Falta el costo: queda en ${money.format(cost)} (de ejemplo).` : 'Falta el costo.');
+      warnings.push(opts.defaultCost && !match ? `Falta el costo: queda en ${fmtMoney(cost)} (de ejemplo).` : 'Falta el costo.');
     }
-    if (costFromFile && cost > priceToStore) warnings.push(`El costo (${money.format(cost)}) es mayor que el precio al local.`);
+    if (costFromFile && cost > priceToStore) warnings.push(`El costo (${fmtMoney(cost)}) es mayor que el precio al local.`);
 
     const qty = map.qty !== undefined && parsed ? toProductQty(cell(cells, 'qty'), { unitName, packSize, kind: parsed.kind }, opts, warnings) : null;
     const familyName = parsed?.familyName ?? text;
@@ -827,11 +826,11 @@ export function buildImportPlan(
   if (map.price === undefined) {
     notices.push(
       line === 'tabaco'
-        ? `El archivo no trae precios: de mazo quedan a ${money.format(opts.defaultPrice)} por mazo y premium a ${money.format(opts.defaultPremiumPrice)} por unidad (los que ya existen no cambian). Cámbialos luego en cada producto.`
-        : `El archivo no trae precios: quedan a ${money.format(opts.defaultPrice)} por unidad (los que ya existen no cambian). Cámbialos luego en cada producto.`,
+        ? `El archivo no trae precios: de mazo quedan a ${fmtMoney(opts.defaultPrice)} por mazo y premium a ${fmtMoney(opts.defaultPremiumPrice)} por unidad (los que ya existen no cambian). Cámbialos luego en cada producto.`
+        : `El archivo no trae precios: quedan a ${fmtMoney(opts.defaultPrice)} por unidad (los que ya existen no cambian). Cámbialos luego en cada producto.`,
     );
   }
-  if (map.cost === undefined) notices.push(`Falta el costo: el archivo no lo trae. Los nuevos quedan en ${money.format(opts.defaultCost ?? 0)}, marcado como de ejemplo, hasta que lo pongas.`);
+  if (map.cost === undefined) notices.push(`Falta el costo: el archivo no lo trae. Los nuevos quedan en ${fmtMoney(opts.defaultCost ?? 0)}, marcado como de ejemplo, hasta que lo pongas.`);
   if (map.origin === undefined && opts.origin) notices.push(`${line === 'tabaco' ? 'Procedencia' : 'Origen'}: ${opts.origin} para los nuevos.`);
 
   return {
