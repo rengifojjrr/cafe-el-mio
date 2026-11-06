@@ -125,8 +125,9 @@ export function Stat({
   const color = { data: 'glow', ink: 'text-ink', ok: 'text-ok', warn: 'text-warn', danger: 'text-danger' }[tone];
   const body = (
     <>
-      <div className="flex items-center gap-2 text-sm font-medium text-muted">
-        {Icon ? <Icon className="h-4 w-4" aria-hidden /> : null}
+      {/* La etiqueta reserva dos líneas: así las cifras de una misma fila quedan a la misma altura en el teléfono. */}
+      <div className="flex min-h-[2.6em] items-start gap-2 text-sm leading-tight font-medium text-muted">
+        {Icon ? <Icon className="mt-px h-4 w-4 flex-none" aria-hidden /> : null}
         <span>{label}</span>
       </div>
       <div className={`tabular mt-1.5 text-[1.7rem] leading-none font-bold tracking-tight ${color}`} aria-label={`${label}: ${formatValue(value, format)}`}>
@@ -137,12 +138,12 @@ export function Stat({
   );
   if (to) {
     return (
-      <Link to={to} className="glass block p-4 transition-colors hover:border-line-strong">
+      <Link to={to} className="glass block h-full p-4 transition-colors hover:border-line-strong">
         {body}
       </Link>
     );
   }
-  return <div className="glass p-4">{body}</div>;
+  return <div className="glass h-full p-4">{body}</div>;
 }
 
 export function Money({ value, className = '' }: { value: number; className?: string }) {

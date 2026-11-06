@@ -673,8 +673,9 @@
 
 /* Títulos: Figtree con peso alto y letras un poco más juntas. Va fuera de las capas para
    ganarle al peso que traiga cada componente (font-semibold) sin tocar cada pantalla. */
+/* Ronda 3: seminegrita (620), más amable que la 760 de la ronda 2; Fraunces se probó y se lee peor en el teléfono. */
 .font-display {
   font-family: var(--font-display);
-  font-weight: 760;
-  letter-spacing: -0.024em;
+  font-weight: 620;
+  letter-spacing: -0.012em;
 }

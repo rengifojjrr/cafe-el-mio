@@ -91,9 +91,9 @@ export function ProductDetailPage() {
                 ['Tripa', a.filler ? String(a.filler) : '—'],
               ] as [string, React.ReactNode][])
             : []),
-          ['Presentación', packText(pr)],
+          ['Caja', packText(pr)],
         ]
-      : config.productFields.map((f) => [f.label, a[f.key] === undefined || a[f.key] === '' ? '—' : f.kind === 'select' ? (f.options.find((o) => o.value === String(a[f.key]))?.label ?? String(a[f.key])) : String(a[f.key])] as [string, React.ReactNode]).concat([['Presentación', packText(pr)]]);
+      : config.productFields.map((f) => [f.label, a[f.key] === undefined || a[f.key] === '' ? '—' : f.kind === 'select' ? (f.options.find((o) => o.value === String(a[f.key]))?.label ?? String(a[f.key])) : String(a[f.key])] as [string, React.ReactNode]).concat([['Caja', packText(pr)]]);
 
   return (
     <>

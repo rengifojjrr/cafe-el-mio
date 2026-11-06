@@ -41,7 +41,14 @@ export function CatalogPage() {
 
   const filterKeys = config.filterFields;
   const filtered = useMemo(() => applyFilters(data ?? [], filters, q), [data, filters, q]);
-  const facets = useMemo(() => buildFacets(data ?? [], filterKeys, filters, q), [data, filterKeys, filters, q]);
+  // Los campos de lista (tueste, por ejemplo) se muestran con su nombre, no con el valor guardado.
+  const facets = useMemo(() => {
+    const labels = new Map(config.productFields.flatMap((f) => (f.kind === 'select' ? f.options.map((o) => [`${f.key}:${o.value}`, o.label] as const) : [])));
+    return buildFacets(data ?? [], filterKeys, filters, q).map((f) => ({
+      ...f,
+      options: f.options.map((o) => ({ ...o, label: f.key === 'capa' || f.key === 'strength' ? o.label : (labels.get(`${f.key}:${o.value}`) ?? o.label) })),
+    }));
+  }, [data, filterKeys, filters, q, config.productFields]);
   const families = useMemo(() => groupFamilies(filtered), [filtered]);
   const active = activeFilterCount(filters);
 
