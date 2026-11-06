@@ -33,6 +33,7 @@ import { MapView, type MapMarker } from '../../ui/map';
 import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Section, Sheet, Stat } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { DeliveryCard, ReportSalesSheet } from '../consignment/components';
+import { FirmStoreHome } from '../sales/store-home';
 import { StoreStatusPill } from '../common';
 
 export function LineHome() {
@@ -96,7 +97,7 @@ function AdminHome() {
     ...pendingApproval.map((s) => ({ icon: FileSignature, text: `${s.store.name} firmó: falta aprobarlo`, to: p(`locales/${s.store.id}`), tone: 'accent' as const })),
     ...(deliveries.data ?? []).map((d) => ({ icon: Truck, text: `Preparar ${d.code} para ${d.storeName}`, to: p('entregas'), tone: 'info' as const })),
     ...(orders.data ?? []).filter((o) => o.status === 'enviado').map((o) => ({ icon: ClipboardList, text: `${o.storeName} pidió ${o.code}: espera al vendedor`, to: p('pedidos'), tone: 'warn' as const })),
-    ...overdue.map((s) => ({ icon: Receipt, text: `${s.store.name} tiene un pago vencido (${fmtMoney(s.balanceDue)})`, to: p('cobros'), tone: 'danger' as const })),
+    ...overdue.map((s) => ({ icon: Receipt, text: `${s.store.name} tiene un pago vencido (${fmtMoney(s.balanceDue + s.invoiceBalance)})`, to: p('cobros'), tone: 'danger' as const })),
     ...(alerts.data ?? []).map((a) => ({ icon: AlertTriangle, text: `${a.productName}: ${a.detail}`, to: a.storeId ? p(`locales/${a.storeId}`) : p(`catalogo/${a.productId}`), tone: 'warn' as const })),
   ];
 
@@ -366,6 +367,8 @@ function StoreHome() {
   const [sales, setSales] = useState(false);
   const view = stores.data?.[0];
   if (!view) return stores.loading ? <Loading rows={4} /> : <EmptyState icon={StoreIcon} title="No encontré tu tienda" />;
+  // Ronda 3: el local que compra en firme ve sus facturas, no la consignación.
+  if (view.store.saleMode === 'firme') return <FirmStoreHome view={view} />;
   const s = view.store;
   const units = (lines.data ?? []).reduce((a, l) => a + l.qty, 0);
   const potential = (lines.data ?? []).reduce((a, l) => a + l.qty * l.storeEarning, 0);

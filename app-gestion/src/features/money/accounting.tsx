@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { fmtMoney, fmtNumber, fmtPercent } from '../../lib/money';
 import { fmtDate, fmtMonth } from '../../lib/time';
 import { balances, inventoryValuation, pnlByMonth, type PnlMonth } from '../../services/analytics';
+import { listInvoices } from '../../services/invoices';
 import { listCommissions, listSettlements } from '../../services/money';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
@@ -19,12 +20,17 @@ export function AccountingPage() {
   return <Accounting />;
 }
 
-const PNL_ROWS: { key: keyof PnlMonth; label: string; strong?: boolean; minus?: boolean }[] = [
-  { key: 'revenue', label: 'Ventas a precio al local' },
-  { key: 'cogs', label: 'Costo de lo vendido (por lote)', minus: true },
+const PNL_ROWS: { key: keyof PnlMonth; label: string; strong?: boolean; minus?: boolean; sub?: boolean; muted?: boolean }[] = [
+  { key: 'revenueFirm', label: 'Ventas en firme (sin impuesto)', sub: true },
+  { key: 'revenueConsignment', label: 'Ventas en consignación', sub: true },
+  { key: 'revenue', label: 'Ventas totales', strong: true },
+  { key: 'cogsFirm', label: 'Costo en firme (por lote)', minus: true, sub: true },
+  { key: 'cogsConsignment', label: 'Costo en consignación (por lote)', minus: true, sub: true },
   { key: 'commissions', label: 'Comisiones de vendedores', minus: true },
   { key: 'shrink', label: 'Mermas', minus: true },
   { key: 'grossMargin', label: 'Margen bruto', strong: true },
+  { key: 'marginFirm', label: 'Margen en firme', muted: true },
+  { key: 'marginConsignment', label: 'Margen en consignación (sin mermas)', muted: true },
 ];
 
 function Accounting() {
@@ -43,8 +49,36 @@ function Accounting() {
 
   const exportPnl = () =>
     downloadCsv(csvName(line, 'estado-de-resultados', now), [
-      ['Mes', 'Ventas a precio al local', 'Costo de lo vendido', 'Comisiones', 'Mermas', 'Margen bruto', 'Unidades vendidas'],
-      ...months.map((m) => [m.month, m.revenue, m.cogs, m.commissions, m.shrink, m.grossMargin, m.units]),
+      [
+        'Mes',
+        'Ventas en firme',
+        'Ventas en consignación',
+        'Ventas totales',
+        'Costo en firme',
+        'Costo en consignación',
+        'Comisiones en firme',
+        'Comisiones en consignación',
+        'Mermas',
+        'Margen en firme',
+        'Margen en consignación',
+        'Margen bruto',
+        'Unidades vendidas',
+      ],
+      ...months.map((m) => [
+        m.month,
+        m.revenueFirm,
+        m.revenueConsignment,
+        m.revenue,
+        m.cogsFirm,
+        m.cogsConsignment,
+        m.commissionsFirm,
+        m.commissionsConsignment,
+        m.shrink,
+        m.marginFirm,
+        m.marginConsignment,
+        m.grossMargin,
+        m.units,
+      ]),
     ]);
   const exportInventory = () => {
     const v = val.data;
@@ -58,10 +92,11 @@ function Accounting() {
     ]);
   };
   const exportReceivables = async () => {
-    const list = await listSettlements(ctx, { open: true });
+    const [list, invoices] = await Promise.all([listSettlements(ctx, { open: true }), listInvoices(ctx, { open: true })]);
     downloadCsv(csvName(line, 'por-cobrar', now), [
-      ['Liquidación', 'Local', 'Emitida', 'Vence', 'Monto', 'Pagado', 'Saldo', 'Días', 'Vencida'],
-      ...list.map((s) => [s.code, s.storeName, s.issuedAt.slice(0, 10), s.dueOn, s.amount, s.paid, s.balance, s.daysOld, s.overdue ? 'sí' : 'no']),
+      ['Tipo', 'Número', 'Local', 'Emitida', 'Vence', 'Monto', 'Pagado', 'Saldo', 'Días', 'Vencida'],
+      ...invoices.map((i) => ['Factura (en firme)', i.code, i.storeName, i.issuedAt.slice(0, 10), i.dueOn, i.total, i.paid, i.balance, i.daysOld, i.overdue ? 'sí' : 'no']),
+      ...list.map((s) => ['Liquidación (consignación)', s.code, s.storeName, s.issuedAt.slice(0, 10), s.dueOn, s.amount, s.paid, s.balance, s.daysOld, s.overdue ? 'sí' : 'no']),
     ]);
   };
   const exportCommissions = async () => {
@@ -94,7 +129,14 @@ function Accounting() {
           />
           <Stat label="Margen bruto del mes" value={last.grossMargin} format="money0" tone="ink" hint={`${fmtPercent(marginPct)} de las ventas`} />
           <Stat label="Inventario al costo" value={(val.data?.warehouseCost ?? 0) + (val.data?.consignmentCost ?? 0)} format="money0" tone="ink" icon={Package} hint="Almacén y consignación" />
-          <Stat label="Por cobrar" value={bal.data?.receivable ?? 0} format="money0" tone="ink" icon={Receipt} hint={bal.data ? `+ ${fmtMoney(bal.data.unsettledSales)} sin liquidar` : undefined} />
+          <Stat
+            label="Por cobrar"
+            value={(bal.data?.receivable ?? 0) + (bal.data?.invoicesReceivable ?? 0)}
+            format="money0"
+            tone="ink"
+            icon={Receipt}
+            hint={bal.data ? `Facturas ${fmtMoney(bal.data.invoicesReceivable)} · + ${fmtMoney(bal.data.unsettledSales)} sin liquidar` : undefined}
+          />
         </div>
       ) : null}
 
@@ -112,9 +154,10 @@ function Accounting() {
             xKey="month"
             xLabel={(v) => monthLabel(String(v), now)}
             fmt="money0"
-            label="Ventas, costo de lo vendido, comisiones y margen bruto por mes"
+            label="Ventas en firme y en consignación, costo de lo vendido, comisiones y margen bruto por mes"
             series={[
-              { key: 'revenue', label: 'Ventas', color: 'var(--chart-1)' },
+              { key: 'revenueFirm', label: 'Ventas en firme', color: 'var(--chart-4)' },
+              { key: 'revenueConsignment', label: 'Ventas en consignación', color: 'var(--chart-1)' },
               { key: 'cogs', label: 'Costo por lote', color: 'var(--chart-5)' },
               { key: 'commissions', label: 'Comisiones', color: 'var(--chart-3)' },
               { key: 'grossMargin', label: 'Margen bruto', color: 'var(--chart-2)' },
@@ -136,13 +179,13 @@ function Accounting() {
             <tbody>
               {PNL_ROWS.map((r) => (
                 <tr key={r.key}>
-                  <th scope="row" className={`text-left ${r.strong ? 'font-bold text-ink' : 'font-medium text-ink'}`}>
+                  <th scope="row" className={`text-left ${r.strong ? 'font-bold text-ink' : r.muted ? 'font-medium text-muted' : 'font-medium text-ink'} ${r.sub ? 'pl-6' : ''}`}>
                     {r.label}
                   </th>
                   {months.map((m) => {
                     const v = Number(m[r.key]);
                     return (
-                      <td key={m.month} className={`num ${r.strong ? 'font-bold' : ''} ${r.strong && v < 0 ? 'text-danger' : ''}`}>
+                      <td key={m.month} className={`num ${r.strong ? 'font-bold' : ''} ${r.muted ? 'text-muted' : ''} ${r.strong && v < 0 ? 'text-danger' : ''}`}>
                         {r.minus && v > 0 ? `− ${fmtMoney(v)}` : fmtMoney(v)}
                       </td>
                     );
@@ -171,7 +214,9 @@ function Accounting() {
               </tr>
             </tbody>
           </TableWrap>
-          <p className="mt-2 text-sm text-muted">El mes en curso va hasta hoy. Las ventas se cuentan al reportarse (por conteo o desde la cuenta del local).</p>
+          <p className="mt-2 text-sm text-muted">
+            El mes en curso va hasta hoy. En consignación, las ventas se cuentan al reportarse (por conteo o desde la cuenta del local); en firme, al facturar (la entrega firmada o la venta rápida), sin el impuesto de venta.
+          </p>
         </div>
       </Section>
 
@@ -283,10 +328,15 @@ function Accounting() {
       >
         {bal.data ? (
           <>
-            <AgingCards aging={bal.data.aging} />
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <AgingCards aging={bal.data.aging} noun={{ one: 'cuenta', many: 'cuentas' }} />
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <Card className="p-4">
-                <p className="text-sm font-medium text-muted">Liquidado sin pagar</p>
+                <p className="text-sm font-medium text-muted">Facturas en firme sin pagar</p>
+                <p className="tabular mt-1 text-2xl font-bold">{fmtMoney(bal.data.invoicesReceivable)}</p>
+                <p className={`text-sm ${bal.data.invoicesOverdue > 0 ? 'text-danger' : 'text-muted'}`}>{bal.data.invoicesOverdue > 0 ? `${fmtMoney(bal.data.invoicesOverdue)} vencidos` : 'Nada vencido'}</p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-sm font-medium text-muted">Liquidado sin pagar (consignación)</p>
                 <p className="tabular mt-1 text-2xl font-bold">{fmtMoney(bal.data.receivable)}</p>
               </Card>
               <Card className="p-4">

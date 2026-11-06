@@ -3,6 +3,7 @@
 import type { LineId } from '../data/types';
 import { getLineRepo } from '../data';
 import { Balances } from '../domain/ledger';
+import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
 import { isOverdue, settlementBalance } from '../domain/money-rules';
 import { ensure, type Actor } from '../domain/permissions';
 import { round2 } from '../lib/money';
@@ -29,7 +30,7 @@ export interface LineOverview {
 export async function lineOverview(actor: Actor, line: LineId, now = new Date()): Promise<LineOverview> {
   ensure(actor, 'direccion.read', line);
   const repo = getLineRepo(line);
-  const [reports, commissions, returns, settlements, stores, movements, lots, reorders] = await Promise.all([
+  const [reports, commissions, returns, settlements, stores, movements, lots, reorders, invoices] = await Promise.all([
     repo.salesReports.all(),
     repo.commissions.all(),
     repo.returns.all(),
@@ -38,6 +39,7 @@ export async function lineOverview(actor: Actor, line: LineId, now = new Date())
     repo.movements.all(),
     repo.lots.all(),
     repo.reorders.all(),
+    repo.invoices.all(),
   ]);
   const since = addDays(now, -30);
   let sales30 = 0;
@@ -48,6 +50,12 @@ export async function lineOverview(actor: Actor, line: LineId, now = new Date())
       sales30 += l.qty * l.unitPrice;
       cogs30 += l.cost;
     }
+  }
+  // Venta en firme (sin el impuesto).
+  for (const inv of invoices) {
+    if (inv.issuedAt < since) continue;
+    sales30 += inv.subtotal;
+    for (const l of inv.lines) cogs30 += l.cost;
   }
   const comm30 = commissions.filter((c) => c.accruedAt >= since).reduce((a, c) => a + c.amount, 0);
   const shrink30 = returns.filter((x) => x.kind === 'merma' && x.at >= since).reduce((a, x) => a + x.cost, 0);
@@ -71,8 +79,11 @@ export async function lineOverview(actor: Actor, line: LineId, now = new Date())
     sales30: round2(sales30),
     margin30: round2(margin30),
     marginPct30: sales30 > 0 ? margin30 / sales30 : 0,
-    receivable: round2(settlements.reduce((a, s) => a + settlementBalance(s), 0)),
-    overdue: round2(settlements.filter((s) => isOverdue(s, now)).reduce((a, s) => a + settlementBalance(s), 0)),
+    receivable: round2(settlements.reduce((a, s) => a + settlementBalance(s), 0) + invoices.reduce((a, i) => a + invoiceBalance(i), 0)),
+    overdue: round2(
+      settlements.filter((s) => isOverdue(s, now)).reduce((a, s) => a + settlementBalance(s), 0) +
+        invoices.filter((i) => isInvoiceOverdue(i, now)).reduce((a, i) => a + invoiceBalance(i), 0),
+    ),
     commissionsPayable: round2(commissions.filter((c) => c.status !== 'pagada').reduce((a, c) => a + c.amount, 0)),
     inventoryCost: round2(inventoryCost),
     consignmentCost: round2(consignmentCost),
@@ -80,7 +91,7 @@ export async function lineOverview(actor: Actor, line: LineId, now = new Date())
     totalStores: stores.length,
     consignmentUnits,
     pendingOrders: reorders.filter((r) => r.status === 'enviado' || r.status === 'confirmado' || r.status === 'preparado').length,
-    months: computePnl(reports, commissions, returns, now, 4),
+    months: computePnl(reports, commissions, returns, now, 4, invoices),
   };
 }
 

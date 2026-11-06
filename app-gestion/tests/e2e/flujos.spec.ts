@@ -38,6 +38,8 @@ test('registrar tienda → contrato y firma → colocar producto (tabaco)', asyn
   const pads = page.locator('canvas');
   await sign(page, pads.nth(0));
   await sign(page, pads.nth(1));
+  // En el teléfono el aviso de «prospecto» puede quedar encima de la casilla: se espera a que se vaya.
+  await expect(page.getByRole('status').getByText(/prospecto/)).toBeHidden({ timeout: 10_000 });
   await page.getByText('Las dos partes aceptan firmar electrónicamente').click();
   await capture(page, info, 'E2-contrato-firma');
   await page.getByRole('button', { name: 'Firmar contrato' }).click();
@@ -172,7 +174,8 @@ test('restablecer la demo vuelve a cargar los datos de ejemplo', async ({ page }
   await page.getByRole('button', { name: 'Restablecer demo' }).click();
   await page.getByRole('button', { name: 'Sí, restablecer' }).click();
   await toast(page, /datos de ejemplo cargados/);
-  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('12')).toBeVisible();
+  // 21 productos de tabaco (12 premium y 9 de mazo).
+  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('21')).toBeVisible();
 });
 
 test('el local pide desde la ficha del producto: cuánto y listo', async ({ page }) => {

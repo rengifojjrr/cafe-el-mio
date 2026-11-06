@@ -1,14 +1,17 @@
-// Cuentas del local: lo que debe, cuándo vence, sus liquidaciones y sus pagos. En palabras de tienda.
+// Cuentas del local: lo que debe, cuándo vence, sus facturas (venta en firme), sus liquidaciones
+// (consignación) y sus pagos. En palabras de tienda.
 import { CalendarClock, CircleAlert, CircleCheck, Receipt, Wallet } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AGING_LABEL } from '../../domain/money-rules';
 import { fmtMoney, round2 } from '../../lib/money';
 import { fmtDate, fmtDateTime, fmtRelativeDays } from '../../lib/time';
 import { listProducts } from '../../services/catalog';
+import { listInvoices, type InvoiceView } from '../../services/invoices';
 import { PAYMENT_METHOD_LABEL, listSettlements, storeAccounts, type SettlementView, type StoreAccount } from '../../services/money';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { Card, EmptyState, ErrorBox, Loading, Money, PageHeader, Pill, Section, SelectInput } from '../../ui/kit';
+import { InvoiceItem, InvoiceSheet } from '../sales/invoices';
 import { SettlementSheet, SettlementStatusPill } from './shared';
 
 export function StoreAccountsPage() {
@@ -22,9 +25,13 @@ export function StoreAccountsPage() {
 
   if (actor.role === 'store') {
     const mine = list[0];
+    const firm = mine?.store.saleMode === 'firme';
     return (
       <>
-        <PageHeader title="Mis cuentas" subtitle="Lo que debes por lo que vendiste, cuándo vence y los pagos que ya hiciste." />
+        <PageHeader
+          title="Mis cuentas"
+          subtitle={firm ? 'Lo que debes por tus compras, cuándo vence cada factura y los pagos que ya hiciste.' : 'Lo que debes por lo que vendiste, cuándo vence y los pagos que ya hiciste.'}
+        />
         {mine ? <AccountView account={mine} /> : <NoAccount />}
       </>
     );
@@ -59,7 +66,7 @@ export function StoreAccountsPage() {
 function NoAccount() {
   return (
     <EmptyState icon={Receipt} title="Todavía no hay cuentas">
-      Cuando el local reciba producto en consignación y venda, aquí aparece lo que debe y cuándo vence.
+      Cuando el local reciba producto (en consignación o comprado en firme), aquí aparece lo que debe y cuándo vence.
     </EmptyState>
   );
 }
@@ -67,18 +74,30 @@ function NoAccount() {
 function AccountView({ account }: { account: StoreAccount }) {
   const { ctx } = useLine();
   const storeId = account.store.id;
+  const firm = account.store.saleMode === 'firme';
   const settlements = useAsync(() => listSettlements(ctx, { storeId }), [ctx, storeId]);
+  const invoices = useAsync(() => listInvoices(ctx, { storeId }), [ctx, storeId]);
   const products = useAsync(() => listProducts(ctx), [ctx]);
   const [detail, setDetail] = useState<SettlementView | null>(null);
+  const [invDetail, setInvDetail] = useState<InvoiceView | null>(null);
   const names = useMemo(() => new Map((products.data ?? []).map((v) => [v.product.id, v.product.name])), [products.data]);
   const now = ctx.now();
   const list = settlements.data ?? [];
+  const invList = invoices.data ?? [];
   const open = list.filter((s) => s.balance > 0);
+  const openInv = invList.filter((i) => i.balance > 0);
   const nextDue = [...open].sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0];
-  const payments = list.flatMap((s) => s.payments.map((pmt) => ({ ...pmt, code: s.code }))).sort((a, b) => b.at.localeCompare(a.at));
-  const overdue = round2(open.filter((s) => s.overdue).reduce((a, s) => a + s.balance, 0));
-  // Lo que debe el local es todo: lo liquidado sin pagar y lo vendido que todavía no se liquidó.
-  const owedTotal = round2(account.balance + account.unsettledSales);
+  const nextInvDue = [...openInv].sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0];
+  const payments = [
+    ...list.flatMap((s) => s.payments.map((pmt) => ({ ...pmt, code: s.code }))),
+    ...invList.flatMap((i) => i.payments.map((pmt) => ({ ...pmt, code: i.code }))),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  const overdue = round2(open.filter((s) => s.overdue).reduce((a, s) => a + s.balance, 0) + openInv.filter((i) => i.overdue).reduce((a, i) => a + i.balance, 0));
+  // Lo que debe el local es todo: lo liquidado sin pagar, lo vendido sin liquidar y las facturas sin pagar.
+  const owedTotal = round2(account.balance + account.unsettledSales + account.invoiceBalance);
+  const credit = account.store.creditDays ?? 0;
+  const showSettlements = !firm || list.length > 0;
+  const showInvoices = firm || invList.length > 0;
 
   return (
     <>
@@ -90,6 +109,14 @@ function AccountView({ account }: { account: StoreAccount }) {
           <p className={`tabular mt-1 text-[2.4rem] leading-none font-bold ${owedTotal > 0 ? (overdue > 0 ? 'text-danger' : 'glow') : 'text-ok'}`}>{fmtMoney(owedTotal)}</p>
           {owedTotal > 0 ? (
             <dl className="mt-3 grid gap-1.5 text-sm">
+              {account.invoiceBalance > 0 ? (
+                <div className="flex flex-wrap justify-between gap-2">
+                  <dt className="text-muted">
+                    Facturas por pagar ({account.openInvoices}){nextInvDue ? ` · la próxima vence el ${fmtDate(nextInvDue.dueOn)}` : ''}
+                  </dt>
+                  <dd className="font-semibold tabular">{fmtMoney(account.invoiceBalance)}</dd>
+                </div>
+              ) : null}
               {account.balance > 0 ? (
                 <div className="flex flex-wrap justify-between gap-2">
                   <dt className="text-muted">Liquidado, por pagar{nextDue ? ` (vence el ${fmtDate(nextDue.dueOn)})` : ''}</dt>
@@ -119,10 +146,22 @@ function AccountView({ account }: { account: StoreAccount }) {
           <p className="flex items-center gap-2 text-sm font-medium text-muted">
             <CalendarClock className="h-4 w-4" aria-hidden /> Cómo se cobra
           </p>
-          <p className="mt-2 text-ink">
-            Lo que vendes se debe desde que se vende. Cada cierto número de días se hace la liquidación y desde ahí tienes unos días para pagarla.
-          </p>
-          {nextDue ? (
+          {firm ? (
+            <p className="mt-2 text-ink">
+              {credit > 0
+                ? `Compras en firme, a crédito: cada entrega trae su factura y tienes ${credit} días para pagarla.`
+                : 'Compras en firme, de contado: cada entrega trae su factura y se paga al recibirla.'}
+            </p>
+          ) : (
+            <p className="mt-2 text-ink">
+              Lo que vendes se debe desde que se vende. Cada cierto número de días se hace la liquidación y desde ahí tienes unos días para pagarla.
+            </p>
+          )}
+          {nextInvDue ? (
+            <p className="mt-2 text-sm text-muted">
+              Próximo pago: {fmtMoney(nextInvDue.balance)} de la factura {nextInvDue.code}, el {fmtDate(nextInvDue.dueOn)} ({fmtRelativeDays(nextInvDue.dueOn, now)}).
+            </p>
+          ) : nextDue ? (
             <p className="mt-2 text-sm text-muted">
               Próximo pago: {fmtMoney(nextDue.balance)} el {fmtDate(nextDue.dueOn)} ({fmtRelativeDays(nextDue.dueOn, now)}).
             </p>
@@ -133,43 +172,65 @@ function AccountView({ account }: { account: StoreAccount }) {
       </div>
 
       <p className="mt-4 text-sm text-muted">
-        Los pagos se hacen en efectivo, cheque, Zelle o transferencia a la empresa. La app solo los anota: no cobra ni mueve dinero.
+        Los pagos se hacen en efectivo, cheque, Zelle, transferencia o tarjeta (cobrada aparte, en el datáfono). La app solo los anota: no cobra ni mueve dinero.
       </p>
 
-      <Section title="Liquidaciones">
-        {settlements.loading && !settlements.data ? (
-          <Loading rows={2} />
-        ) : list.length === 0 ? (
-          <EmptyState icon={Receipt} title="Todavía no hay liquidaciones">
-            La primera llega cuando se cumple el plazo desde tu primera venta.
-          </EmptyState>
-        ) : (
-          <ul className="grid gap-2">
-            {list.map((s) => (
-              <li key={s.id}>
-                <button type="button" onClick={() => setDetail(s)} className="glass flex w-full flex-wrap items-center gap-3 p-4 text-left hover:border-line-strong">
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold">{s.code}</span>
-                      <SettlementStatusPill s={s} />
-                      {s.balance > 0 ? <Pill>{AGING_LABEL[s.bucket]}</Pill> : null}
+      {showInvoices ? (
+        <Section title="Facturas">
+          {invoices.loading && !invoices.data ? (
+            <Loading rows={2} />
+          ) : invList.length === 0 ? (
+            <EmptyState icon={Receipt} title="Todavía no hay facturas">
+              Cada entrega que recibes con firma trae su factura.
+            </EmptyState>
+          ) : (
+            <ul className="grid grid-cols-1 gap-2">
+              {[...openInv, ...invList.filter((i) => i.balance <= 0)].slice(0, 40).map((i) => (
+                <li key={i.id}>
+                  <InvoiceItem inv={i} onOpen={() => setInvDetail(i)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      ) : null}
+
+      {showSettlements ? (
+        <Section title="Liquidaciones">
+          {settlements.loading && !settlements.data ? (
+            <Loading rows={2} />
+          ) : list.length === 0 ? (
+            <EmptyState icon={Receipt} title="Todavía no hay liquidaciones">
+              La primera llega cuando se cumple el plazo desde tu primera venta.
+            </EmptyState>
+          ) : (
+            <ul className="grid grid-cols-1 gap-2">
+              {list.map((s) => (
+                <li key={s.id}>
+                  <button type="button" onClick={() => setDetail(s)} className="glass flex w-full flex-wrap items-center gap-3 p-4 text-left hover:border-line-strong">
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold">{s.code}</span>
+                        <SettlementStatusPill s={s} />
+                        {s.balance > 0 ? <Pill>{AGING_LABEL[s.bucket]}</Pill> : null}
+                      </span>
+                      <span className="mt-0.5 block text-sm text-muted">
+                        Ventas del {fmtDate(s.periodFrom)} al {fmtDate(s.periodTo)} · vence el {fmtDate(s.dueOn)}
+                      </span>
                     </span>
-                    <span className="mt-0.5 block text-sm text-muted">
-                      Ventas del {fmtDate(s.periodFrom)} al {fmtDate(s.periodTo)} · vence el {fmtDate(s.dueOn)}
+                    <span className="text-right">
+                      <span className="tabular block font-bold">
+                        <Money value={s.balance > 0 ? s.balance : s.amount} />
+                      </span>
+                      <span className="block text-sm text-muted">{s.balance > 0 ? (s.paid > 0 ? `quedan de ${fmtMoney(s.amount)}` : 'por pagar') : 'pagada'}</span>
                     </span>
-                  </span>
-                  <span className="text-right">
-                    <span className="tabular block font-bold">
-                      <Money value={s.balance > 0 ? s.balance : s.amount} />
-                    </span>
-                    <span className="block text-sm text-muted">{s.balance > 0 ? (s.paid > 0 ? `quedan de ${fmtMoney(s.amount)}` : 'por pagar') : 'pagada'}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      ) : null}
 
       <Section title="Pagos que hiciste">
         {payments.length === 0 ? (
@@ -195,6 +256,7 @@ function AccountView({ account }: { account: StoreAccount }) {
       </Section>
 
       <SettlementSheet settlement={detail} productName={(id) => names.get(id) ?? 'Producto'} onClose={() => setDetail(null)} />
+      <InvoiceSheet invoice={invDetail} onClose={() => setInvDetail(null)} />
     </>
   );
 }

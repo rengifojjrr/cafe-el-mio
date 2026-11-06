@@ -14,13 +14,15 @@ import type {
   UnmetDemand,
   Visit,
 } from '../data/types';
-import { assertCanConsign, consignmentCheck } from '../domain/compliance';
+import { assertCanSupply, supplyCheck } from '../domain/compliance';
 import { WAREHOUSE, allocate, storeLoc } from '../domain/ledger';
 import { commissionAmount, effectiveRule } from '../domain/money-rules';
+import { splitIntoPacks } from '../domain/pricing';
 import type { NewPhoto } from '../lib/image';
 import { round2 } from '../lib/money';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
 import { type InventorySnapshot, loadInventory } from './inventory';
+import { writeFirmInvoice } from './invoices';
 import { STORE_STATUS_LABEL, applyStoreStatus, scopedStores } from './stores';
 import { findActive } from './templates';
 
@@ -65,13 +67,18 @@ export interface DeliveryView extends Delivery {
   storeName: string;
   sellerName: string;
   itemsView: { productId: string; name: string; qty: number; preparedQty?: number; available?: number }[];
+  /** El local compra en firme: al recibir nace la factura en vez de la consignación. */
+  firm: boolean;
+  /** Factura que nació al recibir (venta en firme). */
+  invoiceCode?: string;
 }
 
 export async function listDeliveries(ctx: Ctx, filter?: { storeId?: string; status?: Delivery['status'] }): Promise<DeliveryView[]> {
   const stores = await scopedStores(ctx);
   const storesById = new Map(stores.map((s) => [s.id, s]));
-  const [all, users, snap] = await Promise.all([ctx.repo.deliveries.all(), ctx.repo.users.all(), loadInventory(ctx)]);
+  const [all, users, snap, invoices] = await Promise.all([ctx.repo.deliveries.all(), ctx.repo.users.all(), loadInventory(ctx), ctx.repo.invoices.all()]);
   const usersById = new Map(users.map((u) => [u.id, u]));
+  const invoiceCode = new Map(invoices.map((i) => [i.id, i.code]));
   const isAdmin = ctx.actor.role === 'admin';
   return all
     .filter((d) => storesById.has(d.storeId))
@@ -82,6 +89,8 @@ export async function listDeliveries(ctx: Ctx, filter?: { storeId?: string; stat
       ...d,
       storeName: storesById.get(d.storeId)?.name ?? '—',
       sellerName: usersById.get(d.sellerId)?.name ?? '—',
+      firm: d.invoiceId ? true : d.status !== 'entregada' && storesById.get(d.storeId)?.saleMode === 'firme',
+      invoiceCode: d.invoiceId ? invoiceCode.get(d.invoiceId) : undefined,
       itemsView: d.items.map((i) => ({
         productId: i.productId,
         name: snap.productsById.get(i.productId)?.name ?? i.productId,
@@ -113,7 +122,7 @@ async function writeDeliveryRequest(
 ): Promise<Delivery> {
   const store = await storeOrThrow(ctx, input.storeId);
   guard(ctx, 'delivery.request', { type: 'store', store });
-  assertCanConsign(ctx.line, store, ctx.now());
+  assertCanSupply(ctx.line, store, ctx.now());
   const products = await ctx.repo.products.all();
   for (const it of input.items) {
     const p = products.find((x) => x.id === it.productId);
@@ -162,7 +171,7 @@ export async function prepareDelivery(
     } else if (store.status !== 'activo') {
       throw new ValidationError(`${store.name} está «${STORE_STATUS_LABEL[store.status]}»: no se le prepara entrega.`);
     }
-    assertCanConsign(ctx.line, store, ctx.now());
+    assertCanSupply(ctx.line, store, ctx.now());
     const snap = await loadInventory(ctx);
     const existingShort = await ctx.repo.unmetDemand.all();
     const refId = d.reorderId ?? d.id;
@@ -240,8 +249,9 @@ const signatureSchema = z.object({
 });
 
 /**
- * El local firma la nota de entrega al recibir. Recién aquí baja el almacén y sube la
- * consignación del local (movimientos de salida a consignación, lote por lote).
+ * El local firma la nota de entrega al recibir. En consignación, recién aquí baja el almacén y sube la
+ * consignación del local (lote por lote). Si el local compra en firme, la mercancía pasa a ser suya:
+ * sale del almacén a «vendido» y nace la factura con los precios de su lista.
  */
 export async function receiveDelivery(ctx: Ctx, deliveryId: string, signature: z.input<typeof signatureSchema>): Promise<Delivery> {
   const sig = signatureSchema.parse(signature);
@@ -251,31 +261,40 @@ export async function receiveDelivery(ctx: Ctx, deliveryId: string, signature: z
     const store = await storeOrThrow(ctx, d.storeId);
     guard(ctx, 'delivery.receive', { type: 'store', store });
     if (d.status !== 'preparada') throw new ValidationError(`La entrega ${d.code} no está lista para entregar.`);
-    assertCanConsign(ctx.line, store, ctx.now());
+    assertCanSupply(ctx.line, store, ctx.now());
     const snap = await loadInventory(ctx);
     const at = nowIso(ctx);
-    for (const it of d.items) {
-      const qty = it.preparedQty ?? 0;
-      if (qty <= 0) continue;
-      const product = snap.productsById.get(it.productId);
-      const parts = allocate(snap.balances, snap.lotsById, WAREHOUSE, it.productId, qty, product?.name);
-      for (const part of parts) {
-        const mv: Movement = {
-          id: ctx.newId('mov'),
-          at,
-          type: 'salida_consignacion',
-          productId: it.productId,
-          lotId: part.lotId,
-          qty: part.qty,
-          from: WAREHOUSE,
-          to: storeLoc(store.id),
-          storeId: store.id,
-          refType: 'delivery',
-          refId: d.id,
-          actorId: ctx.actor.userId,
-        };
-        await ctx.repo.movements.put(mv);
-        snap.balances.apply(mv);
+    if (store.saleMode === 'firme') {
+      const items = d.items.flatMap((it) => {
+        const p = snap.productsById.get(it.productId);
+        return p ? splitIntoPacks(p, it.preparedQty ?? 0).map((part) => ({ productId: it.productId, pack: part.pack, packQty: part.packQty })) : [];
+      });
+      const invoice = await writeFirmInvoice(ctx, { store, items, origin: 'entrega', sellerId: store.sellerId || d.sellerId, deliveryId: d.id, reorderId: d.reorderId, snap });
+      d.invoiceId = invoice.id;
+    } else {
+      for (const it of d.items) {
+        const qty = it.preparedQty ?? 0;
+        if (qty <= 0) continue;
+        const product = snap.productsById.get(it.productId);
+        const parts = allocate(snap.balances, snap.lotsById, WAREHOUSE, it.productId, qty, product?.name);
+        for (const part of parts) {
+          const mv: Movement = {
+            id: ctx.newId('mov'),
+            at,
+            type: 'salida_consignacion',
+            productId: it.productId,
+            lotId: part.lotId,
+            qty: part.qty,
+            from: WAREHOUSE,
+            to: storeLoc(store.id),
+            storeId: store.id,
+            refType: 'delivery',
+            refId: d.id,
+            actorId: ctx.actor.userId,
+          };
+          await ctx.repo.movements.put(mv);
+          snap.balances.apply(mv);
+        }
       }
     }
     const received: Signature = { role: 'local', name: sig.name, image: sig.image, signedAt: at, geo: sig.geo, deviceUserId: ctx.actor.userId };
@@ -583,7 +602,7 @@ export async function createReorder(ctx: Ctx, input: { storeId: string; items: {
   return mutate(ctx, async () => {
     const store = await storeOrThrow(ctx, input.storeId);
     guard(ctx, 'reorder.create', { type: 'store', store });
-    const check = consignmentCheck(ctx.line, store, ctx.now());
+    const check = supplyCheck(ctx.line, store, ctx.now());
     if (!check.ok) throw new ValidationError(check.reason);
     const at = nowIso(ctx);
     const reorder: Reorder = {
@@ -596,6 +615,7 @@ export async function createReorder(ctx: Ctx, input: { storeId: string; items: {
       note: input.note?.trim() ?? '',
       createdAt: at,
       createdBy: ctx.actor.userId,
+      origin: ctx.actor.role === 'store' ? 'local' : 'vendedor',
       history: [{ status: 'enviado', at, by: ctx.actor.userId }],
     };
     await ctx.repo.reorders.put(reorder);
@@ -603,6 +623,68 @@ export async function createReorder(ctx: Ctx, input: { storeId: string; items: {
     await audit(ctx, 'pedido.crear', 'reorder', reorder.id, `${store.name} pidió ${units} unidades (${reorder.code})`);
     await notify(ctx, [store.sellerId], 'pedido_nuevo', `Pedido nuevo de ${store.name}`, `${reorder.code} · ${units} unidades. Confírmalo para que el almacén lo prepare.`, `/${ctx.line}/pedidos`);
     return reorder;
+  });
+}
+
+export const REORDER_ORIGIN_LABEL: Record<NonNullable<Reorder['origin']>, string> = {
+  local: 'Lo pidió el local',
+  vendedor: 'Lo pidió el vendedor',
+  telefono: 'Por teléfono',
+  pegado: 'Pegado de un mensaje',
+};
+
+/**
+ * Administración anota el pedido de un local que llamó por teléfono (o que se pegó de un mensaje de
+ * WhatsApp). Queda confirmado y pasa al almacén como entrega por preparar; sigue el camino de siempre
+ * (preparar → entregar con firma; el local que compra en firme recibe su factura al firmar).
+ */
+export async function createPhoneOrder(
+  ctx: Ctx,
+  input: { storeId: string; items: { productId: string; qty: number }[]; note?: string },
+  origin: 'telefono' | 'pegado' = 'telefono',
+): Promise<{ reorder: Reorder; delivery: Delivery }> {
+  guard(ctx, 'order.phone');
+  const items = itemsSchema.parse(input.items);
+  return mutate(ctx, async () => {
+    const store = await storeOrThrow(ctx, input.storeId);
+    const check = supplyCheck(ctx.line, store, ctx.now());
+    if (!check.ok) throw new ValidationError(check.reason);
+    const at = nowIso(ctx);
+    const note = input.note?.trim() ?? '';
+    const reorder: Reorder = {
+      id: ctx.newId('ped'),
+      code: await nextCode('P', ctx.repo.reorders.count()),
+      storeId: store.id,
+      sellerId: store.sellerId,
+      status: 'confirmado',
+      items,
+      note,
+      createdAt: at,
+      createdBy: ctx.actor.userId,
+      confirmedAt: at,
+      origin,
+      history: [
+        { status: 'enviado', at, by: ctx.actor.userId },
+        { status: 'confirmado', at, by: ctx.actor.userId },
+      ],
+    };
+    await ctx.repo.reorders.put(reorder);
+    const how = origin === 'telefono' ? 'Pedido por teléfono' : 'Pedido pegado de un mensaje';
+    const delivery = await writeDeliveryRequest(ctx, { storeId: store.id, items, note: `${how} ${reorder.code}${note ? `: ${note}` : ''}` }, { origin: 'pedido_local', reorderId: reorder.id });
+    reorder.deliveryId = delivery.id;
+    await ctx.repo.reorders.put(reorder);
+    const units = items.reduce((a, i) => a + i.qty, 0);
+    await audit(ctx, origin === 'telefono' ? 'pedido.telefono' : 'pedido.pegado', 'reorder', reorder.id, `${how}: ${reorder.code} de ${store.name}, ${units} unidades`);
+    const storeUsers = await ctx.repo.users.where('storeId', store.id);
+    await notify(
+      ctx,
+      [store.sellerId, ...storeUsers.map((u) => u.id)],
+      'pedido_confirmado',
+      `Pedido ${reorder.code} anotado`,
+      `La oficina anotó el pedido de ${store.name} (${how.toLowerCase()}). El almacén lo está preparando.`,
+      `/${ctx.line}/pedidos`,
+    );
+    return { reorder, delivery };
   });
 }
 

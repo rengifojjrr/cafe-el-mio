@@ -11,7 +11,7 @@ import type { NewPhoto } from '../../lib/image';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { getPhoto, listProducts } from '../../services/catalog';
-import { REORDER_STATUS_LABEL, cancelReorder, confirmReorder, createReorder, listDeliveries, listReorders, recordVisit, type DeliveryView, type ReorderView } from '../../services/consignment';
+import { REORDER_ORIGIN_LABEL, REORDER_STATUS_LABEL, cancelReorder, confirmReorder, createReorder, listDeliveries, listReorders, recordVisit, type DeliveryView, type ReorderView } from '../../services/consignment';
 import { getWarehouse } from '../../services/inventory';
 import { loadStoreForActor, storeConsignment } from '../../services/stores';
 import { Button, Card, EmptyState, ErrorBox, LinkButton, Loading, PageHeader, Pill, QtyStepper, Tabs, TextArea } from '../../ui/kit';
@@ -125,13 +125,13 @@ export function DeliveriesPage() {
   const by = (s: DTab) => (data ?? []).filter((d) => d.status === s);
   const subtitle =
     actor.role === 'admin'
-      ? 'El vendedor pide, administración aprueba y prepara, y el local firma la nota al recibir. Recién ahí baja el almacén.'
+      ? 'El vendedor pide, administración aprueba y prepara, y el local firma la nota al recibir. Recién ahí baja el almacén; si el local compra en firme, sale su factura.'
       : actor.role === 'seller'
         ? 'Lo que pediste para tus locales y lo que está listo para llevar.'
         : 'Lo que viene en camino a tu tienda y lo que ya recibiste.';
   return (
     <>
-      <PageHeader title="Entregas en consignación" subtitle={subtitle} />
+      <PageHeader title="Entregas" subtitle={subtitle} />
       <div className="mb-4">
         <Tabs<DTab>
           label="Entregas por estado"
@@ -189,8 +189,10 @@ export function DeliveryNotePrintPage() {
       ) : (
         <article className="print-sheet mx-auto max-w-[70ch] rounded-[20px] bg-papel px-6 py-8 text-papel-tinta">
           <h1 className="font-display text-3xl font-semibold">Nota de entrega {d.code}</h1>
+          {d.invoiceCode ? <p className="mt-1 text-lg font-semibold">Factura {d.invoiceCode}</p> : null}
           <p className="mt-1 text-sm text-papel-suave">
-            {config.companyName} · desde {wh.data?.name ?? 'el almacén'} · mercancía en consignación: sigue siendo de la empresa hasta que se vende.
+            {config.companyName} · desde {wh.data?.name ?? 'el almacén'} ·{' '}
+            {d.firm ? 'venta en firme: la mercancía es del local desde que la recibe.' : 'mercancía en consignación: sigue siendo de la empresa hasta que se vende.'}
           </p>
           <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
             <div>
@@ -256,6 +258,7 @@ function DeliveryNotePdf({ d }: { d: DeliveryView }) {
       sellerName={d.sellerName}
       address={`${store.data.address}, ${store.data.city}`}
       lines={d.itemsView.filter((i) => (i.preparedQty ?? i.qty) > 0).map((i) => ({ name: i.name, qty: i.preparedQty ?? i.qty }))}
+      invoiceCode={d.invoiceCode}
     />
   );
 }
@@ -350,6 +353,7 @@ function OrderCard({ r }: { r: ReorderView }) {
           <p className="text-sm text-muted">
             {fmtDateTime(r.createdAt)}
             {actor.role === 'admin' ? ` · ${r.sellerName}` : ''}
+            {r.origin === 'telefono' || r.origin === 'pegado' ? ` · ${REORDER_ORIGIN_LABEL[r.origin]}` : ''}
           </p>
         </div>
         <Pill tone={r.status === 'entregado' ? 'ok' : r.status === 'cancelado' ? 'danger' : r.status === 'enviado' ? 'warn' : 'accent'} dot>
@@ -433,6 +437,9 @@ function StoreOrder() {
     return v ? [{ product: v.product, qty: i.qty }] : [];
   }));
   const earning = items.reduce((a, i) => a + i.qty * (products.data?.find((v) => v.product.id === i.productId)?.storeEarning ?? 0), 0);
+  // El local que compra en firme ve lo que paga (su lista), no lo que gana.
+  const firm = Boolean(products.data?.some((v) => v.storePrice));
+  const cost = items.reduce((a, i) => a + i.qty * (products.data?.find((v) => v.product.id === i.productId)?.storePrice?.unit ?? 0), 0);
   const now = ctx.now();
   return (
     <form
@@ -446,7 +453,14 @@ function StoreOrder() {
         }, (r) => `Pedido ${r.code} enviado. Le llegó el aviso a tu vendedor.`);
       }}
     >
-      <PageHeader title="Pedir más producto" subtitle="Elige cuánto quieres de cada producto. Tu vendedor lo confirma y el almacén lo prepara; firmas la nota al recibir." />
+      <PageHeader
+        title="Pedir más producto"
+        subtitle={
+          firm
+            ? 'Elige cuánto quieres de cada producto, a tus precios. Tu vendedor lo confirma y el almacén lo prepara; al recibir firmas y te llega la factura.'
+            : 'Elige cuánto quieres de cada producto. Tu vendedor lo confirma y el almacén lo prepara; firmas la nota al recibir.'
+        }
+      />
       {products.loading && !products.data ? <Loading rows={4} /> : null}
       {products.error ? <ErrorBox error={products.error} /> : null}
       <ul className="grid gap-2">
@@ -459,9 +473,15 @@ function StoreOrder() {
               </div>
               <div className="min-w-0 flex-1 basis-40">
                 <p className="font-semibold">{v.product.name}</p>
-                <p className="text-sm text-muted">
-                  Ganas <b className="text-ok">{fmtMoney(v.storeEarning)}</b> por {unitOf(v.product).one} · {packText(v.product).toLowerCase()}
-                </p>
+                {v.storePrice ? (
+                  <p className="text-sm text-muted">
+                    <b className="text-ink">{fmtMoney(v.storePrice.unit)}</b> por {unitOf(v.product).one} · {fmtMoney(v.storePrice.box)} la caja · {packText(v.product).toLowerCase()}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted">
+                    Ganas <b className="text-ok">{fmtMoney(v.storeEarning)}</b> por {unitOf(v.product).one} · {packText(v.product).toLowerCase()}
+                  </p>
+                )}
                 <p className={`text-sm ${s.available > 0 ? 'text-muted' : 'text-warn'}`}>
                   {s.available > 0 ? `Hay ${unitsText(v.product, s.available)} en el almacén` : 'Sin disponibilidad ahora'}
                   {s.nextArrival ? ` · llegan ${s.nextArrival.qty} el ${fmtDate(s.nextArrival.eta)} (${fmtRelativeDays(s.nextArrival.eta, now)})` : ''}
@@ -478,7 +498,15 @@ function StoreOrder() {
       <div className="sticky bottom-[76px] z-20 mt-5 flex flex-wrap items-center justify-end gap-3 lg:bottom-4 lg:justify-start">
         {units > 0 ? (
           <p className="glass px-4 py-2 text-sm font-semibold">
-            {unitsLabel} · ganarías <span className="glow tabular">{fmtMoney(earning)}</span> al PVP sugerido
+            {firm ? (
+              <>
+                {unitsLabel} · unos <span className="glow tabular">{fmtMoney(cost)}</span> a tus precios
+              </>
+            ) : (
+              <>
+                {unitsLabel} · ganarías <span className="glow tabular">{fmtMoney(earning)}</span> al PVP sugerido
+              </>
+            )}
           </p>
         ) : null}
         <Button type="submit" variant="primary" big icon={Send} busy={busy} disabled={units === 0 || actor.readOnly}>

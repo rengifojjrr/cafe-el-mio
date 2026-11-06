@@ -6,7 +6,7 @@ import { AGING_LABEL, type AgingBucket } from '../../domain/money-rules';
 import { fmtMoney, fmtNumber } from '../../lib/money';
 import { fmtDate, fmtDateTime, fmtMonth, monthKey } from '../../lib/time';
 import { toCsv } from '../../services/analytics';
-import { PAYMENT_METHOD_LABEL, SETTLEMENT_STATUS_LABEL, recordPayment, type SettlementView } from '../../services/money';
+import { PAYMENT_METHOD_LABEL, SETTLEMENT_STATUS_LABEL, needsReference, recordPayment, type SettlementView } from '../../services/money';
 import { useLine } from '../../app/line-context';
 import { Button, EmptyState, Money, NumberInput, Pill, SelectInput, Sheet, TextInput } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
@@ -57,7 +57,14 @@ export function SettlementStatusPill({ s }: { s: Pick<SettlementView, 'status' |
 const BUCKET_TONE: Record<AgingBucket, string> = { '0-15': 'text-ok', '16-30': 'text-warn', '30+': 'text-danger' };
 const SHORT_BUCKET: Record<AgingBucket, string> = { '0-15': '0–15 días', '16-30': '16–30 días', '30+': '+30 días' };
 
-export function AgingCards({ aging }: { aging: Record<AgingBucket, { amount: number; count: number }> }) {
+export function AgingCards({
+  aging,
+  noun = { one: 'liquidación', many: 'liquidaciones' },
+}: {
+  aging: Record<AgingBucket, { amount: number; count: number }>;
+  /** Qué se cuenta: liquidaciones (lo de siempre) o cuentas (liquidaciones y facturas). */
+  noun?: { one: string; many: string };
+}) {
   return (
     <div className="grid grid-cols-3 gap-2 sm:gap-3" role="list" aria-label="Antigüedad de lo que se debe">
       {(Object.keys(AGING_LABEL) as AgingBucket[]).map((b) => (
@@ -68,7 +75,7 @@ export function AgingCards({ aging }: { aging: Record<AgingBucket, { amount: num
           </p>
           <p className={`tabular mt-1 text-base font-bold sm:text-2xl ${BUCKET_TONE[b]}`}>{fmtMoney(aging[b].amount)}</p>
           <p className="mt-0.5 text-xs text-muted sm:text-sm">
-            {aging[b].count === 0 ? 'Ninguna' : `${fmtNumber(aging[b].count)} liquidaci${aging[b].count === 1 ? 'ón' : 'ones'}`}
+            {aging[b].count === 0 ? 'Ninguna' : `${fmtNumber(aging[b].count)} ${aging[b].count === 1 ? noun.one : noun.many}`}
           </p>
         </div>
       ))}
@@ -229,8 +236,14 @@ export function PaymentSheet({ settlement, onClose }: { settlement: SettlementVi
             label="Referencia"
             value={reference}
             onChange={(e) => setReference(e.target.value)}
-            placeholder={method === 'cheque' ? 'Número de cheque' : method === 'efectivo' ? 'Opcional' : 'Número de confirmación'}
-            hint={method === 'efectivo' ? 'En efectivo puede quedar vacía.' : 'Número de cheque o de confirmación.'}
+            placeholder={method === 'cheque' ? 'Número de cheque' : needsReference(method) ? 'Número de confirmación' : 'Opcional'}
+            hint={
+              method === 'tarjeta'
+                ? 'Se cobra aparte, en el datáfono. Nunca escribas el número de la tarjeta.'
+                : needsReference(method)
+                  ? 'Número de cheque o de confirmación.'
+                  : 'En efectivo puede quedar vacía.'
+            }
           />
           <Button type="submit" variant="primary" icon={HandCoins} busy={busy}>
             Guardar pago

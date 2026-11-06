@@ -1,7 +1,8 @@
 // Liquidaciones, cobros y comisiones. Aquí no se mueve dinero: solo se registra el apunte
 // (efectivo, cheque, Zelle o transferencia, con su referencia).
 import { z } from 'zod';
-import type { Commission, CommissionPayout, Payment, PaymentMethod, SalesReport, Settlement, Store } from '../data/types';
+import type { Commission, CommissionPayout, Invoice, Payment, PaymentMethod, SalesReport, Settlement, Store } from '../data/types';
+import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
 import {
   type AgingBucket,
   aging,
@@ -26,6 +27,14 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   transferencia: 'Transferencia',
   tarjeta: 'Tarjeta (cobrada aparte)',
 };
+
+/**
+ * Cheque, Zelle y transferencia llevan referencia (número de cheque o de confirmación). Efectivo y
+ * tarjeta, no: la tarjeta se cobra aparte, en el datáfono, y aquí nunca se escribe su número.
+ */
+export function needsReference(method: PaymentMethod): boolean {
+  return method === 'cheque' || method === 'zelle' || method === 'transferencia';
+}
 
 export const SETTLEMENT_STATUS_LABEL: Record<Settlement['status'], string> = {
   pendiente: 'Pendiente',
@@ -68,38 +77,57 @@ export interface StoreAccount {
   store: Store;
   unsettledSales: number;
   unsettledReports: number;
+  /** Liquidado sin pagar (consignación). */
   balance: number;
+  /** Vencido: liquidaciones y facturas. */
   overdue: number;
   lastSettlementAt?: string;
   nextSettlementOn?: string;
   aging: Record<AgingBucket, { amount: number; count: number }>;
+  /** Venta en firme: facturas con saldo y cuánto. */
+  invoiceBalance: number;
+  invoiceOverdue: number;
+  openInvoices: number;
+  invoiceCount: number;
 }
 
-/** Estado de cuenta por local: lo vendido sin liquidar, lo que debe y su antigüedad. */
+/** Estado de cuenta por local: lo vendido sin liquidar, lo que debe (liquidaciones y facturas) y su antigüedad. */
 export async function storeAccounts(ctx: Ctx): Promise<StoreAccount[]> {
   guard(ctx, 'settlement.read');
   const stores = await scopedStores(ctx);
-  const [settlements, reports, settings] = await Promise.all([ctx.repo.settlements.all(), ctx.repo.salesReports.all(), getSettings(ctx)]);
+  const [settlements, reports, settings, invoices] = await Promise.all([ctx.repo.settlements.all(), ctx.repo.salesReports.all(), getSettings(ctx), ctx.repo.invoices.all()]);
   const now = ctx.now();
   return stores
     .filter((s) => s.status !== 'prospecto' && s.status !== 'contrato_enviado')
     .map((store) => {
       const mine = settlements.filter((s) => s.storeId === store.id);
+      const myInvoices = invoices.filter((i) => i.storeId === store.id);
+      const openInv = myInvoices.filter((i) => invoiceBalance(i) > 0);
       const unsettled = reports.filter((r) => r.storeId === store.id && !r.settlementId);
       const last = mine.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))[0];
       const base = last?.issuedAt ?? unsettled.map((r) => r.at).sort()[0];
+      const invoiceOverdue = round2(openInv.filter((i) => isInvoiceOverdue(i, now)).reduce((a, i) => a + invoiceBalance(i), 0));
       return {
         store,
         unsettledSales: round2(unsettled.reduce((a, r) => a + r.total, 0)),
         unsettledReports: unsettled.length,
         balance: round2(mine.reduce((a, s) => a + settlementBalance(s), 0)),
-        overdue: round2(mine.filter((s) => isOverdue(s, now)).reduce((a, s) => a + settlementBalance(s), 0)),
+        overdue: round2(mine.filter((s) => isOverdue(s, now)).reduce((a, s) => a + settlementBalance(s), 0) + invoiceOverdue),
         lastSettlementAt: last?.issuedAt,
         nextSettlementOn: base ? addDaysToDate(toIsoDate(base), settings.settlementEveryDays) : undefined,
-        aging: aging(mine, now),
+        aging: aging([...mine, ...openInv.map(asDebt)], now),
+        invoiceBalance: round2(openInv.reduce((a, i) => a + invoiceBalance(i), 0)),
+        invoiceOverdue,
+        openInvoices: openInv.length,
+        invoiceCount: myInvoices.length,
       };
     })
-    .sort((a, b) => b.overdue - a.overdue || b.balance - a.balance);
+    .sort((a, b) => b.overdue - a.overdue || b.balance + b.invoiceBalance - (a.balance + a.invoiceBalance));
+}
+
+/** Una factura vista como «lo que se debe» para la antigüedad (monto, pagado, emitida, vence). */
+export function asDebt(i: Pick<Invoice, 'total' | 'paid' | 'issuedAt' | 'dueOn'>): Pick<Settlement, 'amount' | 'paid' | 'issuedAt' | 'dueOn'> {
+  return { amount: i.total, paid: i.paid, issuedAt: i.issuedAt, dueOn: i.dueOn };
 }
 
 /** Liquida todo lo vendido y aún no liquidado de un local. */
@@ -183,7 +211,7 @@ const paymentSchema = z.object({
 export async function recordPayment(ctx: Ctx, settlementId: string, input: z.input<typeof paymentSchema>): Promise<Payment> {
   guard(ctx, 'payment.record');
   const data = paymentSchema.parse(input);
-  if (data.method !== 'efectivo' && data.reference.length < 2) {
+  if (needsReference(data.method) && data.reference.length < 2) {
     throw new ValidationError('Escribe la referencia (número de cheque o de confirmación).');
   }
   return mutate(ctx, async () => {
@@ -315,7 +343,7 @@ const payoutSchema = z.object({
 export async function payCommissions(ctx: Ctx, sellerId: string, input: z.input<typeof payoutSchema>): Promise<CommissionPayout> {
   guard(ctx, 'commission.pay');
   const data = payoutSchema.parse(input);
-  if (data.method !== 'efectivo' && data.reference.length < 2) throw new ValidationError('Escribe la referencia del pago.');
+  if (needsReference(data.method) && data.reference.length < 2) throw new ValidationError('Escribe la referencia del pago.');
   return mutate(ctx, async () => {
     const list = (await ctx.repo.commissions.where('sellerId', sellerId)).filter((c) => c.status === 'pagable');
     if (list.length === 0) throw new ValidationError('Este vendedor no tiene comisiones pagables.');

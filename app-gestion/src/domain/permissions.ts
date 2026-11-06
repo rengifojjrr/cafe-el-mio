@@ -57,7 +57,14 @@ export type Action =
   | 'settings.read'
   | 'settings.manage'
   | 'audit.read'
-  | 'direccion.read';
+  | 'direccion.read'
+  // Ronda 3 · venta en firme y precios
+  | 'invoice.read'
+  | 'sale.quick'
+  | 'order.phone'
+  | 'store.terms'
+  | 'pricelist.read'
+  | 'pricelist.manage';
 
 export type Resource =
   | { type: 'store'; store: Pick<Store, 'id' | 'sellerId'> }
@@ -87,6 +94,11 @@ const WRITE: ReadonlySet<Action> = new Set<Action>([
   'announcement.create',
   'user.manage',
   'settings.manage',
+  // Ronda 3 · venta en firme y precios
+  'sale.quick',
+  'order.phone',
+  'store.terms',
+  'pricelist.manage',
 ]);
 
 export function isWrite(action: Action): boolean {
@@ -110,6 +122,13 @@ const ADMIN_ONLY: ReadonlySet<Action> = new Set<Action>([
   'settings.read',
   'settings.manage',
   'audit.read',
+  // Ronda 3 · venta en firme y precios: venta rápida, pedidos por teléfono o pegados, condiciones
+  // de compra del local y listas de precios (llevan % sobre el costo) son de administración.
+  'sale.quick',
+  'order.phone',
+  'store.terms',
+  'pricelist.read',
+  'pricelist.manage',
 ]);
 
 /** Lo que cada rol puede hacer sin mirar el recurso. */
@@ -140,6 +159,8 @@ const ROLE_ACTIONS: Record<Exclude<Role, 'admin'>, ReadonlySet<Action>> = {
     'message.read',
     'message.send',
     'announcement.read',
+    // Ronda 3 · venta en firme y precios: las facturas de sus locales.
+    'invoice.read',
   ]),
   store: new Set<Action>([
     'product.read',
@@ -156,6 +177,8 @@ const ROLE_ACTIONS: Record<Exclude<Role, 'admin'>, ReadonlySet<Action>> = {
     'message.read',
     'message.send',
     'announcement.read',
+    // Ronda 3 · venta en firme y precios: sus facturas.
+    'invoice.read',
   ]),
   direccion: new Set<Action>(['direccion.read']),
 };
@@ -211,6 +234,13 @@ const ACTION_TEXT: Partial<Record<Action, string>> = {
   'user.manage': 'dar de alta usuarios',
   'settings.manage': 'cambiar los ajustes',
   'audit.read': 'ver la auditoría',
+  // Ronda 3 · venta en firme y precios
+  'invoice.read': 'ver estas facturas',
+  'sale.quick': 'registrar ventas rápidas',
+  'order.phone': 'tomar pedidos por teléfono o pegados',
+  'store.terms': 'cambiar cómo compra el local',
+  'pricelist.read': 'ver las listas de precios',
+  'pricelist.manage': 'cambiar las listas de precios',
 };
 
 export function ensure(actor: Actor, action: Action, line: LineId | null, res?: Resource): void {

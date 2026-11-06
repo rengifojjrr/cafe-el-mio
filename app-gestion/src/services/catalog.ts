@@ -7,6 +7,7 @@ import { capaShade, composeName, familyIdFor, variantLabelFor } from '../domain/
 import { can } from '../domain/permissions';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
 import { type InventorySnapshot, type StockLine, loadInventory, stockLines } from './inventory';
+import { type StorePrices, computeStorePrices, storeList } from './prices';
 
 /** Producto tal como lo ve un rol que no es administración: sin costo. */
 export type PublicProduct = Omit<Product, 'cost' | 'sampleCost'>;
@@ -23,6 +24,11 @@ export interface ProductView {
   /** Lo que gana el vendedor por unidad (vendedor: la suya; administración: la del producto). */
   sellerCommissionPerUnit?: number;
   sellerCommissionRule?: CommissionRule;
+  /**
+   * Ronda 3: el local que compra en firme ve solo SU precio (el de su lista), nunca el PVP. El local en
+   * consignación no lo lleva: sigue viendo el PVP y lo que gana (su margen).
+   */
+  storePrice?: { unit: number; box: number; listName: string; volume?: { minBoxes: number; box: number } };
 }
 
 export function hasCost(p: Product | PublicProduct): p is Product {
@@ -41,10 +47,25 @@ export async function listProducts(ctx: Ctx, opts?: { includeInactive?: boolean 
   const isAdmin = can(ctx.actor, 'product.readCost', ctx.line);
   const showInactive = isAdmin && opts?.includeInactive;
   const visible = await visibleStoreIds(ctx);
+  const firm = await firmPrices(ctx, snap);
   return snap.products
     .filter((p) => p.active || showInactive)
     .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-    .map((p) => toView(ctx, p, scopeStock(lines.get(p.id)!, snap, visible), isAdmin, seller));
+    .map((p) => withStorePrice(toView(ctx, p, scopeStock(lines.get(p.id)!, snap, visible), isAdmin, seller), firm));
+}
+
+/** Para la cuenta de un local que compra en firme: los precios de su lista. */
+async function firmPrices(ctx: Ctx, snap: InventorySnapshot): Promise<StorePrices | null> {
+  if (ctx.actor.role !== 'store' || !ctx.actor.storeId) return null;
+  const store = await ctx.repo.stores.get(ctx.actor.storeId);
+  if (!store || store.saleMode !== 'firme') return null;
+  return computeStorePrices(store, snap.products, await storeList(ctx, store));
+}
+
+function withStorePrice(view: ProductView, firm: StorePrices | null): ProductView {
+  const row = firm?.prices[view.product.id];
+  if (!firm || !row) return view;
+  return { ...view, storePrice: { unit: row.unit, box: row.box, listName: firm.listName, volume: row.volume } };
 }
 
 /** Locales cuya consignación puede ver el actor: todos (administración), los suyos (vendedor) o el propio (local). */
@@ -89,7 +110,7 @@ export async function getProduct(ctx: Ctx, id: string): Promise<ProductView> {
   const isAdmin = can(ctx.actor, 'product.readCost', ctx.line);
   if (!p.active && !isAdmin) throw new NotFoundError('el producto');
   const lines = stockLines(snap, ctx.now(), settings.expiryWarningDays);
-  return toView(ctx, p, scopeStock(lines.get(p.id)!, snap, await visibleStoreIds(ctx)), isAdmin, seller);
+  return withStorePrice(toView(ctx, p, scopeStock(lines.get(p.id)!, snap, await visibleStoreIds(ctx)), isAdmin, seller), await firmPrices(ctx, snap));
 }
 
 const ruleSchema = z.discriminatedUnion('type', [
