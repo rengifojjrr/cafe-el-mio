@@ -20,6 +20,7 @@ const SCREENS: Record<string, string[]> = {
     '/tabaco/venta-rapida',
     '/tabaco/pedido-telefono?local=t-loc_f0001',
     '/tabaco/pegar-pedido',
+    '/tabaco/ajustes/precios',
     '/tabaco/locales/t-loc_f0001',
   ],
   'tabaco:seller': ['/tabaco', '/tabaco/locales', '/tabaco/pedidos', '/tabaco/comisiones', '/tabaco/contratos'],

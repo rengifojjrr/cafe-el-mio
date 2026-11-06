@@ -16,6 +16,7 @@ import { listStores, listZones } from '../../services/stores';
 import { Button, Card, EmptyState, ErrorBox, Field, Loading, NumberInput, PageHeader, Pill, Section, SelectInput, Sheet, TextInput } from '../../ui/kit';
 import { MapView, type MapMarker } from '../../ui/map';
 import { useAction } from '../../ui/toast';
+import { FirmSalesSettings } from '../sales/price-lists';
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { actor } = useLine();
@@ -391,7 +392,13 @@ function SettingsInner() {
   if (settings.loading && !settings.data) return <Loading rows={5} />;
   if (settings.error) return <ErrorBox error={settings.error} />;
   if (!settings.data) return null;
-  return <SettingsForm settings={settings.data} products={products.data ?? []} />;
+  return (
+    <>
+      <SettingsForm settings={settings.data} products={products.data ?? []} />
+      {/* Ronda 3 · venta en firme y precios */}
+      <FirmSalesSettings />
+    </>
+  );
 }
 
 function SettingsForm({ settings, products }: { settings: LineSettings; products: ProductView[] }) {

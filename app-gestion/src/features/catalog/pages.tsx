@@ -35,6 +35,7 @@ import { PhotoPicker, ProductThumb, useStoredPhoto } from '../../ui/media';
 import { useAction } from '../../ui/toast';
 import { attrText } from '../common';
 import { QuickOrderSheet } from '../consignment/components';
+import { StorePrice } from '../sales/store-price';
 
 function arrivalText(n: NextArrival | undefined, now: Date): string {
   if (!n) return 'Sin llegada programada';
@@ -145,6 +146,10 @@ function ProductCard({ view, now, onOrder }: { view: ProductView; now: Date; onO
             </span>
           ))}
         </div>
+        {view.storePrice ? (
+          // El local que compra en firme ve solo su precio (nunca el PVP).
+          <StorePrice view={view} className="mt-auto pt-2" />
+        ) : (
         <div className="mt-auto grid grid-cols-2 gap-x-3 gap-y-1 pt-2 text-sm">
           <span className="text-muted">Precio al local</span>
           <span className="text-right font-semibold tabular">{fmtMoney(pr.priceToStore)}</span>
@@ -169,6 +174,7 @@ function ProductCard({ view, now, onOrder }: { view: ProductView; now: Date; onO
             </>
           ) : null}
         </div>
+        )}
         <div className="mt-2 border-t border-line pt-2 text-sm">
           <p className="flex justify-between gap-2">
             <span className="text-muted">Disponible en almacén</span>
@@ -297,6 +303,7 @@ export function ProductDetailPage() {
           </Card>
           <Card className="p-4">
             <h2 className="mb-2 font-bold">Precios</h2>
+            {v.storePrice ? <StorePrice view={v} /> : (
             <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
               <dt className="text-muted">Precio al local</dt>
               <dd className="text-right font-semibold tabular">{fmtMoney(pr.priceToStore)}</dd>
@@ -322,6 +329,7 @@ export function ProductDetailPage() {
                 </>
               ) : null}
             </dl>
+            )}
             <p className="mt-2 text-xs text-muted">
               Presentación: {packText(pr)}.
             </p>
