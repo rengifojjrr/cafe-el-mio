@@ -17,6 +17,7 @@ function page<T extends Record<string, ComponentType>>(loader: () => Promise<T>,
 const home = () => import('../features/home/LineHome');
 const catalog = () => import('../features/catalog/pages');
 const catalogImport = () => import('../features/catalog/import');
+const batchPhotos = () => import('../features/catalog/batch-photos');
 const warehouse = () => import('../features/warehouse/WarehousePage');
 const stores = () => import('../features/stores/pages');
 const contracts = () => import('../features/contracts/pages');
@@ -64,6 +65,7 @@ const router = createHashRouter([
           { path: 'catalogo', element: page(catalog, 'CatalogPage') },
           { path: 'catalogo/nuevo', element: page(catalog, 'ProductFormPage') },
           { path: 'catalogo/importar', element: page(catalogImport, 'ImportProductsPage') },
+          { path: 'catalogo/fotos', element: page(batchPhotos, 'BatchPhotosPage') },
           { path: 'catalogo/:id', element: page(catalog, 'ProductDetailPage') },
           { path: 'catalogo/:id/editar', element: page(catalog, 'ProductFormPage') },
           { path: 'almacen', element: page(warehouse, 'WarehousePage') },

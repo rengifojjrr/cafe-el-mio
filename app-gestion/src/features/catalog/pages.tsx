@@ -1,6 +1,6 @@
 // Catálogo: fichas con la silueta a escala (tabaco) o la foto de la marca (café), precios,
 // lo que gana el local, la comisión del vendedor y la disponibilidad con la próxima llegada.
-import { AlertTriangle, BookOpen, Camera, Eye, EyeOff, FileSpreadsheet, PackagePlus, Pencil, Plus, Save, Search, ShoppingBag, Trash2, Truck } from 'lucide-react';
+import { AlertTriangle, ArrowUpDown, BookOpen, Camera, Eye, EyeOff, FileSpreadsheet, Images, PackagePlus, Pencil, Plus, Save, Search, ShoppingBag, Trash2, Truck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { CommissionRule, Product } from '../../data/types';
@@ -35,6 +35,7 @@ import { PhotoPicker, ProductThumb, useStoredPhoto } from '../../ui/media';
 import { useAction } from '../../ui/toast';
 import { attrText } from '../common';
 import { QuickOrderSheet } from '../consignment/components';
+import { PhotoOrderSheet } from './photo-order';
 
 function arrivalText(n: NextArrival | undefined, now: Date): string {
   if (!n) return 'Sin llegada programada';
@@ -83,6 +84,9 @@ export function CatalogPage() {
               </LinkButton>
               <LinkButton to={p('catalogo/importar')} icon={FileSpreadsheet}>
                 Importar
+              </LinkButton>
+              <LinkButton to={p('catalogo/fotos')} icon={Images}>
+                Fotos en lote
               </LinkButton>
             </>
           ) : null
@@ -410,6 +414,7 @@ export function ProductDetailPage() {
 function PhotoStrip({ productId, photoIds, canEdit }: { productId: string; photoIds: string[]; canEdit: boolean }) {
   const { ctx } = useLine();
   const { run } = useAction();
+  const [ordering, setOrdering] = useState(false);
   if (!canEdit && photoIds.length === 0) return null;
   return (
     <div className="mt-4">
@@ -418,7 +423,13 @@ function PhotoStrip({ productId, photoIds, canEdit }: { productId: string; photo
           <PhotoTile key={pid} id={pid} onRemove={canEdit ? () => void run(() => removeProductPhoto(ctx, productId, pid), 'Foto quitada.') : undefined} />
         ))}
         {canEdit ? <PhotoPicker label="Agregar foto" onPhoto={async (ph) => void (await run(() => addProductPhoto(ctx, productId, ph), 'Foto guardada (WebP, 1600 px máx.).'))} /> : null}
+        {canEdit && photoIds.length > 1 ? (
+          <Button variant="ghost" icon={ArrowUpDown} onClick={() => setOrdering(true)}>
+            Ordenar
+          </Button>
+        ) : null}
       </div>
+      {ordering ? <PhotoOrderSheet productId={productId} photoIds={photoIds} onClose={() => setOrdering(false)} /> : null}
       {canEdit && photoIds.length === 0 ? (
         <p className="mt-2 flex items-center gap-2 text-sm text-muted">
           <Camera className="h-4 w-4" aria-hidden /> Mientras no haya fotos reales, la ficha usa la silueta a escala o la foto de la marca.

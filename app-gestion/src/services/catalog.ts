@@ -256,3 +256,52 @@ export async function getPhoto(ctx: Ctx, photoId: string): Promise<Photo | undef
   guard(ctx, 'product.read');
   return ctx.repo.photos.get(photoId);
 }
+
+/** Cambia el orden de las fotos de un producto (la primera es la que se ve en el catálogo). */
+export async function reorderProductPhotos(ctx: Ctx, productId: string, photoIds: string[]): Promise<void> {
+  guard(ctx, 'product.write');
+  await mutate(ctx, async () => {
+    const p = await ctx.repo.products.get(productId);
+    if (!p) throw new NotFoundError('el producto');
+    const same = photoIds.length === p.photoIds.length && new Set(photoIds).size === photoIds.length && photoIds.every((id) => p.photoIds.includes(id));
+    if (!same) throw new ValidationError('El orden nuevo tiene que tener las mismas fotos del producto.');
+    p.photoIds = [...photoIds];
+    p.updatedAt = nowIso(ctx);
+    await ctx.repo.products.put(p);
+    await audit(ctx, 'producto.fotos.orden', 'product', p.id, `Fotos de ${p.name} en otro orden`);
+  });
+}
+
+/** Una foto que ya tiene el producto o una nueva (ya comprimida en el navegador). */
+export type PhotoSlot = { existingId: string } | { photo: Omit<Photo, 'id' | 'ownerType' | 'ownerId' | 'createdAt'> };
+
+/**
+ * Fotos en lote: agrega las nuevas en el orden pedido. Las que ya tenía se conservan siempre
+ * (las que no vengan en el orden quedan al final) y el producto no pasa de `max` fotos.
+ */
+export async function addProductPhotos(ctx: Ctx, productId: string, slots: PhotoSlot[], max = 3): Promise<string[]> {
+  guard(ctx, 'product.write');
+  return mutate(ctx, async () => {
+    const p = await ctx.repo.products.get(productId);
+    if (!p) throw new NotFoundError('el producto');
+    const order: string[] = [];
+    let added = 0;
+    for (const slot of slots) {
+      if ('existingId' in slot) {
+        if (p.photoIds.includes(slot.existingId) && !order.includes(slot.existingId)) order.push(slot.existingId);
+        continue;
+      }
+      const id = ctx.newId('pho');
+      await ctx.repo.photos.put({ ...slot.photo, id, ownerType: 'product', ownerId: productId, createdAt: nowIso(ctx) });
+      order.push(id);
+      added += 1;
+    }
+    for (const id of p.photoIds) if (!order.includes(id)) order.push(id);
+    if (added && order.length > max) throw new ValidationError(`${p.name} llegaría a ${order.length} fotos: cada producto lleva hasta ${max}.`);
+    p.photoIds = order;
+    p.updatedAt = nowIso(ctx);
+    await ctx.repo.products.put(p);
+    if (added) await audit(ctx, 'producto.fotos.lote', 'product', p.id, `${added === 1 ? 'Una foto nueva' : `${added} fotos nuevas`} para ${p.name} (fotos en lote)`);
+    return order;
+  });
+}
