@@ -1,11 +1,13 @@
 // Contabilidad por línea (nunca mezclada), rentabilidad, reportes y datos del mapa.
-import type { Product, Store } from '../data/types';
+import type { Market, Product, Store } from '../data/types';
 import { WAREHOUSE, storeLoc } from '../domain/ledger';
 import { aging, settlementBalance } from '../domain/money-rules';
 import { round2 } from '../lib/money';
-import { addDays, daysBetween, monthKey } from '../lib/time';
+import { addDays, daysBetween, monthKey, toIsoDate } from '../lib/time';
 import { type Ctx, guard, getSettings } from './context';
 import { loadInventory } from './inventory';
+import { loadMarketIndex } from './markets';
+import { distributionShares } from './routes';
 import { scopedStores } from './stores';
 
 export interface PnlMonth {
@@ -14,6 +16,8 @@ export interface PnlMonth {
   cogs: number;
   commissions: number;
   shrink: number;
+  /** Costo de distribución: los repartos terminados del mes (km, chofer y peajes). */
+  distribution: number;
   grossMargin: number;
   units: number;
 }
@@ -37,8 +41,8 @@ async function loadMoney(ctx: Ctx) {
 /** Estado de resultados por mes: ventas al precio al local, costo por lote, comisiones y mermas. */
 export async function pnlByMonth(ctx: Ctx, months = 4): Promise<PnlMonth[]> {
   guard(ctx, 'accounting.read');
-  const { reports, commissions, returns } = await loadMoney(ctx);
-  return computePnl(reports, commissions, returns, ctx.now(), months);
+  const [{ reports, commissions, returns }, dist] = await Promise.all([loadMoney(ctx), distributionShares(ctx)]);
+  return computePnl(reports, commissions, returns, ctx.now(), months, dist.shares.map((s) => ({ at: s.date, amount: s.cost })));
 }
 
 export function computePnl(
@@ -47,6 +51,8 @@ export function computePnl(
   returns: Awaited<ReturnType<typeof loadMoney>>['returns'],
   now: Date,
   months: number,
+  /** Costo de distribución por fecha (repartos terminados). */
+  distribution: readonly { at: string; amount: number }[] = [],
 ): PnlMonth[] {
   const keys: string[] = [];
   for (let i = months - 1; i >= 0; i--) {
@@ -55,7 +61,7 @@ export function computePnl(
     d.setUTCMonth(d.getUTCMonth() - i);
     keys.push(monthKey(d));
   }
-  const rows = new Map(keys.map((k) => [k, { month: k, revenue: 0, cogs: 0, commissions: 0, shrink: 0, grossMargin: 0, units: 0 }]));
+  const rows = new Map(keys.map((k) => [k, { month: k, revenue: 0, cogs: 0, commissions: 0, shrink: 0, distribution: 0, grossMargin: 0, units: 0 }]));
   for (const r of reports) {
     const row = rows.get(monthKey(r.at));
     if (!row) continue;
@@ -74,13 +80,19 @@ export function computePnl(
     const row = rows.get(monthKey(x.at));
     if (row) row.shrink += x.cost;
   }
+  for (const d of distribution) {
+    // Una fecha sin hora (la del reparto) es de ese día en Miami.
+    const row = rows.get(d.at.length === 10 ? d.at.slice(0, 7) : monthKey(d.at));
+    if (row) row.distribution += d.amount;
+  }
   return [...rows.values()].map((r) => ({
     ...r,
     revenue: round2(r.revenue),
     cogs: round2(r.cogs),
     commissions: round2(r.commissions),
     shrink: round2(r.shrink),
-    grossMargin: round2(r.revenue - r.cogs - r.commissions - r.shrink),
+    distribution: round2(r.distribution),
+    grossMargin: round2(r.revenue - r.cogs - r.commissions - r.shrink - r.distribution),
   }));
 }
 
@@ -178,12 +190,19 @@ export interface ProfitRow {
   revenue: number;
   cogs: number;
   commissions: number;
+  /** Costo de distribución (repartos terminados), repartido por unidades entregadas. */
+  distribution: number;
   margin: number;
   marginPct: number;
 }
 
 export interface ReportsData {
   periodDays: number;
+  /** Mercado filtrado (o null: todos). */
+  marketId: string | null;
+  markets: Market[];
+  /** Costo de repartos terminados del periodo que no se pudo repartir (no entregaron nada). */
+  distributionUnallocated: number;
   topSold: { productId: string; name: string; units: number; revenue: number }[];
   topRequested: { productId: string; name: string; units: number; orders: number }[];
   sellThrough: { productId: string; name: string; placed: number; sold: number; ratio: number; rotationDays: number | null }[];
@@ -196,13 +215,32 @@ export interface ReportsData {
   unmetDemand: { productId: string; name: string; units: number; stores: number }[];
 }
 
-export async function reports(ctx: Ctx, periodDays = 90): Promise<ReportsData> {
+export async function reports(ctx: Ctx, periodDays = 90, opts?: { marketId?: string | null }): Promise<ReportsData> {
   guard(ctx, 'reports.read');
-  const [snap, money, settings] = await Promise.all([loadInventory(ctx), loadMoney(ctx), getSettings(ctx)]);
   const now = ctx.now();
   const since = addDays(now, -periodDays);
+  const [snap, all, settings, idx, dist] = await Promise.all([loadInventory(ctx), loadMoney(ctx), getSettings(ctx), loadMarketIndex(ctx), distributionShares(ctx, toIsoDate(since))]);
+  // Mercado: todo lo de los locales de ese mercado (ventas, pedidos, demanda, consignación y repartos).
+  const marketId = opts?.marketId && idx.markets.some((m) => m.id === opts.marketId) ? opts.marketId : null;
+  const storeById = new Map(all.stores.map((st) => [st.id, st]));
+  const inMarket = (storeId: string | null | undefined) => {
+    if (!marketId) return true;
+    const st = storeId ? storeById.get(storeId) : undefined;
+    return st ? idx.storeMarket(st) === marketId : false;
+  };
+  const money = marketId
+    ? {
+        ...all,
+        reports: all.reports.filter((r) => inMarket(r.storeId)),
+        commissions: all.commissions.filter((c) => inMarket(c.storeId)),
+        stores: all.stores.filter((st) => inMarket(st.id)),
+        reorders: all.reorders.filter((o) => inMarket(o.storeId)),
+        unmet: all.unmet.filter((u) => inMarket(u.storeId)),
+      }
+    : all;
+  const shares = dist.shares.filter((x) => inMarket(x.storeId));
   const pName = (id: string) => snap.productsById.get(id)?.name ?? id;
-  const storesById = new Map(money.stores.map((s) => [s.id, s]));
+  const storesById = storeById;
   const usersById = new Map(money.users.map((u) => [u.id, u]));
   const zonesById = new Map(money.zones.map((z) => [z.id, z]));
 
@@ -214,17 +252,18 @@ export async function reports(ctx: Ctx, periodDays = 90): Promise<ReportsData> {
   }
 
   const profit = new Map<string, Map<string, ProfitRow>>();
-  const bump = (dim: string, key: string, label: string, units: number, revenue: number, cogs: number, comm: number) => {
+  const bump = (dim: string, key: string, label: string, units: number, revenue: number, cogs: number, comm: number, distribution = 0) => {
     let m = profit.get(dim);
     if (!m) {
       m = new Map();
       profit.set(dim, m);
     }
-    const row = m.get(key) ?? { key, label, units: 0, revenue: 0, cogs: 0, commissions: 0, margin: 0, marginPct: 0 };
+    const row = m.get(key) ?? { key, label, units: 0, revenue: 0, cogs: 0, commissions: 0, distribution: 0, margin: 0, marginPct: 0 };
     row.units += units;
     row.revenue += revenue;
     row.cogs += cogs;
     row.commissions += comm;
+    row.distribution += distribution;
     m.set(key, row);
   };
   for (const r of recent) {
@@ -240,15 +279,26 @@ export async function reports(ctx: Ctx, periodDays = 90): Promise<ReportsData> {
       bump('zone', zone?.id ?? 'sin-zona', zone?.name ?? 'Sin zona', l.qty, revenue, l.cost, comm);
     }
   }
+  // Costo de distribución: cada parte de un reparto terminado va a su producto, local, vendedor y zona.
+  for (const x of shares) {
+    const store = storesById.get(x.storeId);
+    const seller = usersById.get(x.sellerId);
+    const zone = store ? zonesById.get(store.zoneId) : undefined;
+    bump('product', x.productId, pName(x.productId), 0, 0, 0, 0, x.cost);
+    bump('store', x.storeId, store?.name ?? x.storeId, 0, 0, 0, 0, x.cost);
+    bump('seller', x.sellerId, seller?.name ?? x.sellerId, 0, 0, 0, 0, x.cost);
+    bump('zone', zone?.id ?? 'sin-zona', zone?.name ?? 'Sin zona', 0, 0, 0, 0, x.cost);
+  }
   const finish = (dim: string): ProfitRow[] =>
     [...(profit.get(dim)?.values() ?? [])]
       .map((r) => {
-        const margin = r.revenue - r.cogs - r.commissions;
+        const margin = r.revenue - r.cogs - r.commissions - r.distribution;
         return {
           ...r,
           revenue: round2(r.revenue),
           cogs: round2(r.cogs),
           commissions: round2(r.commissions),
+          distribution: round2(r.distribution),
           margin: round2(margin),
           marginPct: r.revenue > 0 ? margin / r.revenue : 0,
         };
@@ -277,11 +327,16 @@ export async function reports(ctx: Ctx, periodDays = 90): Promise<ReportsData> {
   const placed = new Map<string, number>();
   const sold = new Map<string, number>();
   for (const m of snap.movements) {
-    if (m.at < since) continue;
+    if (m.at < since || !inMarket(m.storeId)) continue;
     if (m.type === 'salida_consignacion') placed.set(m.productId, (placed.get(m.productId) ?? 0) + m.qty);
     if (m.type === 'venta_reportada') sold.set(m.productId, (sold.get(m.productId) ?? 0) + m.qty);
   }
-  const consign = snap.balances.consignmentTotals();
+  const consign = marketId ? new Map<string, number>() : snap.balances.consignmentTotals();
+  if (marketId) {
+    for (const st of money.stores) {
+      for (const [pid, q] of snap.balances.byProduct(storeLoc(st.id))) if (q > 0) consign.set(pid, (consign.get(pid) ?? 0) + q);
+    }
+  }
   const sellThrough = snap.products
     .filter((p) => p.active)
     .map((p) => {
@@ -336,6 +391,9 @@ export async function reports(ctx: Ctx, periodDays = 90): Promise<ReportsData> {
 
   return {
     periodDays,
+    marketId,
+    markets: idx.markets,
+    distributionUnallocated: marketId ? 0 : dist.unallocated,
     topSold,
     topRequested,
     sellThrough,
@@ -353,6 +411,8 @@ export async function reports(ctx: Ctx, periodDays = 90): Promise<ReportsData> {
 
 export interface MapStore {
   store: Store;
+  /** Mercado del local (el suyo, el de su zona o el primero). */
+  marketId: string;
   sellerName: string;
   units: number;
   sales30: number;
@@ -365,14 +425,16 @@ export interface MapStore {
 export interface MapData {
   warehouse: { name: string; lat: number; lng: number; units: number };
   stores: MapStore[];
-  sellers: { id: string; name: string; lat: number; lng: number; at: string; storeName: string; storeId: string }[];
+  sellers: { id: string; name: string; lat: number; lng: number; at: string; storeName: string; storeId: string; marketId: string }[];
   maxSales: number;
+  /** Mercados de la línea; el almacén queda en el primero. */
+  markets: Market[];
 }
 
 export async function mapData(ctx: Ctx): Promise<MapData> {
   guard(ctx, 'map.read');
   const stores = await scopedStores(ctx);
-  const [snap, users, visits, reports, reorders, deliveries, warehouse, settlements] = await Promise.all([
+  const [snap, users, visits, reports, reorders, deliveries, warehouse, settlements, idx] = await Promise.all([
     loadInventory(ctx),
     ctx.repo.users.all(),
     ctx.repo.visits.all(),
@@ -381,6 +443,7 @@ export async function mapData(ctx: Ctx): Promise<MapData> {
     ctx.repo.deliveries.all(),
     ctx.repo.warehouses.get('almacen'),
     ctx.repo.settlements.all(),
+    loadMarketIndex(ctx),
   ]);
   const now = ctx.now();
   const since = addDays(now, -30);
@@ -392,6 +455,7 @@ export async function mapData(ctx: Ctx): Promise<MapData> {
     const lastVisit = visits.filter((v) => v.storeId === s.id).sort((a, b) => b.at.localeCompare(a.at))[0];
     return {
       store: s,
+      marketId: idx.storeMarket(s),
       sellerName: usersById.get(s.sellerId)?.name ?? '—',
       units: [...held.values()].reduce((a, b) => a + Math.max(0, b), 0),
       sales30: round2(reports.filter((r) => r.storeId === s.id && r.at >= since).reduce((a, r) => a + r.total, 0)),
@@ -420,6 +484,7 @@ export async function mapData(ctx: Ctx): Promise<MapData> {
       at: v.at,
       storeName: store.name,
       storeId: store.id,
+      marketId: idx.storeMarket(store),
     });
   }
   return {
@@ -432,6 +497,7 @@ export async function mapData(ctx: Ctx): Promise<MapData> {
     stores: out,
     sellers,
     maxSales: Math.max(1, ...out.map((s) => s.sales30)),
+    markets: idx.markets,
   };
 }
 

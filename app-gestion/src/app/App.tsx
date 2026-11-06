@@ -26,6 +26,7 @@ const insight = () => import('../features/insight/pages');
 const comms = () => import('../features/comms/pages');
 const admin = () => import('../features/admin/pages');
 const direccion = () => import('../features/direccion/DireccionPage');
+const red = () => import('../features/red/pages');
 const LineLayoutLazy = lazy(() => import('./LineLayout').then((m) => ({ default: m.LineLayout })));
 
 function RouteError() {
@@ -50,6 +51,7 @@ const router = createHashRouter([
     children: [
       { path: '/', element: <Portada /> },
       { path: '/direccion', element: page(direccion, 'DireccionPage') },
+      { path: '/invitacion/:token', element: page(red, 'InvitationPage') },
       {
         path: '/:line',
         element: (
@@ -82,6 +84,9 @@ const router = createHashRouter([
           { path: 'cuentas', element: page(money, 'StoreAccountsPage') },
           { path: 'comisiones', element: page(money, 'CommissionsPage') },
           { path: 'contabilidad', element: page(money, 'AccountingPage') },
+          { path: 'contabilidad/contadora', element: page(red, 'AccountantReportPage') },
+          { path: 'repartos', element: page(red, 'RoutesPage') },
+          { path: 'repartos/:id', element: page(red, 'RouteDetailPage') },
           { path: 'mapa', element: page(insight, 'MapPage') },
           { path: 'reportes', element: page(insight, 'ReportsPage') },
           { path: 'mensajes', element: page(comms, 'MessagesPage') },

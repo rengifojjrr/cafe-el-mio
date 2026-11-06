@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import type { AuditEntry, LineSettings, User, Zone } from '../data/types';
 import { templateVariables } from '../domain/contract';
+import { marketsOf, pointInMarket } from '../domain/markets';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
 
 export async function listUsers(ctx: Ctx): Promise<User[]> {
@@ -29,6 +30,8 @@ const userSchema = z.object({
   email: z.union([z.literal(''), z.string().trim().email('Escribe un correo válido.')]),
   phone: z.string().trim().max(20, 'El teléfono es demasiado largo.').default(''),
   zoneId: z.string().optional(),
+  /** Vendedor: su mercado (si falta, el de su zona). */
+  marketId: z.string().optional(),
   commissionOverride: ruleSchema.optional(),
   active: z.boolean().default(true),
 });
@@ -41,6 +44,13 @@ export async function saveUser(ctx: Ctx, input: z.input<typeof userSchema>): Pro
   return mutate(ctx, async () => {
     const prev = data.id ? await ctx.repo.users.get(data.id) : undefined;
     if (data.id && !prev) throw new NotFoundError('el usuario');
+    let marketId = data.role === 'seller' ? (data.marketId ?? prev?.marketId) : undefined;
+    if (marketId) {
+      const markets = marketsOf(await getSettings(ctx));
+      if (!markets.some((m) => m.id === marketId)) throw new ValidationError('Ese mercado no existe en la línea.');
+      const zone = data.zoneId ? await ctx.repo.zones.get(data.zoneId) : undefined;
+      if (zone && (zone.marketId ?? markets[0]!.id) !== marketId) throw new ValidationError('La zona elegida es de otro mercado.');
+    } else marketId = undefined;
     const user: User = {
       id: prev?.id ?? ctx.newId('usr'),
       role: data.role,
@@ -49,9 +59,14 @@ export async function saveUser(ctx: Ctx, input: z.input<typeof userSchema>): Pro
       phone: data.phone,
       zoneId: data.zoneId,
       commissionOverride: data.role === 'seller' ? data.commissionOverride : undefined,
+      // Lo de la ronda 3 que se edita en otras pantallas se conserva al guardar.
+      commissionScheme: data.role === 'seller' ? prev?.commissionScheme : undefined,
+      marketId,
       active: data.active,
       createdAt: prev?.createdAt ?? nowIso(ctx),
     };
+    if (!user.commissionScheme) delete user.commissionScheme;
+    if (!user.marketId) delete user.marketId;
     await ctx.repo.users.put(user);
     await audit(ctx, prev ? 'usuario.editar' : 'usuario.crear', 'user', user.id, `${prev ? 'Editado' : 'Alta de'} ${user.role === 'seller' ? 'vendedor' : 'administración'}: ${user.name}`);
     return user;
@@ -73,15 +88,25 @@ export async function setUserActive(ctx: Ctx, userId: string, active: boolean): 
 const zoneSchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(2, 'Escribe el nombre de la zona.'),
-  lat: z.number({ error: 'Toca el mapa o escribe la latitud.' }).min(24, 'El punto queda fuera del sur de Florida.').max(27.5, 'El punto queda fuera del sur de Florida.'),
-  lng: z.number({ error: 'Toca el mapa o escribe la longitud.' }).min(-82.5, 'El punto queda fuera del sur de Florida.').max(-79.5, 'El punto queda fuera del sur de Florida.'),
+  lat: z.number({ error: 'Toca el mapa o escribe la latitud.' }),
+  lng: z.number({ error: 'Toca el mapa o escribe la longitud.' }),
+  /** Mercado de la zona (si falta, el primero de la línea). */
+  marketId: z.string().optional(),
 });
 
 export async function saveZone(ctx: Ctx, input: z.input<typeof zoneSchema>): Promise<Zone> {
   guard(ctx, 'user.manage');
   const data = zoneSchema.parse(input);
   return mutate(ctx, async () => {
-    const zone: Zone = { id: data.id ?? ctx.newId('zon'), name: data.name, lat: data.lat, lng: data.lng };
+    const markets = marketsOf(await getSettings(ctx));
+    const prev = data.id ? await ctx.repo.zones.get(data.id) : undefined;
+    const marketId = data.marketId ?? prev?.marketId ?? markets[0]!.id;
+    const market = markets.find((m) => m.id === marketId);
+    if (!market) throw new ValidationError('Ese mercado no existe en la línea.');
+    if (!pointInMarket(market, data.lat, data.lng)) {
+      throw new ValidationError(market.id === 'miami' ? 'El punto queda fuera del sur de Florida.' : `El punto queda lejos de ${market.name}.`);
+    }
+    const zone: Zone = { id: data.id ?? ctx.newId('zon'), name: data.name, lat: data.lat, lng: data.lng, marketId };
     await ctx.repo.zones.put(zone);
     await audit(ctx, 'zona.guardar', 'zone', zone.id, `Zona ${zone.name}`);
     return zone;

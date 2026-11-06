@@ -2,6 +2,8 @@
 import { z } from 'zod';
 import type { Contract, Photo, Store, StoreStatus, User } from '../data/types';
 import { permitState, type PermitState } from '../domain/compliance';
+import { DEFAULT_PERMIT_ISSUER, normalizeEin } from '../domain/fiscal';
+import { pointInMarket } from '../domain/markets';
 import { WAREHOUSE, storeLoc } from '../domain/ledger';
 import { settlementBalance, storeEarning } from '../domain/money-rules';
 import { can } from '../domain/permissions';
@@ -9,6 +11,7 @@ import { round2 } from '../lib/money';
 import { addDays, addDaysToDate, daysBetween, toIsoDate } from '../lib/time';
 import { type Ctx, ForbiddenError, NotFoundError, ValidationError, audit, guard, mutate, notify, nowIso } from './context';
 import { loadInventory } from './inventory';
+import { loadMarketIndex } from './markets';
 
 export const STORE_STATUS_LABEL: Record<StoreStatus, string> = {
   prospecto: 'Prospecto',
@@ -128,6 +131,8 @@ export interface ConsignmentLine {
   productId: string;
   name: string;
   sku: string;
+  /** Unidad del producto (mazo, tabaco, unidad). */
+  unitName: string;
   qty: number;
   priceToStore: number;
   suggestedRetail: number;
@@ -159,6 +164,7 @@ export async function storeConsignment(ctx: Ctx, storeId: string): Promise<Consi
       productId: pid,
       name: p.name,
       sku: p.sku,
+      unitName: p.unitName,
       qty,
       priceToStore: p.priceToStore,
       suggestedRetail: p.suggestedRetail,
@@ -177,8 +183,11 @@ const storeSchema = z.object({
   address: z.string().trim().min(5, 'Escribe la dirección.'),
   city: z.string().trim().min(2, 'Escribe la ciudad.'),
   zoneId: z.string().min(1, 'Elige la zona.'),
-  lat: z.number({ error: 'Ubica la tienda en el mapa.' }).min(24).max(27.5, 'El punto queda fuera del sur de Florida.'),
-  lng: z.number({ error: 'Ubica la tienda en el mapa.' }).min(-82.5).max(-79.5, 'El punto queda fuera del sur de Florida.'),
+  // El punto se revisa contra el área de su mercado (validateLocation).
+  lat: z.number({ error: 'Ubica la tienda en el mapa.' }),
+  lng: z.number({ error: 'Ubica la tienda en el mapa.' }),
+  /** Mercado (Miami, Houston…). Si falta, el de la zona. */
+  marketId: z.string().optional(),
   managerName: z.string().trim().min(3, 'Escribe el nombre del encargado.'),
   phone: z
     .string()
@@ -192,7 +201,19 @@ const storeSchema = z.object({
     .object({
       number: z.string().trim(),
       expiresOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Elige la fecha de vencimiento del permiso.'),
+      /** Quién lo emite (Florida DBPR, Texas Comptroller…). */
+      issuer: z.string().trim().max(60).optional(),
     })
+    .optional(),
+  /** Tax ID (EIN): vacío lo borra; sin enviar, se conserva. */
+  taxId: z.string().trim().max(12).optional(),
+  /** Certificado de reventa: null lo borra; sin enviar, se conserva. */
+  resaleCert: z
+    .object({
+      number: z.string().trim().min(4, 'Escribe el número del certificado de reventa.').max(40),
+      expiresOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Elige la fecha de vencimiento del certificado.'),
+    })
+    .nullable()
     .optional(),
 });
 export type StoreInput = z.input<typeof storeSchema>;
@@ -204,17 +225,64 @@ function validatePermit(ctx: Ctx, data: z.output<typeof storeSchema>): void {
   }
 }
 
+/** Tax ID normalizado («12-3456789»), vacío para borrarlo o undefined para conservarlo. */
+function parseTaxId(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  if (raw.trim() === '') return '';
+  const ein = normalizeEin(raw);
+  if (!ein) throw new ValidationError('El Tax ID (EIN) tiene 9 dígitos: NN-NNNNNNN.');
+  return ein;
+}
+
+/** El mercado del local (el elegido, o el de su zona) y que el punto quede en su área. */
+async function resolveLocation(ctx: Ctx, data: z.output<typeof storeSchema>): Promise<string> {
+  const idx = await loadMarketIndex(ctx);
+  const zone = idx.zonesById.get(data.zoneId);
+  if (!zone) throw new ValidationError('Elige la zona.');
+  const zoneMarket = idx.zoneMarket(zone);
+  const marketId = data.marketId && idx.markets.some((m) => m.id === data.marketId) ? data.marketId : zoneMarket;
+  if (marketId !== zoneMarket) throw new ValidationError('La zona elegida es de otro mercado.');
+  const market = idx.markets.find((m) => m.id === marketId)!;
+  if (!pointInMarket(market, data.lat, data.lng)) {
+    throw new ValidationError(market.id === 'miami' ? 'El punto queda fuera del sur de Florida.' : `El punto queda lejos de ${market.name}.`);
+  }
+  return marketId;
+}
+
+function permitFrom(ctx: Ctx, data: z.output<typeof storeSchema>, prev?: Store): Store['tobaccoPermit'] {
+  if (!ctx.config.requiresTobaccoPermit || !data.tobaccoPermit) return undefined;
+  const issuer = data.tobaccoPermit.issuer || prev?.tobaccoPermit?.issuer || DEFAULT_PERMIT_ISSUER;
+  return { number: data.tobaccoPermit.number, expiresOn: data.tobaccoPermit.expiresOn, issuer };
+}
+
+/** Aplica Tax ID y certificado de reventa: lo que no se envió se conserva. */
+function withFiscal(store: Store, data: z.output<typeof storeSchema>): Store {
+  const next = { ...store };
+  const taxId = parseTaxId(data.taxId);
+  if (taxId !== undefined) {
+    if (taxId) next.taxId = taxId;
+    else delete next.taxId;
+  }
+  if (data.resaleCert !== undefined) {
+    if (data.resaleCert) next.resaleCert = { number: data.resaleCert.number, expiresOn: data.resaleCert.expiresOn };
+    else delete next.resaleCert;
+  }
+  return next;
+}
+
 export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store> {
   guard(ctx, 'store.create');
   const data = storeSchema.parse(input);
   validatePermit(ctx, data);
+  parseTaxId(data.taxId);
   const sellerId = ctx.actor.role === 'seller' ? ctx.actor.userId : data.sellerId;
   if (!sellerId) throw new ValidationError('Elige el vendedor responsable de la tienda.');
   return mutate(ctx, async () => {
     const seller = await ctx.repo.users.get(sellerId);
     if (!seller || seller.role !== 'seller') throw new ValidationError('El vendedor no existe en esta línea.');
+    const marketId = await resolveLocation(ctx, data);
     const at = nowIso(ctx);
-    const store: Store = {
+    const base: Store = {
       id: ctx.newId('loc'),
       name: data.name,
       type: data.type,
@@ -229,12 +297,14 @@ export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store>
       hours: data.hours,
       sellerId,
       status: 'prospecto',
-      tobaccoPermit: ctx.config.requiresTobaccoPermit ? data.tobaccoPermit : undefined,
+      tobaccoPermit: permitFrom(ctx, data),
+      marketId,
       notes: data.notes,
       createdAt: at,
       createdBy: ctx.actor.userId,
       statusHistory: [{ status: 'prospecto', at, by: ctx.actor.userId }],
     };
+    const store = withFiscal(base, data);
     await ctx.repo.stores.put(store);
     await audit(ctx, 'local.registrar', 'store', store.id, `Tienda registrada: ${store.name} (${store.city})`);
     await notify(ctx, 'admins', 'local_por_aprobar', `Tienda nueva: ${store.name}`, `${seller.name} la registró como prospecto en ${store.city}.`, `/${ctx.line}/locales/${store.id}`);
@@ -245,11 +315,13 @@ export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store>
 export async function updateStore(ctx: Ctx, storeId: string, input: StoreInput): Promise<Store> {
   const data = storeSchema.parse(input);
   validatePermit(ctx, data);
+  parseTaxId(data.taxId);
   return mutate(ctx, async () => {
     const s = await ctx.repo.stores.get(storeId);
     if (!s) throw new NotFoundError('el local');
     guard(ctx, 'store.update', { type: 'store', store: s });
-    const next: Store = {
+    const marketId = await resolveLocation(ctx, data);
+    const next: Store = withFiscal({
       ...s,
       name: data.name,
       type: data.type,
@@ -263,9 +335,10 @@ export async function updateStore(ctx: Ctx, storeId: string, input: StoreInput):
       email: data.email,
       hours: data.hours,
       notes: data.notes,
-      tobaccoPermit: ctx.config.requiresTobaccoPermit ? data.tobaccoPermit : undefined,
+      tobaccoPermit: permitFrom(ctx, data, s),
+      marketId,
       sellerId: ctx.actor.role === 'admin' && data.sellerId ? data.sellerId : s.sellerId,
-    };
+    }, data);
     await ctx.repo.stores.put(next);
     await audit(ctx, 'local.editar', 'store', s.id, `Datos de ${next.name} actualizados`);
     return next;

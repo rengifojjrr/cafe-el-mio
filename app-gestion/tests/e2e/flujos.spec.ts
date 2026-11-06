@@ -107,7 +107,8 @@ test('registrar una visita con conteo (tabaco)', async ({ page }, info) => {
   await enterAs(page, 'tabaco:seller');
   await go(page, '/tabaco/locales/t-loc_0001/visita');
   await expect(page.getByRole('heading', { name: 'Registrar visita' })).toBeVisible();
-  const minus = page.getByRole('button', { name: /^Quitar una unidad de .*, contados$/ }).first();
+  // El botón dice la unidad del producto: «un tabaco» (premium) o «un mazo» (de mazo).
+  const minus = page.getByRole('button', { name: /^Quitar (un tabaco|un mazo|una unidad) de .*, contados$/ }).first();
   await minus.click();
   await minus.click();
   await expect(page.getByText(/2 vendidas ·/).first()).toBeVisible();
@@ -172,6 +173,7 @@ test('restablecer la demo vuelve a cargar los datos de ejemplo', async ({ page }
   await page.getByRole('button', { name: 'Restablecer demo' }).click();
   await page.getByRole('button', { name: 'Sí, restablecer' }).click();
   await toast(page, /datos de ejemplo cargados/);
+  // 21 productos de tabaco desde la ronda 3 (12 premium y 9 de mazo).
   await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('21')).toBeVisible();
 });
 

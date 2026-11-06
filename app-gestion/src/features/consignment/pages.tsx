@@ -4,7 +4,7 @@ import { CheckCircle2, ClipboardCheck, ClipboardList, MapPin, Printer, Send, Sho
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import type { Delivery, Reorder } from '../../data/types';
-import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitOf, unitsText } from '../../domain/products';
+import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitNames, unitOf, unitsText } from '../../domain/products';
 import { fmtMoney } from '../../lib/money';
 import { fmtDate, fmtDateTime, fmtRelativeDays } from '../../lib/time';
 import type { NewPhoto } from '../../lib/image';
@@ -34,7 +34,7 @@ export function VisitPage() {
 
 function Visit() {
   const { id = '' } = useParams();
-  const { ctx, p, config, actor } = useLine();
+  const { ctx, p, actor } = useLine();
   const nav = useNavigate();
   const { run, busy } = useAction();
   const store = useAsync(() => loadStoreForActor(ctx, id), [ctx, id]);
@@ -83,7 +83,7 @@ function Visit() {
                 </div>
                 <div className="grid justify-items-end gap-1">
                   <span className="text-xs text-muted">Contados ahora</span>
-                  <QtyStepper label={`${l.name}, contados`} value={c} max={l.qty} onChange={(n) => setCounted((st) => ({ ...st, [l.productId]: n }))} unit={config.unitName.many} />
+                  <QtyStepper label={`${l.name}, contados`} value={c} max={l.qty} onChange={(n) => setCounted((st) => ({ ...st, [l.productId]: n }))} unit={unitNames(l.unitName).many} />
                 </div>
               </li>
             );

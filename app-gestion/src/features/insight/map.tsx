@@ -11,6 +11,7 @@ import { useAsync, useMediaQuery } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { Card, EmptyState, ErrorBox, KeyValue, LinkButton, Loading, Money, PageHeader, Pill, SelectInput, Sheet, Stat } from '../../ui/kit';
 import { MapView, directionsUrl, type MapMarker } from '../../ui/map';
+import { MarketSelect } from '../red/markets';
 
 const STATUS_VAR: Record<StoreStatus, string> = {
   prospecto: 'var(--estado-prospecto)',
@@ -70,9 +71,13 @@ function CommandMap() {
   const [product, setProduct] = useState('');
   const [status, setStatus] = useState<'' | StoreStatus>('');
   const [selected, setSelected] = useState<string | null>(null);
+  // Mercado: el primero (Miami) al abrir; cambiarlo vuelve a centrar el mapa. '*' es «Todos».
+  const [marketPick, setMarketPick] = useState<string | null>(null);
   const wide = useMediaQuery('(min-width: 1024px)');
 
   const d = data.data;
+  const markets = d?.markets ?? [];
+  const market = marketPick === null ? (markets.length > 1 ? (markets[0]?.id ?? '') : '') : marketPick === '*' ? '' : marketPick;
   const sellers = useMemo(() => {
     const m = new Map<string, string>();
     for (const s of d?.stores ?? []) m.set(s.store.sellerId, s.sellerName);
@@ -81,9 +86,9 @@ function CommandMap() {
   const visible = useMemo(
     () =>
       (d?.stores ?? []).filter(
-        (s) => (!seller || s.store.sellerId === seller) && (!product || s.productIds.includes(product)) && (!status || s.store.status === status),
+        (s) => (!market || s.marketId === market) && (!seller || s.store.sellerId === seller) && (!product || s.productIds.includes(product)) && (!status || s.store.status === status),
       ),
-    [d, seller, product, status],
+    [d, market, seller, product, status],
   );
   const markers = useMemo<MapMarker[]>(() => {
     if (!d) return [];
@@ -100,11 +105,15 @@ function CommandMap() {
     }));
     for (const sl of d.sellers) {
       if (seller && sl.id !== seller) continue;
+      if (market && sl.marketId !== market) continue;
       out.push({ id: `seller:${sl.id}`, kind: 'seller', lat: sl.lat, lng: sl.lng, title: `${sl.name}: última visita en ${sl.storeName}`, label: initials(sl.name) });
     }
-    out.push({ id: 'warehouse', kind: 'warehouse', lat: d.warehouse.lat, lng: d.warehouse.lng, title: `${d.warehouse.name}: ${fmtNumber(d.warehouse.units)} unidades` });
+    // El almacén está en el primer mercado.
+    if (!market || market === d.markets[0]?.id) {
+      out.push({ id: 'warehouse', kind: 'warehouse', lat: d.warehouse.lat, lng: d.warehouse.lng, title: `${d.warehouse.name}: ${fmtNumber(d.warehouse.units)} unidades` });
+    }
     return out;
-  }, [d, visible, selected, seller]);
+  }, [d, visible, selected, seller, market]);
 
   if (data.error) return <ErrorBox error={data.error} />;
   const current = d?.stores.find((s) => s.store.id === selected) ?? null;
@@ -116,7 +125,15 @@ function CommandMap() {
   return (
     <>
       <PageHeader title="Mapa" subtitle={`Locales de ${config.name} por estado y por ventas, vendedores en su última visita y el almacén. Toca un local para ver su tarjeta.`} />
-      <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
+      <div className={`mb-4 grid gap-2 sm:gap-3 ${markets.length > 1 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+        <MarketSelect
+          markets={markets}
+          value={marketPick === null ? market : marketPick === '*' ? '' : marketPick}
+          onChange={(id) => {
+            setMarketPick(id || '*');
+            setSelected(null);
+          }}
+        />
         <SelectInput
           label="Vendedor"
           value={seller}
@@ -155,7 +172,7 @@ function CommandMap() {
                 setSelected(id);
               }}
               className="h-[55vh] bg-surface-2! lg:h-[68vh]"
-              fitKey={`${seller}|${product}|${status}`}
+              fitKey={`${market}|${seller}|${product}|${status}`}
               label={`Mapa de locales de ${config.name}`}
             />
             <StatusLegend />

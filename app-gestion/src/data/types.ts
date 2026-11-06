@@ -33,6 +33,8 @@ export interface Product extends Entity {
   /** Precio de venta al público sugerido. La ganancia del local es PVP − precio al local. */
   suggestedRetail: number;
   sellerCommission: CommissionRule;
+  /** Comisión propia: este producto paga siempre su regla, aunque haya comisión progresiva. */
+  commissionCustom?: boolean;
   lowStockThreshold: number;
   /** Unidades por caja (presentación). */
   packSize: number;
@@ -800,4 +802,6 @@ export interface Invitation extends Entity {
   createdAt: IsoDateTime;
   createdBy: string;
   revokedAt?: IsoDateTime;
+  /** Última vez que alguien entró con ella (en este navegador). */
+  acceptedAt?: IsoDateTime;
 }

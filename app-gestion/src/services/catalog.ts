@@ -1,10 +1,11 @@
 // Catálogo de la línea. Los costos solo los ve administración: para los demás roles
 // el campo ni siquiera viaja en el objeto.
 import { z } from 'zod';
-import type { CommissionRule, Photo, Product, User } from '../data/types';
-import { commissionPerUnit, effectiveRule, storeEarning } from '../domain/money-rules';
+import type { CommissionRule, Photo, Product } from '../data/types';
+import { commissionPerUnit, storeEarning } from '../domain/money-rules';
 import { capaShade, composeName, familyIdFor, variantLabelFor } from '../domain/products';
 import { can } from '../domain/permissions';
+import { type SellerCommissionContext, ruleFromContext, sellerCommissionContext } from './commission-scheme';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
 import { type InventorySnapshot, type StockLine, loadInventory, stockLines } from './inventory';
 
@@ -29,9 +30,10 @@ export function hasCost(p: Product | PublicProduct): p is Product {
   return 'cost' in p;
 }
 
-async function viewerSeller(ctx: Ctx): Promise<User | undefined> {
+/** Vendedor: su comisión de hoy (la progresiva según cómo va en el mes, o la de cada producto). */
+async function viewerSeller(ctx: Ctx): Promise<SellerCommissionContext | undefined> {
   if (ctx.actor.role !== 'seller') return undefined;
-  return ctx.repo.users.get(ctx.actor.userId);
+  return sellerCommissionContext(ctx, ctx.actor.userId, ctx.now());
 }
 
 export async function listProducts(ctx: Ctx, opts?: { includeInactive?: boolean }): Promise<ProductView[]> {
@@ -67,16 +69,18 @@ function scopeStock(line: StockLine, snap: InventorySnapshot, visible: Set<strin
   return { ...line, consignment, storesHolding };
 }
 
-function toView(ctx: Ctx, p: Product, stock: StockLine, isAdmin: boolean, seller?: User): ProductView {
+function toView(ctx: Ctx, p: Product, stock: StockLine, isAdmin: boolean, seller?: SellerCommissionContext): ProductView {
   const view: ProductView = {
     product: isAdmin ? p : toPublicProduct(p),
     stock,
     storeEarning: storeEarning(p),
   };
   if (ctx.actor.role === 'seller' || isAdmin) {
-    const rule = effectiveRule(p, seller);
-    view.sellerCommissionRule = rule;
-    view.sellerCommissionPerUnit = commissionPerUnit(rule, p.priceToStore);
+    const rule = seller ? ruleFromContext(seller, p) : p.sellerCommission;
+    if (rule) {
+      view.sellerCommissionRule = rule;
+      view.sellerCommissionPerUnit = commissionPerUnit(rule, p.priceToStore);
+    }
   }
   return view;
 }
@@ -108,6 +112,8 @@ const productSchema = z
     priceToStore: z.number({ error: 'Escribe el precio al local.' }).positive('El precio al local tiene que ser mayor que cero.'),
     suggestedRetail: z.number({ error: 'Escribe el PVP sugerido.' }).positive('El PVP tiene que ser mayor que cero.'),
     sellerCommission: ruleSchema,
+    /** Comisión propia: el producto paga su regla aunque haya comisión progresiva. */
+    commissionCustom: z.boolean().optional(),
     lowStockThreshold: z.number().int().min(0),
     packSize: z.number().int().min(1),
     unitName: z.string().trim().min(1),
@@ -181,6 +187,7 @@ export async function saveProduct(ctx: Ctx, input: ProductInput): Promise<Produc
       priceToStore: data.priceToStore,
       suggestedRetail: data.suggestedRetail,
       sellerCommission: data.sellerCommission,
+      commissionCustom: (data.commissionCustom ?? prev?.commissionCustom) || undefined,
       lowStockThreshold: data.lowStockThreshold,
       packSize: data.packSize,
       unitName: data.unitName,

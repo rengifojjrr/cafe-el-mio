@@ -1,19 +1,20 @@
 // Dirección: las dos líneas lado a lado, solo lectura. Cada columna sale de su propia base
 // y toma los colores de su línea. Nada se suma, salvo la «suma informativa» marcada aparte.
 import { Crown, Eye, LogOut, Sigma } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import type { LineId } from '../../data/types';
+import type { LineId, Market } from '../../data/types';
 import type { Actor } from '../../domain/permissions';
 import { lineConfig } from '../../lines/config';
 import { fmtMoney, fmtNumber, fmtPercent } from '../../lib/money';
 import { monthLabel } from '../money/shared';
-import { lineOverview, type LineOverview } from '../../services/direccion';
+import { lineMarkets, lineOverview, type LineOverview } from '../../services/direccion';
 import { directorOpenLine, findAccount, getSession, leave } from '../../services/session';
 import { useAsync } from '../../app/hooks';
 import { LineMark } from '../../ui/brand';
 import { LinesChart } from '../../ui/charts';
 import { Button, ErrorBox, Loading, SampleBadge, Stat } from '../../ui/kit';
+import { MarketSelect } from '../red/markets';
 import { errorText, useToast } from '../../ui/toast';
 
 const DIRECTOR: Actor = { accountId: 'direccion', userId: 'direccion', role: 'direccion', line: null, name: 'Dirección', readOnly: true };
@@ -56,11 +57,20 @@ export function DireccionPage() {
 function Overview() {
   const nav = useNavigate();
   const { push } = useToast();
+  const [market, setMarket] = useState('');
+  // Mercados de las dos líneas (Miami, Houston…), por id.
+  const markets = useAsync(async () => {
+    const lists = await Promise.all([lineMarkets(DIRECTOR, 'tabaco'), lineMarkets(DIRECTOR, 'cafe')]);
+    const byId = new Map<string, Market>();
+    for (const m of lists.flat()) if (!byId.has(m.id)) byId.set(m.id, m);
+    return [...byId.values()];
+  }, []);
   const data = useAsync(async () => {
     const now = new Date();
-    const [tabaco, cafe] = await Promise.all([lineOverview(DIRECTOR, 'tabaco', now), lineOverview(DIRECTOR, 'cafe', now)]);
+    const opts = { marketId: market || null };
+    const [tabaco, cafe] = await Promise.all([lineOverview(DIRECTOR, 'tabaco', now, opts), lineOverview(DIRECTOR, 'cafe', now, opts)]);
     return { tabaco, cafe };
-  }, []);
+  }, [market]);
 
   const open = async (line: LineId) => {
     try {
@@ -92,6 +102,12 @@ function Overview() {
         <p className="mt-2 max-w-[62ch] text-muted">
           Solo lectura. Cada cifra sale de su propia línea: las cuentas de Tabaco y de Café no se mezclan. La suma de abajo es solo informativa.
         </p>
+        {(markets.data ?? []).length > 1 ? (
+          <div className="mt-4 max-w-xs">
+            <MarketSelect markets={markets.data ?? []} value={market} onChange={setMarket} />
+            {market ? <p className="mt-1 text-sm text-muted">Solo lo de los locales de ese mercado; el almacén es de toda la línea y no se cuenta.</p> : null}
+          </div>
+        ) : null}
 
         {data.error ? <ErrorBox error={data.error} /> : null}
         {data.loading && !d ? (

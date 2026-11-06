@@ -102,7 +102,7 @@ beforeAll(async () => {
 
 describe('la semilla quedó en las dos bases', () => {
   it('cada línea tiene sus datos y ningún id se repite entre líneas', async () => {
-    expect(await repos.tabaco.stores.count()).toBe(18);
+    expect(await repos.tabaco.stores.count()).toBe(23);
     expect(await repos.cafe.stores.count()).toBe(15);
     const tIds = new Set([...(await repos.tabaco.products.all()), ...(await repos.tabaco.stores.all())].map((x) => x.id));
     const cIds = [...(await repos.cafe.products.all()), ...(await repos.cafe.stores.all())].map((x) => x.id);

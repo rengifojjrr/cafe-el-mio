@@ -3,6 +3,7 @@ import type { DirectoryAccount, EcosystemSettings, LineId, Store, User } from '.
 import type { CoreRepo, LineRepo } from '../data/repo';
 import { CAFE_SEED } from './cafe';
 import { type LineSeedDef, type SeedTables, simulateLine } from './engine';
+import { applyRonda3Red } from './r3-red';
 import { TABACO_SEED } from './tabaco';
 
 import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from './version';
@@ -12,7 +13,9 @@ export { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION };
 export const SEEDS: Record<LineId, LineSeedDef> = { tabaco: TABACO_SEED, cafe: CAFE_SEED };
 
 export function buildLine(line: LineId, now: Date): SeedTables {
-  return simulateLine(SEEDS[line], now);
+  const tables = simulateLine(SEEDS[line], now);
+  // Ronda 3 · mercados, datos fiscales, comisión progresiva, repartos e invitaciones.
+  return applyRonda3Red(SEEDS[line], tables, now);
 }
 
 /** Las cuentas principales de «Entrar como…»: una por rol de cada línea, más Dirección. */

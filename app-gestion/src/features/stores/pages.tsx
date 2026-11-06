@@ -28,6 +28,7 @@ import { addDaysToDate, fmtAgo, fmtDate, fmtDateTime, toIsoDate } from '../../li
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { contractsForStore, issueContract } from '../../services/contracts';
+import { listMarkets } from '../../services/markets';
 import { listDeliveries, listReorders, storeVisits } from '../../services/consignment';
 import { openThread } from '../../services/messages';
 import { listSettlements } from '../../services/money';
@@ -70,6 +71,10 @@ import { PhotoPicker, useStoredPhoto } from '../../ui/media';
 import { errorText, useAction, useToast } from '../../ui/toast';
 import { PermitPill, StoreStatusPill } from '../common';
 import { DeliveryCard, RequestDeliverySheet, ReportSalesSheet, ReturnSheet } from '../consignment/components';
+import { DEFAULT_PERMIT_ISSUER } from '../../domain/fiscal';
+import { pointInMarket } from '../../domain/markets';
+import { FiscalFormCard, ResaleCertPill, StoreFiscalSection, issuerOptions, type FiscalFormValue } from '../red/fiscal';
+import { InviteButton } from '../red/invite';
 
 type Filter = 'todos' | 'activos' | 'proceso' | 'pausados';
 
@@ -224,6 +229,10 @@ interface StoreFormState {
   sellerId: string;
   permitNumber: string;
   permitExpires: string;
+  permitIssuer: string;
+  /** Mercado (Miami, Houston…): las zonas y el mapa son los de ese mercado. */
+  marketId: string;
+  fiscal: FiscalFormValue;
 }
 
 function StoreForm({ initial }: { initial?: Store }) {
@@ -233,6 +242,7 @@ function StoreForm({ initial }: { initial?: Store }) {
   const { run, busy } = useAction();
   const zones = useAsync(() => listZones(ctx), [ctx]);
   const sellers = useAsync(() => listSellers(ctx), [ctx]);
+  const markets = useAsync(() => listMarkets(ctx), [ctx]);
   const [photo, setPhoto] = useState<NewPhoto | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>();
   const [results, setResults] = useState<GeoResult[] | null>(null);
@@ -252,13 +262,28 @@ function StoreForm({ initial }: { initial?: Store }) {
     sellerId: initial?.sellerId ?? '',
     permitNumber: initial?.tobaccoPermit?.number ?? '',
     permitExpires: initial?.tobaccoPermit?.expiresOn ?? addDaysToDate(toIsoDate(ctx.now()), 365),
+    permitIssuer: initial?.tobaccoPermit?.issuer ?? '',
+    marketId: initial?.marketId ?? '',
+    fiscal: {
+      taxId: initial?.taxId ?? '',
+      resaleNumber: initial?.resaleCert?.number ?? '',
+      resaleExpires: initial?.resaleCert?.expiresOn ?? addDaysToDate(toIsoDate(ctx.now()), 365),
+    },
   }));
   const set = <K extends keyof StoreFormState>(k: K, v: StoreFormState[K]) => setF((s) => ({ ...s, [k]: v }));
+
+  // Mercado: el elegido, o el de la zona, o el primero (Miami).
+  const marketList = markets.data ?? [];
+  const zoneMarket = (zoneId: string) => (zones.data ?? []).find((z) => z.id === zoneId)?.marketId ?? marketList[0]?.id ?? '';
+  const marketId = f.marketId || (f.zoneId ? zoneMarket(f.zoneId) : marketList[0]?.id ?? '');
+  const market = marketList.find((m) => m.id === marketId);
+  const marketZones = (zones.data ?? []).filter((z) => !marketId || (z.marketId ?? marketList[0]?.id) === marketId);
+  const permitIssuer = f.permitIssuer || (marketId === 'houston' ? 'Texas Comptroller' : DEFAULT_PERMIT_ISSUER);
 
   const nearestZone = (pt: { lat: number; lng: number }) => {
     let best = '';
     let d = Infinity;
-    for (const z of zones.data ?? []) {
+    for (const z of marketZones) {
       const dd = (z.lat - pt.lat) ** 2 + (z.lng - pt.lng) ** 2;
       if (dd < d) {
         d = dd;
@@ -300,7 +325,10 @@ function StoreForm({ initial }: { initial?: Store }) {
         hours: f.hours,
         notes: f.notes,
         sellerId: actor.role === 'admin' ? f.sellerId || undefined : undefined,
-        tobaccoPermit: config.requiresTobaccoPermit ? { number: f.permitNumber, expiresOn: f.permitExpires } : undefined,
+        tobaccoPermit: config.requiresTobaccoPermit ? { number: f.permitNumber, expiresOn: f.permitExpires, issuer: permitIssuer } : undefined,
+        marketId: marketId || undefined,
+        taxId: f.fiscal.taxId,
+        resaleCert: f.fiscal.resaleNumber.trim() ? { number: f.fiscal.resaleNumber.trim(), expiresOn: f.fiscal.resaleExpires } : null,
       };
       const saved = initial ? await updateStore(ctx, initial.id, input) : await registerStore(ctx, input);
       if (photo) await setFacadePhoto(ctx, saved.id, photo);
@@ -325,6 +353,24 @@ function StoreForm({ initial }: { initial?: Store }) {
           <h2 className="font-bold">La tienda</h2>
           <TextInput label="Nombre de la tienda" value={f.name} onChange={(e) => set('name', e.target.value)} autoComplete="organization" required />
           <SelectInput label="Tipo" value={f.type} onChange={(e) => set('type', e.target.value)} options={config.storeTypes.map((t) => ({ value: t, label: t }))} />
+          {marketList.length > 1 ? (
+            <SelectInput
+              label="Mercado"
+              value={marketId}
+              onChange={(e) => {
+                const id = e.target.value;
+                const m = marketList.find((x) => x.id === id);
+                // Otro mercado: la zona y el punto tienen que ser de allá.
+                setF((st) => ({
+                  ...st,
+                  marketId: id,
+                  zoneId: zoneMarket(st.zoneId) === id ? st.zoneId : '',
+                  point: st.point && m && pointInMarket(m, st.point.lat, st.point.lng) ? st.point : null,
+                }));
+              }}
+              options={marketList.map((m) => ({ value: m.id, label: m.name }))}
+            />
+          ) : null}
           <TextInput label="Dirección" value={f.address} onChange={(e) => set('address', e.target.value)} placeholder="Número y calle" autoComplete="street-address" required />
           <TextInput label="Ciudad" value={f.city} onChange={(e) => set('city', e.target.value)} placeholder="Hialeah, FL" required />
           <Button icon={Search} onClick={() => void search()} busy={searching}>
@@ -354,16 +400,17 @@ function StoreForm({ initial }: { initial?: Store }) {
               <MapPin className="h-4 w-4 text-accent" aria-hidden /> Punto en el mapa
             </p>
             <MapView
+              key={marketId || 'mapa'}
               label="Mapa para ubicar la tienda: toca para poner el punto"
               className="h-64"
               markers={[]}
-              center={f.point ? [f.point.lat, f.point.lng] : [25.79, -80.28]}
-              zoom={f.point ? 15 : 10}
+              center={f.point ? [f.point.lat, f.point.lng] : market ? [market.lat, market.lng] : [25.79, -80.28]}
+              zoom={f.point ? 15 : (market?.zoom ?? 10)}
               pick={{ value: f.point, onPick: choosePoint }}
             />
             <p className="field-hint mt-1.5">{f.point ? `Punto elegido: ${f.point.lat}, ${f.point.lng}. Arrástralo o toca otro lugar para moverlo.` : 'Si la búsqueda no la encuentra, toca el mapa donde está la tienda.'}</p>
           </div>
-          <SelectInput label="Zona" value={f.zoneId} onChange={(e) => set('zoneId', e.target.value)} options={(zones.data ?? []).map((z) => ({ value: z.id, label: z.name }))} placeholder="Elige la zona" />
+          <SelectInput label="Zona" value={f.zoneId} onChange={(e) => set('zoneId', e.target.value)} options={marketZones.map((z) => ({ value: z.id, label: z.name }))} placeholder="Elige la zona" />
         </Card>
         <div className="grid content-start gap-4">
           <Card className="grid gap-4 p-4 sm:p-5">
@@ -376,11 +423,13 @@ function StoreForm({ initial }: { initial?: Store }) {
           {config.requiresTobaccoPermit ? (
             <Card className="grid gap-4 p-4 sm:p-5">
               <h2 className="font-bold">Permiso de venta de tabaco</h2>
-              <p className="text-sm text-muted">En Florida lo otorga el DBPR. Sin permiso vigente no se le puede consignar tabaco, y el local se compromete a vender solo a mayores de 21 años.</p>
+              <p className="text-sm text-muted">En Florida lo otorga el DBPR; en Texas, el Comptroller. Sin permiso vigente no se le puede consignar tabaco, y el local se compromete a vender solo a mayores de 21 años.</p>
               <TextInput label="Número del permiso" value={f.permitNumber} onChange={(e) => set('permitNumber', e.target.value)} required />
+              <SelectInput label="Quién lo emite" value={permitIssuer} onChange={(e) => set('permitIssuer', e.target.value)} options={issuerOptions(permitIssuer)} />
               <TextInput label="Vence el" type="date" value={f.permitExpires} onChange={(e) => set('permitExpires', e.target.value)} required />
             </Card>
           ) : null}
+          <FiscalFormCard value={f.fiscal} onChange={(v) => set('fiscal', v)} />
           <Card className="grid gap-4 p-4 sm:p-5">
             <h2 className="font-bold">Fachada y notas</h2>
             <div className="flex flex-wrap items-center gap-3">
@@ -469,15 +518,19 @@ export function StoreDetailPage() {
         subtitle={`${s.type} · ${s.address}, ${s.city}`}
         actions={
           canWork ? (
-            <LinkButton to={p(`locales/${s.id}/editar`)} icon={Pencil}>
-              Editar
-            </LinkButton>
+            <>
+              <LinkButton to={p(`locales/${s.id}/editar`)} icon={Pencil}>
+                Editar
+              </LinkButton>
+              {s.status === 'activo' || s.status === 'pausado' ? <InviteButton target={{ kind: 'store', storeId: s.id }} name={s.name} /> : null}
+            </>
           ) : null
         }
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <StoreStatusPill status={s.status} />
         <PermitPill state={permit} />
+        {s.status !== 'prospecto' ? <ResaleCertPill store={s} /> : null}
         {contract ? <Pill tone={contract.status === 'firmado' ? 'ok' : 'warn'}>{contract.status === 'firmado' ? `Contrato v${contract.version} firmado` : `Contrato v${contract.version} por firmar`}</Pill> : null}
         {reorders.data?.length ? <Pill tone="accent">{reorders.data.length} pedido(s) en curso</Pill> : null}
       </div>
@@ -541,7 +594,7 @@ export function StoreDetailPage() {
               ['Correo', s.email || '—'],
               ['Horario', s.hours || '—'],
               ...(config.requiresTobaccoPermit
-                ? ([['Permiso de tabaco', s.tobaccoPermit ? `${s.tobaccoPermit.number} · vence el ${fmtDate(s.tobaccoPermit.expiresOn)}` : 'Sin registrar']] as [string, string][])
+                ? ([['Permiso de venta de tabaco', s.tobaccoPermit ? `${s.tobaccoPermit.number} · ${s.tobaccoPermit.issuer ?? DEFAULT_PERMIT_ISSUER} · vence el ${fmtDate(s.tobaccoPermit.expiresOn)}` : 'Sin registrar']] as [string, string][])
                 : []),
               ['Contrato', contract ? (
                 <Link key="ctr" to={p(`contratos/${contract.id}`)} className="underline">
@@ -567,6 +620,10 @@ export function StoreDetailPage() {
           {photo ? <img src={photo} alt={`Fachada de ${s.name}`} className="h-40 w-full rounded-[20px] object-cover" /> : null}
           <MapView label={`Ubicación de ${s.name}`} className="h-56" markers={[{ id: s.id, lat: s.lat, lng: s.lng, kind: 'store', status: s.status, title: s.name, weight: 0.5 }]} center={[s.lat, s.lng]} zoom={15} />
         </div>
+      </div>
+
+      <div className="mt-4">
+        <StoreFiscalSection store={s} canEdit={canWork} />
       </div>
 
       {s.status !== 'prospecto' ? (

@@ -9,6 +9,7 @@ import { useLine } from '../../app/line-context';
 import { RankBars } from '../../ui/charts';
 import { Card, EmptyState, ErrorBox, Loading, PageHeader, Pill, Section, Stat, Tabs } from '../../ui/kit';
 import { AdminOnly, TableWrap } from '../money/shared';
+import { MarketSelect } from '../red/markets';
 
 export function ReportsPage() {
   const { actor } = useLine();
@@ -24,20 +25,21 @@ function Reports() {
   const { ctx, config } = useLine();
   const [period, setPeriod] = useState<Period>('90');
   const [dim, setDim] = useState<Dim>('product');
-  const data = useAsync(() => reports(ctx, Number(period)), [ctx, period]);
+  const [market, setMarket] = useState('');
+  const data = useAsync(() => reports(ctx, Number(period), { marketId: market || null }), [ctx, period, market]);
   const r = data.data;
 
   const rowsFor = (d: Dim): ProfitRow[] => (!r ? [] : d === 'product' ? r.byProduct : d === 'store' ? r.byStore : d === 'seller' ? r.bySeller : r.byZone);
   const totals = (r?.byProduct ?? []).reduce(
-    (a, x) => ({ units: a.units + x.units, revenue: a.revenue + x.revenue, margin: a.margin + x.margin }),
-    { units: 0, revenue: 0, margin: 0 },
+    (a, x) => ({ units: a.units + x.units, revenue: a.revenue + x.revenue, margin: a.margin + x.margin, distribution: a.distribution + x.distribution }),
+    { units: 0, revenue: 0, margin: 0, distribution: 0 },
   );
 
   return (
     <>
       <PageHeader
         title="Rentabilidad y reportes"
-        subtitle={`Qué se vende, qué piden los locales y dónde deja margen la línea ${config.name}. Margen = ventas a precio al local − costo por lote − comisiones.`}
+        subtitle={`Qué se vende, qué piden los locales y dónde deja margen la línea ${config.name}. Margen = ventas a precio al local − costo por lote − comisiones − costo de distribución (repartos).`}
         actions={
           <Tabs
             label="Periodo"
@@ -51,14 +53,20 @@ function Reports() {
           />
         }
       />
+      {r && r.markets.length > 1 ? (
+        <div className="mb-4 max-w-xs">
+          <MarketSelect markets={r.markets} value={market} onChange={setMarket} />
+        </div>
+      ) : null}
       {data.error ? <ErrorBox error={data.error} /> : null}
       {data.loading && !r ? (
         <Loading rows={4} />
       ) : r ? (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Stat label="Unidades vendidas" value={totals.units} icon={TrendingUp} />
             <Stat label="Ventas a precio al local" value={totals.revenue} format="money0" tone="ink" />
+            <Stat label="Costo de distribución" value={totals.distribution} format="money0" tone="ink" hint="Repartos terminados" />
             <Stat label="Margen" value={totals.margin} format="money0" />
             <Stat label="Margen sobre ventas" value={totals.revenue > 0 ? totals.margin / totals.revenue : 0} format="percent" tone="ink" />
           </div>
@@ -153,7 +161,7 @@ function Reports() {
             {rowsFor(dim).length === 0 ? (
               <EmptyState icon={TrendingUp} title="Sin ventas en el periodo" />
             ) : (
-              <TableWrap label={`Rentabilidad por ${DIM_LABEL[dim].toLowerCase()}`} min={720}>
+              <TableWrap label={`Rentabilidad por ${DIM_LABEL[dim].toLowerCase()}`} min={820}>
                 <thead>
                   <tr>
                     <th scope="col">{DIM_LABEL[dim]}</th>
@@ -168,6 +176,9 @@ function Reports() {
                     </th>
                     <th scope="col" className="num">
                       Comisiones
+                    </th>
+                    <th scope="col" className="num">
+                      Costo de distribución
                     </th>
                     <th scope="col" className="num">
                       Margen
@@ -185,6 +196,7 @@ function Reports() {
                       <td className="num">{fmtMoney(x.revenue)}</td>
                       <td className="num">{fmtMoney(x.cogs)}</td>
                       <td className="num">{fmtMoney(x.commissions)}</td>
+                      <td className="num">{fmtMoney(x.distribution)}</td>
                       <td className={`num font-bold ${x.margin < 0 ? 'text-danger' : ''}`}>{fmtMoney(x.margin)}</td>
                       <td className="num">{fmtPercent(x.marginPct)}</td>
                     </tr>
@@ -192,6 +204,10 @@ function Reports() {
                 </tbody>
               </TableWrap>
             )}
+            <p className="mt-2 text-sm text-muted">
+              Costo de distribución: el de cada reparto terminado del periodo (km × costo por km + chofer + peajes), repartido por las unidades que se entregaron en cada parada; un mazo cuenta como una unidad.
+              {r.distributionUnallocated > 0 ? ` Quedan ${fmtMoney(r.distributionUnallocated)} sin repartir de repartos que no entregaron nada.` : ''}
+            </p>
           </Section>
 
           <div className="mt-7 grid gap-4 lg:grid-cols-2">

@@ -35,6 +35,8 @@ interface FormState {
   suggestedRetail: Num;
   ruleType: CommissionRule['type'];
   ruleValue: Num;
+  /** Comisión propia: manda aunque el vendedor tenga comisión progresiva. */
+  commissionCustom: boolean;
   lowStockThreshold: Num;
   notes: string;
   pairing: string;
@@ -63,6 +65,7 @@ function initialState(pr: Product | undefined, opts: { line: 'tabaco' | 'cafe'; 
     suggestedRetail: pr?.suggestedRetail ?? '',
     ruleType: pr?.sellerCommission.type ?? opts.rule.type,
     ruleValue: pr?.sellerCommission.value ?? opts.rule.value,
+    commissionCustom: pr?.commissionCustom ?? false,
     lowStockThreshold: pr?.lowStockThreshold ?? opts.low,
     notes: pr?.notes ?? '',
     pairing: pr?.pairing ?? '',
@@ -140,6 +143,7 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
         boxPrice: f.boxPrice === '' ? 0 : f.boxPrice,
         suggestedRetail: f.suggestedRetail === '' ? Number.NaN : f.suggestedRetail,
         sellerCommission: { type: f.ruleType, value: f.ruleValue === '' ? 0 : f.ruleValue },
+        commissionCustom: f.commissionCustom,
         lowStockThreshold: f.lowStockThreshold === '' ? 0 : f.lowStockThreshold,
         packSize: f.packSize === '' ? 1 : f.packSize,
         unitName: f.unitName,
@@ -282,6 +286,13 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
               />
               <NumberInput label={f.ruleType === 'percent' ? 'Porcentaje' : 'Monto'} step={f.ruleType === 'percent' ? 0.5 : 0.05} min={0} value={f.ruleValue} onValue={(v) => set('ruleValue', v)} />
             </div>
+            <label className="flex min-h-12 items-start gap-3">
+              <input type="checkbox" className="mt-1 h-5 w-5 flex-none accent-[var(--accent)]" checked={f.commissionCustom} onChange={(e) => set('commissionCustom', e.target.checked)} />
+              <span>
+                <span className="block font-semibold">Comisión propia de este producto</span>
+                <span className="block text-sm text-muted">Paga siempre esta comisión, aunque el vendedor tenga comisión progresiva. Sin marcar, la progresiva manda cuando la hay.</span>
+              </span>
+            </label>
           </Card>
           <Card className="grid gap-4 p-4 sm:p-5">
             <h2 className="font-bold">Inventario</h2>
