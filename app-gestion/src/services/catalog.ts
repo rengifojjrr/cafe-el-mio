@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import type { CommissionRule, Photo, Product, User } from '../data/types';
 import { commissionPerUnit, effectiveRule, storeEarning } from '../domain/money-rules';
+import { capaShade, composeName, familyIdFor, variantLabelFor } from '../domain/products';
 import { can } from '../domain/permissions';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
 import { type InventorySnapshot, type StockLine, loadInventory, stockLines } from './inventory';
@@ -113,6 +114,17 @@ const productSchema = z
     notes: z.string().trim().max(600).default(''),
     pairing: z.string().trim().max(300).default(''),
     attrs: z.record(z.string(), z.union([z.string(), z.number()])),
+    /** Tabaco: premium o de mazo. */
+    kind: z.enum(['premium', 'mazo']).optional(),
+    /** Familia («Toro»). Si viene, el nombre se compone con la variante; si no, se usa `name`. */
+    familyName: z.string().trim().min(2, 'Escribe el nombre de la familia.').max(60).optional(),
+    barcode: z
+      .string()
+      .trim()
+      .max(32)
+      .regex(/^[0-9A-Za-z-]*$/, 'El código solo puede tener letras, números y guiones.')
+      .optional(),
+    boxPrice: z.number().nonnegative().optional(),
   })
   .refine((p) => p.suggestedRetail >= p.priceToStore, {
     message: 'El PVP sugerido no puede ser menor que el precio al local: el local perdería en cada venta.',
@@ -125,6 +137,8 @@ export async function saveProduct(ctx: Ctx, input: ProductInput): Promise<Produc
   guard(ctx, 'product.write');
   const data = productSchema.parse(input);
   for (const f of ctx.config.productFields) {
+    // Capote, tripa y marca solo se piden en premium.
+    if (f.kinds && (!data.kind || !f.kinds.includes(data.kind))) continue;
     if ('required' in f && f.required) {
       const v = data.attrs[f.key];
       if (v === undefined || v === '' || (typeof v === 'number' && Number.isNaN(v))) {
@@ -143,10 +157,24 @@ export async function saveProduct(ctx: Ctx, input: ProductInput): Promise<Produc
     const at = nowIso(ctx);
     const prev = data.id ? all.find((p) => p.id === data.id) : undefined;
     if (data.id && !prev) throw new NotFoundError('el producto');
+    if (data.barcode && all.some((p) => p.barcode === data.barcode && p.id !== data.id)) {
+      throw new ValidationError(`El código ${data.barcode} ya es de otro producto.`);
+    }
+    const attrs = { ...data.attrs };
+    if (attrs.capa) attrs.wrapperShade = capaShade(attrs.capa);
+    const kind = data.kind ?? prev?.kind;
+    // Sin `familyName` (formulario simple): el nombre escrito es la familia, salvo en una variante con etiqueta.
+    const familyName = data.familyName ?? (prev?.familyName && prev.variantLabel ? prev.familyName : data.name);
+    const familyId = familyIdFor(ctx.line, familyName, kind, kind === 'premium' ? String(attrs.brand ?? '') : undefined);
+    const id = prev?.id ?? ctx.newId('prd');
+    const siblings = all.filter((p) => p.id !== id && (p.familyId ?? p.id) === familyId);
+    // De mazo: la capa y la medida siempre dicen cuál es. Lo demás solo si la familia tiene más de una variante.
+    const labelled = kind === 'mazo' || siblings.length > 0;
+    const variantLabel = labelled ? variantLabelFor(ctx.line, attrs, familyName) : '';
     const product: Product = {
-      id: prev?.id ?? ctx.newId('prd'),
+      id,
       sku: data.sku,
-      name: data.name,
+      name: composeName(familyName, variantLabel),
       brandLine: data.brandLine,
       active: data.active,
       cost: data.cost,
@@ -158,7 +186,13 @@ export async function saveProduct(ctx: Ctx, input: ProductInput): Promise<Produc
       unitName: data.unitName,
       notes: data.notes,
       pairing: data.pairing,
-      attrs: data.attrs,
+      attrs,
+      kind,
+      familyId,
+      familyName,
+      variantLabel,
+      barcode: data.barcode === undefined ? prev?.barcode : data.barcode || undefined,
+      boxPrice: data.boxPrice === undefined ? prev?.boxPrice : data.boxPrice || undefined,
       photoIds: prev?.photoIds ?? [],
       brandPhoto: prev?.brandPhoto,
       sampleCost: prev ? prev.sampleCost && prev.cost === data.cost : false,
@@ -166,6 +200,13 @@ export async function saveProduct(ctx: Ctx, input: ProductInput): Promise<Produc
       updatedAt: at,
     };
     await ctx.repo.products.put(product);
+    // Si la familia pasó a tener varias variantes, las hermanas también llevan su capa y medida en el nombre.
+    for (const sib of siblings) {
+      const label = variantLabelFor(ctx.line, sib.attrs, sib.familyName ?? '');
+      if (sib.variantLabel !== label && sib.familyName) {
+        await ctx.repo.products.put({ ...sib, variantLabel: label, name: composeName(sib.familyName, label), updatedAt: at });
+      }
+    }
     await audit(ctx, prev ? 'producto.editar' : 'producto.crear', 'product', product.id, `${prev ? 'Editado' : 'Nuevo'}: ${product.name} (${product.sku})`);
     return product;
   });

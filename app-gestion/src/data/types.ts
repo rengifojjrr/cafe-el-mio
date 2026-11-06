@@ -18,6 +18,9 @@ export interface Entity {
 // ---------- Catálogo ----------
 export type CommissionRule = { type: 'percent'; value: number } | { type: 'fixed'; value: number };
 
+/** Tabaco: premium (con marca, capote y tripa) o de mazo (sin marca). */
+export type ProductKind = 'premium' | 'mazo';
+
 export interface Product extends Entity {
   sku: string;
   name: string;
@@ -39,6 +42,17 @@ export interface Product extends Entity {
   /** Campos propios de la línea (vitola, capa… o tueste, molido…). */
   attrs: Record<string, string | number>;
   photoIds: string[];
+  /** Tabaco: premium o de mazo. */
+  kind?: ProductKind;
+  /** Familia (por ejemplo «Toro»): sus variantes salen en una sola tarjeta del catálogo. */
+  familyId?: string;
+  familyName?: string;
+  /** Lo que distingue a la variante dentro de su familia (por ejemplo «Maduro · 6 × 52»). */
+  variantLabel?: string;
+  /** Código de barras (EAN-13, EAN-8, UPC-A o Code 128). Si no hay, la etiqueta usa el SKU. */
+  barcode?: string;
+  /** Precio al local por caja, si no es unidades por caja × precio por unidad. */
+  boxPrice?: number;
   /** Foto de la marca (solo café): nombre de archivo en public/marca/productos. */
   brandPhoto?: string;
   sampleCost: boolean;
@@ -47,7 +61,8 @@ export interface Product extends Entity {
 }
 
 export interface Photo extends Entity {
-  ownerType: 'product' | 'store' | 'return' | 'message' | 'visit';
+  /** `document`: foto o PDF de un permiso, Tax ID o certificado; `bale`: foto de un bulto con diferencias. */
+  ownerType: 'product' | 'store' | 'return' | 'message' | 'visit' | 'document' | 'bale';
   ownerId: string;
   blob: Blob;
   mime: string;
@@ -81,6 +96,8 @@ export type ArrivalStatus =
   | 'produccion'
   | 'transito'
   | 'aduana'
+  /** Confirmando bultos (entre «En aduana» y «Recibida»). */
+  | 'confirmando'
   | 'recibida'
   | 'programado'
   | 'tostado'
@@ -90,6 +107,29 @@ export interface ArrivalItem {
   productId: string;
   qty: number;
   unitCost: number;
+}
+
+export type BaleStatus = 'pendiente' | 'bien' | 'falta' | 'sobra' | 'danado';
+
+export interface BaleItem {
+  productId: string;
+  /** Lo que dice la lista de empaque (en la unidad del producto: mazos, tabacos…). */
+  qty: number;
+  unitCost: number;
+}
+
+/** Un bulto de la lista de empaque de una importación. Puede traer varios productos. */
+export interface Bale {
+  id: string;
+  number: string;
+  items: BaleItem[];
+  status: BaleStatus;
+  /** Lo contado por producto (si falta, se toma lo esperado). */
+  counted?: Record<string, number>;
+  note?: string;
+  photoIds?: string[];
+  checkedAt?: IsoDateTime;
+  checkedBy?: string;
 }
 
 export interface Arrival extends Entity {
@@ -104,6 +144,8 @@ export interface Arrival extends Entity {
   /** Café: consumir antes de, para el lote. */
   bestBefore?: IsoDate;
   items: ArrivalItem[];
+  /** Importación: lista de empaque por bulto (si se cargó). */
+  bales?: Bale[];
   notes: string;
   createdAt: IsoDateTime;
   receivedAt?: IsoDateTime;
@@ -125,7 +167,11 @@ export type MovementType =
   | 'venta_reportada'
   | 'devolucion'
   | 'merma'
-  | 'ajuste';
+  | 'ajuste'
+  /** Venta en firme (mayoreo): del almacén a vendido. */
+  | 'venta_firme'
+  /** Inventario inicial cargado al importar productos. */
+  | 'inventario_inicial';
 
 export interface Movement extends Entity {
   at: IsoDateTime;
@@ -137,7 +183,7 @@ export interface Movement extends Entity {
   to: Location;
   /** Para buscar rápido los movimientos de un local. */
   storeId: string | null;
-  refType: 'arrival' | 'delivery' | 'sale' | 'return' | 'shrink' | 'adjust' | 'seed';
+  refType: 'arrival' | 'delivery' | 'sale' | 'return' | 'shrink' | 'adjust' | 'seed' | 'invoice' | 'import' | 'count';
   refId: string;
   reason?: string;
   actorId: string;
@@ -149,7 +195,19 @@ export type StoreStatus = 'prospecto' | 'contrato_enviado' | 'firmado' | 'activo
 export interface TobaccoPermit {
   number: string;
   expiresOn: IsoDate;
+  /** Quién lo emite (Florida: DBPR; Texas: Comptroller). */
+  issuer?: string;
 }
+
+/** Consignación (lo de siempre) o compra en firme como mayorista. */
+export type SaleMode = 'consignacion' | 'firme';
+
+export interface ResaleCertificate {
+  number: string;
+  expiresOn: IsoDate;
+}
+
+export type StoreDocumentKind = 'permiso' | 'taxId' | 'reventa';
 
 export interface Store extends Entity {
   name: string;
@@ -167,6 +225,20 @@ export interface Store extends Entity {
   sellerId: string;
   status: StoreStatus;
   tobaccoPermit?: TobaccoPermit;
+  /** Si falta, consignación. */
+  saleMode?: SaleMode;
+  /** En firme: días de crédito (0 = de contado). */
+  creditDays?: number;
+  /** Lista de precios del local (si falta, la de la línea por defecto). */
+  priceListId?: string;
+  /** Mercado (Miami, Houston…). Si falta, el primero de la línea. */
+  marketId?: string;
+  /** Tax ID (EIN) del local. */
+  taxId?: string;
+  /** Certificado de reventa (Florida: Annual Resale Certificate). */
+  resaleCert?: ResaleCertificate;
+  /** Foto o PDF de cada documento (id en `photos`). */
+  documents?: Partial<Record<StoreDocumentKind, string>>;
   notes: string;
   createdAt: IsoDateTime;
   createdBy: string;
@@ -189,6 +261,8 @@ export interface ContractAnnexItem {
   productId: string;
   name: string;
   sku: string;
+  /** Unidad del producto (mazo, tabaco…). Si falta, la de la línea. */
+  unitName?: string;
   priceToStore: number;
   suggestedRetail: number;
   storeEarning: number;
@@ -278,6 +352,10 @@ export interface Delivery extends Entity {
   rejectedReason?: string;
   /** Plantilla PDF de nota de entrega activa cuando se recibió (si había). */
   templateId?: string;
+  /** Venta en firme: factura que nació al recibir. */
+  invoiceId?: string;
+  /** Reparto (ruta del camión) en el que va. */
+  routeId?: string;
 }
 
 // ---------- Visitas, ventas, devoluciones ----------
@@ -343,6 +421,8 @@ export interface Reorder extends Entity {
   createdBy: string;
   confirmedAt?: IsoDateTime;
   deliveryId?: string;
+  /** Cómo llegó: lo pidió el local o el vendedor, por teléfono o pegado de un mensaje. */
+  origin?: 'local' | 'vendedor' | 'telefono' | 'pegado';
   history: { status: ReorderStatus; at: IsoDateTime; by: string }[];
 }
 
@@ -374,10 +454,14 @@ export interface Settlement extends Entity {
   paidAt?: IsoDateTime;
 }
 
-export type PaymentMethod = 'efectivo' | 'cheque' | 'zelle' | 'transferencia';
+/** `tarjeta`: cobrada aparte, en el datáfono del local o de la empresa (aquí solo se apunta). */
+export type PaymentMethod = 'efectivo' | 'cheque' | 'zelle' | 'transferencia' | 'tarjeta';
 
 export interface Payment extends Entity {
-  settlementId: string;
+  /** Pago de una liquidación (consignación)… */
+  settlementId?: string;
+  /** …o de una factura (venta en firme). */
+  invoiceId?: string;
   storeId: string;
   amount: number;
   method: PaymentMethod;
@@ -463,7 +547,10 @@ export type NotificationKind =
   | 'comision_pagada'
   | 'mensaje'
   | 'comunicado'
-  | 'cafe_por_vencer';
+  | 'cafe_por_vencer'
+  | 'factura_nueva'
+  | 'documento_por_vencer'
+  | 'copia_pendiente';
 
 export interface AppNotification extends Entity {
   userId: string;
@@ -485,6 +572,10 @@ export interface User extends Entity {
   storeId?: string;
   /** Vendedor: comisión especial que reemplaza la de cada producto (si se pone). */
   commissionOverride?: CommissionRule;
+  /** Vendedor: comisión progresiva propia (si falta, la de Ajustes). */
+  commissionScheme?: CommissionScheme;
+  /** Vendedor: mercado donde trabaja. */
+  marketId?: string;
   active: boolean;
   createdAt: IsoDateTime;
 }
@@ -493,6 +584,32 @@ export interface Zone extends Entity {
   name: string;
   lat: number;
   lng: number;
+  marketId?: string;
+}
+
+/** Mercado (Miami, Houston…): agrupa zonas, locales y vendedores. */
+export interface Market {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  zoom: number;
+}
+
+export type CommissionTierMetric = 'locales' | 'cajas' | 'unidades' | 'ventas';
+
+/** Escalón: desde `min` (locales activos, cajas, unidades o dólares del mes) se pasa a `percent`. */
+export interface CommissionTier {
+  metric: CommissionTierMetric;
+  min: number;
+  percent: number;
+}
+
+/** Comisión progresiva: un % base, escalones y un tope que nunca se pasa. */
+export interface CommissionScheme {
+  basePercent: number;
+  capPercent: number;
+  tiers: CommissionTier[];
 }
 
 export interface LineSettings extends Entity {
@@ -509,6 +626,19 @@ export interface LineSettings extends Entity {
   contractTemplateVersion: number;
   contractTermMonths: number;
   terminationNoticeDays: number;
+  /** Datos de ejemplo o datos reales de la empresa (solo en este navegador). Si falta, ejemplo. */
+  dataMode?: 'demo' | 'real';
+  /** Última copia exportada (para el aviso de copia de seguridad). */
+  lastExportAt?: IsoDateTime;
+  markets?: Market[];
+  /** % de impuesto de venta. Vacío o 0: la app no calcula impuestos. */
+  salesTaxPercent?: number;
+  /** Comisión progresiva de la línea (si falta, la regla de cada producto). */
+  commissionScheme?: CommissionScheme;
+  /** Lista de precios de los locales que no tienen una propia. */
+  defaultPriceListId?: string;
+  /** Repartos: costo estimado por kilómetro (USD). */
+  routeCostPerKm?: number;
 }
 
 export interface AuditEntry {
@@ -549,4 +679,125 @@ export interface EcosystemSettings extends Entity {
   theme: 'dark' | 'light';
   seededAt: IsoDateTime;
   seedVersion: number;
+}
+
+// ---------- Ronda 3: venta en firme, precios, trazabilidad, repartos, invitaciones ----------
+export type PriceListKind = 'pvp' | 'local' | 'mayorista' | 'otra';
+
+/** Precio de un producto en una lista: escrito o como % sobre el costo. */
+export interface PriceEntry {
+  mode: 'fixed' | 'markup';
+  /** Por unidad base (mazo, tabaco o unidad). */
+  unit?: number;
+  /** Por caja (si falta: unidad × unidades por caja). */
+  box?: number;
+  markupPercent?: number;
+  /** Desde N cajas, precio por caja. */
+  volume?: { minBoxes: number; box: number };
+}
+
+export interface PriceList extends Entity {
+  name: string;
+  kind: PriceListKind;
+  /** Para productos sin precio en la lista: % sobre el costo (si falta, el precio al local del producto). */
+  defaultMarkupPercent?: number;
+  entries: Record<string, PriceEntry>;
+  active: boolean;
+  createdAt: IsoDateTime;
+  updatedAt: IsoDateTime;
+}
+
+/** Por unidad base (mazo, tabaco o unidad) o por caja. */
+export type SalePack = 'unidad' | 'caja';
+
+export interface InvoiceLine {
+  productId: string;
+  /** Nombre al facturar (no cambia si el producto se renombra). */
+  name: string;
+  pack: SalePack;
+  packQty: number;
+  /** Unidades base que salen del almacén. */
+  qty: number;
+  /** Precio por unidad o por caja, según `pack`. */
+  unitPrice: number;
+  amount: number;
+  /** Costo por lote (COGS). */
+  cost: number;
+  lots: { lotId: string; qty: number; unitCost: number }[];
+}
+
+export type InvoiceOrigin = 'entrega' | 'venta_rapida';
+
+/** Factura de una venta en firme (mayoreo). Los pagos se apuntan en `payments` con `invoiceId`. */
+export interface Invoice extends Entity {
+  code: string;
+  storeId: string;
+  /** Sin vendedor (venta directa): no hay comisión. */
+  sellerId: string | null;
+  origin: InvoiceOrigin;
+  deliveryId?: string;
+  reorderId?: string;
+  priceListId?: string;
+  lines: InvoiceLine[];
+  subtotal: number;
+  taxPercent: number;
+  tax: number;
+  total: number;
+  paid: number;
+  status: SettlementStatus;
+  issuedAt: IsoDateTime;
+  dueOn: IsoDate;
+  creditDays: number;
+  /** El local no tenía certificado de reventa vigente al facturar. */
+  withoutResaleCert: boolean;
+  note: string;
+  createdBy: string;
+  paidAt?: IsoDateTime;
+}
+
+/** Trazabilidad: una caja con su número propio, de qué importación y bulto viene y a dónde fue. */
+export interface CaseUnit extends Entity {
+  code: string;
+  productId: string;
+  arrivalId: string | null;
+  baleNumber?: string;
+  factory: string;
+  roller: string;
+  packer: string;
+  packedOn?: IsoDate;
+  deliveryId?: string;
+  invoiceId?: string;
+  storeId?: string;
+  createdAt: IsoDateTime;
+}
+
+export type RouteStatus = 'borrador' | 'en_ruta' | 'terminado';
+
+/** Reparto: la ruta del día de un camión, con sus paradas en orden y sus costos. */
+export interface DeliveryRoute extends Entity {
+  code: string;
+  date: IsoDate;
+  driver: string;
+  vehicle: string;
+  stops: { deliveryId: string; storeId: string }[];
+  km: number;
+  costPerKm: number;
+  driverCost: number;
+  tolls: number;
+  status: RouteStatus;
+  createdAt: IsoDateTime;
+  createdBy: string;
+}
+
+/** Invitación a un vendedor o a un local. Sin servidor solo elige la cuenta en este navegador. */
+export interface Invitation extends Entity {
+  accountId: string;
+  userId: string;
+  role: 'seller' | 'store';
+  storeId?: string;
+  priceListId?: string;
+  expiresAt: IsoDateTime;
+  createdAt: IsoDateTime;
+  createdBy: string;
+  revokedAt?: IsoDateTime;
 }

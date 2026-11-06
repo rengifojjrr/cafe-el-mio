@@ -734,6 +734,9 @@ const NOTIF_ICON: Record<NotificationKind, LucideIcon> = {
   mensaje: MessageCircle,
   comunicado: Megaphone,
   cafe_por_vencer: Coffee,
+  factura_nueva: Receipt,
+  documento_por_vencer: FileText,
+  copia_pendiente: AlarmClock,
 };
 
 const ALERT_ICON: Record<InventoryAlert['kind'], LucideIcon> = {

@@ -48,6 +48,8 @@ export const MOVEMENT_LABEL: Record<MovementType, string> = {
   salida_consignacion: 'Salida a consignación',
   venta_reportada: 'Venta reportada',
   devolucion: 'Devolución',
+  venta_firme: 'Venta en firme',
+  inventario_inicial: 'Inventario inicial (importado)',
   merma: 'Merma',
   ajuste: 'Ajuste',
 };

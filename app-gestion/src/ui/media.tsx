@@ -1,5 +1,6 @@
 // Fotos: miniatura de producto (foto subida, foto de la marca o silueta del tabaco)
 // y el botón para tomar o elegir una foto (se comprime a WebP antes de guardarla).
+import { capaShade } from '../domain/products';
 import { Camera, ImageOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Photo } from '../data/types';
@@ -59,7 +60,7 @@ export function ProductThumb({
       <CigarSilhouette
         lengthIn={Number(a.lengthIn)}
         ringGauge={Number(a.ringGauge)}
-        shade={String(a.wrapperShade ?? 'colorado')}
+        shade={String(a.wrapperShade ?? capaShade(a.capa))}
         vitola={String(a.vitola ?? '')}
         ruler={size === 'lg'}
         className={`h-full w-full ${className}`}

@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import type { Store } from '../../data/types';
 import { consignmentCheck } from '../../domain/compliance';
+import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitOf, unitsText } from '../../domain/products';
 import type { NewPhoto } from '../../lib/image';
 import { fmtMoney } from '../../lib/money';
 import { fmtDate, fmtDateTime, fmtRelativeDays } from '../../lib/time';
@@ -211,14 +212,15 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
 
 /** Pedir un producto desde su ficha (o su tarjeta): cuánto y listo. Para la cuenta del local. */
 export function QuickOrderSheet({ view, onClose }: { view: ProductView | null; onClose: () => void }) {
-  const { ctx, actor, config, p } = useLine();
+  const { ctx, actor, p } = useLine();
   const { run, busy } = useAction();
   const [qty, setQty] = useState<number | null>(null);
   const [note, setNote] = useState('');
   if (!view) return null;
   const pr = view.product;
   const s = view.stock;
-  const value = qty ?? pr.packSize;
+  const value = qty ?? defaultOrderQty(pr);
+  const unit = unitOf(pr);
   const now = ctx.now();
   return (
     <Sheet open onClose={onClose} title={`Pedir ${pr.name}`}>
@@ -231,12 +233,12 @@ export function QuickOrderSheet({ view, onClose }: { view: ProductView | null; o
             const r = await createReorder(ctx, { storeId: actor.storeId!, items: [{ productId: pr.id, qty: value }], note });
             onClose();
             return r;
-          }, (r) => `Pedido ${r.code} enviado: ${value} ${value === 1 ? config.unitName.one : config.unitName.many}. Tu vendedor ya tiene el aviso.`);
+          }, (r) => `Pedido ${r.code} enviado: ${unitsText(pr, value)}. Tu vendedor ya tiene el aviso.`);
         }}
       >
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-2xl bg-surface-2 p-3">
-            <p className="text-muted">Ganas por unidad</p>
+            <p className="text-muted">Ganas por {unit.one}</p>
             <p className="glow text-xl font-bold tabular">{fmtMoney(view.storeEarning)}</p>
           </div>
           <div className="rounded-2xl bg-surface-2 p-3">
@@ -251,9 +253,9 @@ export function QuickOrderSheet({ view, onClose }: { view: ProductView | null; o
         ) : null}
         <div className="field">
           <span className="field-label">¿Cuánto quieres?</span>
-          <QtyStepper label={pr.name} pack={pr.packSize} value={value} onChange={setQty} unit={config.unitName.many} />
+          <QtyStepper label={pr.name} pack={orderStep(pr)} value={value} onChange={setQty} unit={unit.many} />
           <p className="field-hint">
-            Caja de {pr.packSize} {config.unitName.many}. Ganarías {fmtMoney(value * view.storeEarning)} si lo vendes todo al PVP sugerido.
+            {packText(pr)}. Ganarías {fmtMoney(value * view.storeEarning)} si lo vendes todo al PVP sugerido.
           </p>
         </div>
         <TextArea label="Nota para tu vendedor (opcional)" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -270,7 +272,7 @@ export function QuickOrderSheet({ view, onClose }: { view: ProductView | null; o
 
 /** El vendedor (o administración) pide producto en consignación para un local. */
 export function RequestDeliverySheet({ open, onClose, store }: { open: boolean; onClose: () => void; store: Store }) {
-  const { ctx, line, config } = useLine();
+  const { ctx, line } = useLine();
   const { run, busy } = useAction();
   const products = useAsync(() => (open ? listProducts(ctx) : Promise.resolve([])), [ctx, open]);
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -279,7 +281,8 @@ export function RequestDeliverySheet({ open, onClose, store }: { open: boolean; 
   const items = Object.entries(qty)
     .filter(([, q]) => q > 0)
     .map(([productId, q]) => ({ productId, qty: q }));
-  const total = items.reduce((a, i) => a + i.qty, 0);
+  const byId = new Map((products.data ?? []).map((v) => [v.product.id, v.product]));
+  const totalText = mixedUnitsText(items.flatMap((i) => (byId.get(i.productId) ? [{ product: byId.get(i.productId)!, qty: i.qty }] : [])));
   return (
     <Sheet open={open} onClose={onClose} title={`Pedir producto para ${store.name}`} wide>
       {!check.ok ? (
@@ -296,7 +299,7 @@ export function RequestDeliverySheet({ open, onClose, store }: { open: boolean; 
               setQty({});
               setNote('');
               onClose();
-            }, `Pedido enviado a administración: ${total} ${config.unitName.many}.`);
+            }, `Pedido enviado a administración: ${totalText}.`);
           }}
         >
           <p className="text-muted">Administración lo aprueba y lo prepara. Cuando esté listo, el local firma la nota de entrega al recibir.</p>
@@ -306,17 +309,17 @@ export function RequestDeliverySheet({ open, onClose, store }: { open: boolean; 
                 <div className="min-w-0 flex-1 basis-48">
                   <p className="font-semibold">{v.product.name}</p>
                   <p className="text-sm text-muted">
-                    Hay {v.stock.available} · {fmtMoney(v.product.priceToStore)} al local
+                    Hay {unitsText(v.product, v.stock.available)} · {fmtMoney(v.product.priceToStore)} por {unitOf(v.product).one} al local
                     {v.stock.available === 0 && v.stock.nextArrival ? ` · llegan ${v.stock.nextArrival.qty} ${fmtRelativeDays(v.stock.nextArrival.eta, ctx.now())}` : ''}
                   </p>
                 </div>
-                <QtyStepper label={v.product.name} pack={v.product.packSize} value={qty[v.product.id] ?? 0} onChange={(n) => setQty((s) => ({ ...s, [v.product.id]: n }))} unit={config.unitName.many} />
+                <QtyStepper label={v.product.name} pack={orderStep(v.product)} value={qty[v.product.id] ?? 0} onChange={(n) => setQty((s) => ({ ...s, [v.product.id]: n }))} unit={unitOf(v.product).many} />
               </li>
             ))}
           </ul>
           <TextArea label="Nota para administración (opcional)" value={note} onChange={(e) => setNote(e.target.value)} />
-          <Button type="submit" variant="primary" big icon={Send} busy={busy} disabled={total === 0}>
-            Enviar pedido ({total} u.)
+          <Button type="submit" variant="primary" big icon={Send} busy={busy} disabled={items.length === 0}>
+            Enviar pedido{items.length ? ` (${totalText})` : ''}
           </Button>
         </form>
       )}

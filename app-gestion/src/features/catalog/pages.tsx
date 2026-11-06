@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { CommissionRule, Product } from '../../data/types';
 import { describeRule, storeEarning } from '../../domain/money-rules';
+import { capaShade, packText } from '../../domain/products';
 import { arrivalStatusLabel } from '../../lines/config';
 import { fmtMoney } from '../../lib/money';
 import { fmtDate, fmtRelativeDays } from '../../lib/time';
@@ -254,7 +255,7 @@ export function ProductDetailPage() {
         <Card className="p-4 sm:p-6">
           {line === 'tabaco' && a.lengthIn ? (
             <>
-              <CigarSilhouette lengthIn={Number(a.lengthIn)} ringGauge={Number(a.ringGauge)} shade={String(a.wrapperShade)} vitola={String(a.vitola)} className="w-full" />
+              <CigarSilhouette lengthIn={Number(a.lengthIn)} ringGauge={Number(a.ringGauge)} shade={String(a.wrapperShade ?? capaShade(a.capa))} vitola={String(a.vitola)} className="w-full" />
               <p className="mt-2 text-sm text-muted">Silueta a escala real: {attrText(config.productFields[1]!, a.lengthIn)} de largo, cepo {attrText(config.productFields[2]!, a.ringGauge)}.</p>
             </>
           ) : (
@@ -322,7 +323,7 @@ export function ProductDetailPage() {
               ) : null}
             </dl>
             <p className="mt-2 text-xs text-muted">
-              Presentación: {config.packName} de {pr.packSize} {pr.packSize === 1 ? config.unitName.one : config.unitName.many}.
+              Presentación: {packText(pr)}.
             </p>
           </Card>
         </div>
@@ -515,7 +516,8 @@ function ProductForm({ initial }: { initial?: Product }) {
         sellerCommission: { type: f.ruleType, value: f.ruleValue === '' ? 0 : f.ruleValue },
         lowStockThreshold: f.lowStockThreshold === '' ? 0 : f.lowStockThreshold,
         packSize: f.packSize === '' ? 1 : f.packSize,
-        unitName: config.unitName.one,
+        // Al editar se conserva la unidad del producto (un producto de mazo sigue siendo de mazo).
+        unitName: initial?.unitName ?? config.unitName.one,
         notes: f.notes,
         pairing: f.pairing,
         attrs: f.attrs,
@@ -534,7 +536,7 @@ function ProductForm({ initial }: { initial?: Product }) {
       <PageHeader back={{ to: initial ? p(`catalogo/${initial.id}`) : p('catalogo'), label: initial ? initial.name : 'Catálogo' }} title={initial ? 'Editar producto' : 'Nuevo producto'} subtitle="Los costos solo los ve administración." />
       {line === 'tabaco' && f.attrs.lengthIn && f.attrs.ringGauge ? (
         <Card className="mb-4 p-4">
-          <CigarSilhouette lengthIn={Number(f.attrs.lengthIn)} ringGauge={Number(f.attrs.ringGauge)} shade={String(f.attrs.wrapperShade ?? 'colorado')} vitola={String(f.attrs.vitola ?? '')} className="w-full" />
+          <CigarSilhouette lengthIn={Number(f.attrs.lengthIn)} ringGauge={Number(f.attrs.ringGauge)} shade={String(f.attrs.capa ? capaShade(f.attrs.capa) : (f.attrs.wrapperShade ?? 'colorado'))} vitola={String(f.attrs.vitola ?? '')} className="w-full" />
           <p className="mt-1 text-sm text-muted">Vista previa a escala mientras completas largo, cepo y capa.</p>
         </Card>
       ) : null}

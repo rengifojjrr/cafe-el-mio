@@ -4,6 +4,7 @@ import { CheckCircle2, ClipboardCheck, ClipboardList, MapPin, Printer, Send, Sho
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import type { Delivery, Reorder } from '../../data/types';
+import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitOf, unitsText } from '../../domain/products';
 import { fmtMoney } from '../../lib/money';
 import { fmtDate, fmtDateTime, fmtRelativeDays } from '../../lib/time';
 import type { NewPhoto } from '../../lib/image';
@@ -410,7 +411,7 @@ export function StoreOrderPage() {
 }
 
 function StoreOrder() {
-  const { ctx, actor, p, config, line } = useLine();
+  const { ctx, actor, p, line } = useLine();
   const nav = useNavigate();
   const [params] = useSearchParams();
   const { run, busy } = useAction();
@@ -421,12 +422,16 @@ function StoreOrder() {
   const effective = useMemo(() => {
     if (!preselect || qty[preselect] !== undefined) return qty;
     const pr = products.data?.find((v) => v.product.id === preselect);
-    return pr ? { ...qty, [preselect]: pr.product.packSize } : qty;
+    return pr ? { ...qty, [preselect]: defaultOrderQty(pr.product) } : qty;
   }, [qty, preselect, products.data]);
   const items = Object.entries(effective)
     .filter(([, q]) => q > 0)
     .map(([productId, q]) => ({ productId, qty: q }));
   const units = items.reduce((a, i) => a + i.qty, 0);
+  const unitsLabel = mixedUnitsText(items.flatMap((i) => {
+    const v = products.data?.find((x) => x.product.id === i.productId);
+    return v ? [{ product: v.product, qty: i.qty }] : [];
+  }));
   const earning = items.reduce((a, i) => a + i.qty * (products.data?.find((v) => v.product.id === i.productId)?.storeEarning ?? 0), 0);
   const now = ctx.now();
   return (
@@ -441,7 +446,7 @@ function StoreOrder() {
         }, (r) => `Pedido ${r.code} enviado. Le llegó el aviso a tu vendedor.`);
       }}
     >
-      <PageHeader title="Pedir más producto" subtitle="Elige cuántas cajas quieres. Tu vendedor lo confirma y el almacén lo prepara; firmas la nota al recibir." />
+      <PageHeader title="Pedir más producto" subtitle="Elige cuánto quieres de cada producto. Tu vendedor lo confirma y el almacén lo prepara; firmas la nota al recibir." />
       {products.loading && !products.data ? <Loading rows={4} /> : null}
       {products.error ? <ErrorBox error={products.error} /> : null}
       <ul className="grid gap-2">
@@ -455,14 +460,14 @@ function StoreOrder() {
               <div className="min-w-0 flex-1 basis-40">
                 <p className="font-semibold">{v.product.name}</p>
                 <p className="text-sm text-muted">
-                  Ganas <b className="text-ok">{fmtMoney(v.storeEarning)}</b> por unidad · caja de {v.product.packSize}
+                  Ganas <b className="text-ok">{fmtMoney(v.storeEarning)}</b> por {unitOf(v.product).one} · {packText(v.product).toLowerCase()}
                 </p>
                 <p className={`text-sm ${s.available > 0 ? 'text-muted' : 'text-warn'}`}>
-                  {s.available > 0 ? `Hay ${s.available} en el almacén` : 'Sin disponibilidad ahora'}
+                  {s.available > 0 ? `Hay ${unitsText(v.product, s.available)} en el almacén` : 'Sin disponibilidad ahora'}
                   {s.nextArrival ? ` · llegan ${s.nextArrival.qty} el ${fmtDate(s.nextArrival.eta)} (${fmtRelativeDays(s.nextArrival.eta, now)})` : ''}
                 </p>
               </div>
-              <QtyStepper label={v.product.name} pack={v.product.packSize} value={effective[v.product.id] ?? 0} onChange={(n) => setQty((st) => ({ ...st, [v.product.id]: n }))} unit={config.unitName.many} />
+              <QtyStepper label={v.product.name} pack={orderStep(v.product)} value={effective[v.product.id] ?? 0} onChange={(n) => setQty((st) => ({ ...st, [v.product.id]: n }))} unit={unitOf(v.product).many} />
             </li>
           );
         })}
@@ -473,7 +478,7 @@ function StoreOrder() {
       <div className="sticky bottom-[76px] z-20 mt-5 flex flex-wrap items-center justify-end gap-3 lg:bottom-4 lg:justify-start">
         {units > 0 ? (
           <p className="glass px-4 py-2 text-sm font-semibold">
-            {units} {config.unitName.many} · ganarías <span className="glow tabular">{fmtMoney(earning)}</span> al PVP sugerido
+            {unitsLabel} · ganarías <span className="glow tabular">{fmtMoney(earning)}</span> al PVP sugerido
           </p>
         ) : null}
         <Button type="submit" variant="primary" big icon={Send} busy={busy} disabled={units === 0 || actor.readOnly}>

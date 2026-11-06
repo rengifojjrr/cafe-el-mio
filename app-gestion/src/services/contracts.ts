@@ -44,6 +44,7 @@ async function buildBody(ctx: Ctx, store: Store, version: number) {
       productId: p.id,
       name: p.name,
       sku: p.sku,
+      unitName: p.unitName,
       priceToStore: p.priceToStore,
       suggestedRetail: p.suggestedRetail,
       storeEarning: storeEarning(p),

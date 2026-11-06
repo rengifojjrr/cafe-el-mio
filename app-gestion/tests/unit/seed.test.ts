@@ -41,9 +41,24 @@ describe('semilla de ejemplo', () => {
     });
   }
 
-  it('tabaco: 12 productos, 4 vendedores, 18 locales, un permiso vencido y nada de Cuba', () => {
+  it('tabaco: 12 premium y 9 de mazo en 4 familias, 4 vendedores, 18 locales, un permiso vencido y nada de Cuba', () => {
     const products = tabaco.products as Product[];
-    expect(products).toHaveLength(12);
+    expect(products).toHaveLength(21);
+    expect(products.filter((p) => p.kind === 'premium')).toHaveLength(12);
+    const mazo = products.filter((p) => p.kind === 'mazo');
+    expect(mazo).toHaveLength(9);
+    expect(new Set(mazo.map((p) => p.familyId)).size).toBe(4);
+    for (const p of mazo) {
+      expect(p.unitName).toBe('mazo');
+      expect(p.attrs.cigarsPerBundle).toBe(25);
+      expect(p.packSize).toBe(50);
+      // El nombre lleva la capa sin escribirla a mano: «Toro 6 × 52 · Maduro».
+      expect(p.name).toBe(`${p.familyName} · ${p.variantLabel}`);
+      expect(p.variantLabel).not.toContain('×');
+    }
+    // Ningún código de barras repetido.
+    const codes = products.map((p) => p.barcode).filter(Boolean);
+    expect(new Set(codes).size).toBe(codes.length);
     for (const p of products) expect(isCubanOrigin(String(p.attrs.originCountry))).toBe(false);
     const stores = tabaco.stores as Store[];
     expect(stores).toHaveLength(18);

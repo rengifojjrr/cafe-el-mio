@@ -53,9 +53,9 @@ export function annexText(items: readonly ContractAnnexItem[], unitName: string)
   return items
     .map(
       (i) =>
-        `- ${i.name} (${i.sku}): precio al local ${fmtMoney(i.priceToStore)} por ${unitName}; PVP sugerido ${fmtMoney(
+        `- ${i.name} (${i.sku}): precio al local ${fmtMoney(i.priceToStore)} por ${i.unitName ?? unitName}; PVP sugerido ${fmtMoney(
           i.suggestedRetail,
-        )}; el local gana ${fmtMoney(i.storeEarning)} por ${unitName} vendido.`,
+        )}; el local gana ${fmtMoney(i.storeEarning)} por ${i.unitName ?? unitName} vendido.`,
     )
     .join('\n');
 }

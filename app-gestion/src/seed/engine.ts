@@ -38,6 +38,7 @@ import type {
 import { annexText, renderTemplate } from '../domain/contract';
 import { consignmentCheck } from '../domain/compliance';
 import { Balances, WAREHOUSE, allocate, storeLoc } from '../domain/ledger';
+import { orderStep } from '../domain/products';
 import { commissionAmount, effectiveRule, settlementLines, settlementStatus, storeEarning } from '../domain/money-rules';
 import type { LineConfig } from '../lines/config';
 import { idFactory, seededRandom } from '../lib/ids';
@@ -390,7 +391,7 @@ export function simulateLine(def: LineSeedDef, now: Date): SeedTables {
     const annex = products
       .filter((p) => p.active)
       .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-      .map((p) => ({ productId: p.id, name: p.name, sku: p.sku, priceToStore: p.priceToStore, suggestedRetail: p.suggestedRetail, storeEarning: storeEarning(p) }));
+      .map((p) => ({ productId: p.id, name: p.name, sku: p.sku, unitName: p.unitName, priceToStore: p.priceToStore, suggestedRetail: p.suggestedRetail, storeEarning: storeEarning(p) }));
     const vars: Record<string, string> = {
       'contrato.version': '1',
       fecha: fmtDate(at(day, 10)),
@@ -665,9 +666,11 @@ export function simulateLine(def: LineSeedDef, now: Date): SeedTables {
   const state = new Map<string, StoreState>();
   const payPlan: { day: number; settlement: Settlement; amount: number; method: PaymentMethod }[] = [];
   const payoutDays = [-61, -31];
+  // Lo de mazo se pide de a un mazo; lo demás, de a una caja.
   const parFor = (ps: ProductSeed, s: StoreSeed) => {
     const weekly = ps.rate * s.size;
-    return Math.max(ps.packSize, Math.ceil((weekly * 3) / ps.packSize) * ps.packSize);
+    const step = orderStep(ps);
+    return Math.max(step, Math.ceil((weekly * 3) / step) * step);
   };
 
   const activeDayStart = Math.min(...def.stores.filter((s) => s.activationDay !== null).map((s) => s.activationDay!));
@@ -759,7 +762,7 @@ export function simulateLine(def: LineSeedDef, now: Date): SeedTables {
           const have = balances.qty(storeLoc(store.id), p.id);
           const par = parFor(ps, s);
           if (have >= par * 0.4) return null;
-          return { productId: p.id, qty: Math.ceil((par - have) / ps.packSize) * ps.packSize };
+          return { productId: p.id, qty: Math.ceil((par - have) / orderStep(ps)) * orderStep(ps) };
         })
         .filter((x): x is { productId: string; qty: number } => Boolean(x));
       if (need.length && day < -3) {
@@ -847,7 +850,7 @@ export function simulateLine(def: LineSeedDef, now: Date): SeedTables {
     if (!su) throw new Error(`Semilla: el local ${store.name} no tiene cuenta para pedir.`);
     const items = pr.items.map((it) => {
       const p = prod(it.product);
-      return { productId: p.id, qty: it.packs * p.packSize };
+      return { productId: p.id, qty: it.packs * orderStep(p) };
     });
     const created = ago(pr.status === 'enviado' ? 2 + i : 20 + i);
     const r: Reorder = {

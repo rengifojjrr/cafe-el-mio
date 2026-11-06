@@ -258,7 +258,7 @@ describe('separación de líneas', () => {
         lengthIn: 5,
         ringGauge: 50,
         wrapper: 'Connecticut Shade (Ecuador)',
-        wrapperShade: 'claro',
+        capa: 'connecticut',
         originCountry: 'Nicaragua',
         strength: 'suave',
       },
@@ -284,7 +284,7 @@ describe('separación de líneas', () => {
         lowStockThreshold: 10,
         packSize: 20,
         unitName: 'tabaco',
-        attrs: { vitola: 'Robusto', lengthIn: 5, ringGauge: 50, wrapper: 'X', wrapperShade: 'claro', originCountry: 'Cuba', strength: 'media' },
+        attrs: { vitola: 'Robusto', lengthIn: 5, ringGauge: 50, capa: 'habano', originCountry: 'Cuba', strength: 'media' },
       }),
     ).rejects.toThrow(ValidationError);
   });

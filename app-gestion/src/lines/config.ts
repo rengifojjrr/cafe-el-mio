@@ -1,13 +1,17 @@
 // Un mismo motor, dos configuraciones. Todo lo que cambia entre Tabaco y Café vive aquí:
 // los campos del producto, de dónde entra el inventario, la plantilla de contrato,
 // las reglas de comisión por defecto y el tema de color.
-import type { ArrivalStatus, CommissionRule, LineId } from '../data/types';
+import type { ArrivalStatus, CommissionRule, LineId, ProductKind } from '../data/types';
+import { CAPAS } from '../domain/products';
 import { CAFE_CONTRACT, TABACO_CONTRACT } from './contract-templates';
 
+/** `kinds`: el campo solo aparece en esos tipos de tabaco (capote y tripa, solo en premium). */
+type FieldBase = { key: string; label: string; required?: boolean; kinds?: ProductKind[] };
+
 export type FieldDef =
-  | { key: string; label: string; kind: 'text'; placeholder?: string; hint?: string; required?: boolean }
-  | { key: string; label: string; kind: 'number'; unit?: string; step?: number; min?: number; hint?: string; required?: boolean }
-  | { key: string; label: string; kind: 'select'; options: { value: string; label: string }[]; required?: boolean };
+  | (FieldBase & { kind: 'text'; placeholder?: string; hint?: string; suggestions?: string[] })
+  | (FieldBase & { kind: 'number'; unit?: string; step?: number; min?: number; hint?: string })
+  | (FieldBase & { kind: 'select'; options: { value: string; label: string }[] });
 
 export interface LineConfig {
   id: LineId;
@@ -21,6 +25,14 @@ export interface LineConfig {
   productFields: FieldDef[];
   /** Campos que se muestran como resumen en las tarjetas del catálogo. */
   summaryFields: string[];
+  /** Filtros de un toque arriba del catálogo («kind» es premium o de mazo; «stock», con existencias). */
+  filterFields: string[];
+  /** Campos que distinguen las variantes de una familia (en tabaco, la capa y la medida). */
+  variantFields: string[];
+  /** Tabaco: se pregunta primero «¿Premium o de mazo?». */
+  hasKinds: boolean;
+  /** Unidad en que se cuenta por defecto (mazo en tabaco de mazo, unidad en café). */
+  defaultUnit: string;
   unitName: { one: string; many: string };
   packName: string;
   notesLabel: string;
@@ -42,6 +54,10 @@ export const WRAPPER_SHADES = [
   { value: 'candela', label: 'Candela' },
 ];
 
+export const VITOLAS = ['Robusto', 'Toro', 'Torpedo', 'Churchill', 'Corona', 'Gordo', 'Lancero', 'Belicoso', 'Petit corona', 'Corona gorda', 'Lonsdale', 'Perfecto'];
+
+export const KIND_LABEL: Record<ProductKind, string> = { premium: 'Premium', mazo: 'De mazo' };
+
 export const STRENGTHS = [
   { value: 'suave', label: 'Suave' },
   { value: 'media', label: 'Media' },
@@ -62,18 +78,24 @@ export const TABACO: LineConfig = {
     { value: 'recibida', label: 'Recibida' },
   ],
   productFields: [
-    { key: 'vitola', label: 'Vitola', kind: 'text', placeholder: 'Robusto, Toro, Churchill…', required: true },
+    { key: 'vitola', label: 'Vitola', kind: 'text', placeholder: 'Toro, Robusto, Torpedo…', suggestions: VITOLAS, required: true },
     { key: 'lengthIn', label: 'Largo', kind: 'number', unit: 'pulgadas', step: 0.125, min: 3, hint: 'En pulgadas: 6.125 es 6⅛″. Los mm se calculan solos.', required: true },
-    { key: 'ringGauge', label: 'Cepo', kind: 'number', unit: '/64″', step: 1, min: 20, hint: 'Grosor en 64avos de pulgada (50 = 50/64″).', required: true },
-    { key: 'wrapper', label: 'Capa', kind: 'text', placeholder: 'Connecticut Shade (Ecuador)', required: true },
-    { key: 'wrapperShade', label: 'Color de la capa', kind: 'select', options: WRAPPER_SHADES, required: true },
-    { key: 'binder', label: 'Capote', kind: 'text', placeholder: 'Nicaragua' },
-    { key: 'filler', label: 'Tripa', kind: 'text', placeholder: 'Nicaragua (Estelí, Jalapa)' },
-    { key: 'originCountry', label: 'País de procedencia', kind: 'text', placeholder: 'Nicaragua', required: true },
-    { key: 'originRegion', label: 'Región', kind: 'text', placeholder: 'Estelí' },
+    { key: 'ringGauge', label: 'Cepo', kind: 'number', unit: '/64″', step: 1, min: 20, hint: 'Grosor en 64avos de pulgada (52 = 52/64″).', required: true },
+    { key: 'capa', label: 'Capa', kind: 'select', options: CAPAS.map((c) => ({ value: c.value, label: c.label })), required: true },
     { key: 'strength', label: 'Fortaleza', kind: 'select', options: STRENGTHS, required: true },
+    { key: 'originCountry', label: 'Procedencia', kind: 'text', placeholder: 'Nicaragua', required: true },
+    { key: 'originRegion', label: 'Región', kind: 'text', placeholder: 'Estelí' },
+    { key: 'brand', label: 'Marca', kind: 'text', placeholder: 'GM Tabacos', kinds: ['premium'], required: true },
+    { key: 'edition', label: 'Línea o edición', kind: 'text', placeholder: 'Serie Biscayne', kinds: ['premium'] },
+    { key: 'wrapper', label: 'Detalle de la capa', kind: 'text', placeholder: 'Connecticut Shade (Ecuador)', kinds: ['premium'] },
+    { key: 'binder', label: 'Capote', kind: 'text', placeholder: 'Nicaragua', kinds: ['premium'] },
+    { key: 'filler', label: 'Tripa', kind: 'text', placeholder: 'Nicaragua (Estelí, Jalapa)', kinds: ['premium'] },
   ],
-  summaryFields: ['vitola', 'strength', 'originCountry'],
+  summaryFields: ['capa', 'strength', 'originCountry'],
+  filterFields: ['capa', 'vitola', 'strength', 'originCountry', 'kind', 'brand', 'stock'],
+  variantFields: ['capa', 'lengthIn', 'ringGauge'],
+  hasKinds: true,
+  defaultUnit: 'mazo',
   unitName: { one: 'tabaco', many: 'tabacos' },
   packName: 'caja',
   notesLabel: 'Notas de cata',
@@ -127,6 +149,10 @@ export const CAFE: LineConfig = {
     },
   ],
   summaryFields: ['roast', 'weight', 'productionLine'],
+  filterFields: ['roast', 'grind', 'weight', 'stock'],
+  variantFields: ['grind', 'weight'],
+  hasKinds: false,
+  defaultUnit: 'unidad',
   unitName: { one: 'unidad', many: 'unidades' },
   packName: 'caja',
   notesLabel: 'Notas',

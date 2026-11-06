@@ -2,9 +2,12 @@
 // personas, teléfonos 555-01xx, correos @example.com y direcciones «de ejemplo».
 // Ningún tabaco de origen Cuba (embargo de EE. UU.).
 import { TABACO } from '../lines/config';
+import { capaFromText, capaShade, composeName, familyIdFor, sizeText, variantLabelFor } from '../domain/products';
+import { internalEan13 } from '../lib/barcode';
 import type { LineSeedDef, ProductSeed, StoreSeed } from './engine';
 
 const BRAND = 'GM Tabacos (marca provisional)';
+let barcodeSeq = 1000;
 
 const z = {
   hialeah: 't-zon_hialeah',
@@ -40,6 +43,7 @@ function cigar(
   rate: number,
   supply = 1,
 ): ProductSeed {
+  // Premium: cada uno es su propia familia (el nombre ya dice la serie y la vitola).
   return {
     key,
     sku,
@@ -55,9 +59,56 @@ function cigar(
     unitName: 'tabaco',
     notes,
     pairing,
-    attrs: { ...a },
+    attrs: { ...a, capa: capaFromText(a.wrapper) ?? 'habano', brand: BRAND, edition: series },
+    kind: 'premium',
+    familyId: familyIdFor('tabaco', name, 'premium', BRAND),
+    familyName: name,
+    variantLabel: '',
+    barcode: internalEan13((barcodeSeq += 1)),
     rate,
     supply,
+  };
+}
+
+/**
+ * De mazo (sin marca): la familia es la vitola y las variantes son la capa y la medida.
+ * Se cuenta por mazo (25 tabacos) y la caja trae 50 mazos. Precios por mazo, inventados.
+ */
+function mazo(
+  key: string,
+  family: string,
+  a: { vitola: string; lengthIn: number; ringGauge: number; capa: string; strength: 'suave' | 'media' | 'fuerte'; originRegion: string },
+  money: { cost: number; price: number; pvp: number },
+  notes: string,
+  rate: number,
+): ProductSeed {
+  const attrs = { ...a, originCountry: 'Nicaragua', cigarsPerBundle: 25, wrapperShade: capaShade(a.capa) };
+  const familyName = `${family} ${sizeText(attrs)}`;
+  const variantLabel = variantLabelFor('tabaco', attrs, familyName);
+  return {
+    key,
+    sku: `TB-MZ-${family.slice(0, 3).toUpperCase()}-${a.capa.slice(0, 3).toUpperCase()}${a.ringGauge}`,
+    name: composeName(familyName, variantLabel),
+    brandLine: 'De mazo (sin marca)',
+    active: true,
+    cost: money.cost,
+    priceToStore: money.price,
+    suggestedRetail: money.pvp,
+    sellerCommission: { type: 'percent', value: 6 },
+    lowStockThreshold: 60,
+    packSize: 50,
+    unitName: 'mazo',
+    notes,
+    pairing: 'Para el cliente de todos los días: café, cerveza o ron.',
+    attrs,
+    kind: 'mazo',
+    familyId: familyIdFor('tabaco', familyName, 'mazo'),
+    familyName,
+    variantLabel,
+    barcode: internalEan13((barcodeSeq += 1)),
+    // La caja (50 mazos) sale un 4 % más barata que 50 mazos sueltos.
+    boxPrice: Math.round(money.price * 50 * 0.96 * 100) / 100,
+    rate,
   };
 }
 
@@ -197,7 +248,20 @@ const products: ProductSeed[] = [
   ),
 ];
 
-const ALL = products.map((p) => p.key);
+// De mazo: lo que más se vende en bodegas, gasolineras y licorerías. Todo inventado.
+products.push(
+  mazo('mz-toro-hab', 'Toro', { vitola: 'Toro', lengthIn: 6, ringGauge: 52, capa: 'habano', strength: 'media', originRegion: 'Estelí' }, { cost: 10.5, price: 25, pvp: 43.75 }, 'Parejo y rendidor: tierra, cedro y un dulzor suave.', 3),
+  mazo('mz-toro-mad', 'Toro', { vitola: 'Toro', lengthIn: 6, ringGauge: 52, capa: 'maduro', strength: 'fuerte', originRegion: 'Estelí' }, { cost: 10.9, price: 26, pvp: 45 }, 'Oscuro y con cuerpo: cacao, café y melaza.', 3),
+  mazo('mz-toro-con', 'Toro', { vitola: 'Toro', lengthIn: 6, ringGauge: 52, capa: 'connecticut', strength: 'suave', originRegion: 'Condega' }, { cost: 10.2, price: 24, pvp: 42.5 }, 'Suave y cremoso, para quien empieza.', 2),
+  mazo('mz-rob-hab', 'Robusto', { vitola: 'Robusto', lengthIn: 5, ringGauge: 50, capa: 'habano', strength: 'media', originRegion: 'Estelí' }, { cost: 9.6, price: 23, pvp: 40 }, 'Corto y con sabor: madera y pimienta suave.', 2.5),
+  mazo('mz-rob-mad', 'Robusto', { vitola: 'Robusto', lengthIn: 5, ringGauge: 50, capa: 'maduro', strength: 'fuerte', originRegion: 'Jalapa' }, { cost: 9.9, price: 24, pvp: 41.25 }, 'Fuerte y dulce al final.', 2),
+  mazo('mz-torp-mad', 'Torpedo', { vitola: 'Torpedo', lengthIn: 6.125, ringGauge: 52, capa: 'maduro', strength: 'fuerte', originRegion: 'Estelí' }, { cost: 11.4, price: 27, pvp: 46.25 }, 'La punta concentra el humo: café tostado y especias.', 2),
+  mazo('mz-torp-nat', 'Torpedo', { vitola: 'Torpedo', lengthIn: 6.125, ringGauge: 52, capa: 'natural', strength: 'media', originRegion: 'Condega' }, { cost: 11, price: 26, pvp: 45 }, 'Equilibrado, con un final de nuez.', 1.5),
+  mazo('mz-chu-con', 'Churchill', { vitola: 'Churchill', lengthIn: 7, ringGauge: 48, capa: 'connecticut', strength: 'suave', originRegion: 'Condega' }, { cost: 11.2, price: 26, pvp: 45 }, 'Largo y suave, para la tarde.', 1.5),
+  mazo('mz-chu-hab', 'Churchill', { vitola: 'Churchill', lengthIn: 7, ringGauge: 48, capa: 'habano', strength: 'media', originRegion: 'Estelí' }, { cost: 11.6, price: 27, pvp: 46.25 }, 'Mucho humo y buen tiro.', 1.5),
+);
+
+const ALL = products.filter((p) => p.kind === 'premium').map((p) => p.key);
 const pickSet = (...keys: string[]) => keys;
 
 function store(
@@ -244,8 +308,8 @@ function store(
 
 const stores: StoreSeed[] = [
   // Andrés Molina: Hialeah y Doral
-  store('t-faro', 'Tabaquería El Faro', 'Tabaquería', 'hialeah', 'Hialeah', 25.8612, -80.2788, 'Osvaldo Pérez', 1, 'andres', -88, 'activo', pickSet('bis-rob', 'bis-toro', 'eve-cor', 'eve-torp', 'tam-lanc', 'cor-petit', 'bri-beli', 'bri-cand'), 1.2, 260),
-  store('t-humo', 'Licorería Humo y Ron', 'Licorería', 'hialeah', 'Hialeah', 25.848, -80.2851, 'Yamila Rodríguez', 2, 'andres', -80, 'activo', pickSet('bis-rob', 'eve-cor', 'eve-gordo', 'cor-petit', 'cor-toro'), 1.0, -10, {
+  store('t-faro', 'Tabaquería El Faro', 'Tabaquería', 'hialeah', 'Hialeah', 25.8612, -80.2788, 'Osvaldo Pérez', 1, 'andres', -88, 'activo', pickSet('bis-rob', 'bis-toro', 'eve-cor', 'eve-torp', 'tam-lanc', 'cor-petit', 'bri-beli', 'bri-cand', 'mz-toro-hab', 'mz-toro-mad', 'mz-rob-hab'), 1.2, 260),
+  store('t-humo', 'Licorería Humo y Ron', 'Licorería', 'hialeah', 'Hialeah', 25.848, -80.2851, 'Yamila Rodríguez', 2, 'andres', -80, 'activo', pickSet('bis-rob', 'eve-cor', 'eve-gordo', 'cor-petit', 'cor-toro', 'mz-toro-hab', 'mz-toro-mad'), 1.0, -10, {
     notes: 'El permiso de tabaco venció: pedir la renovación en la próxima visita.',
   }),
   store('t-esquina', 'Bodega La Esquina 49', 'Bodega', 'hialeah', 'Hialeah', 25.8705, -80.301, 'Reinaldo Suárez', 3, 'andres', null, 'contrato_enviado', [], 1, 300),
@@ -254,22 +318,22 @@ const stores: StoreSeed[] = [
   // Yanelis Cruz: Pequeña Habana y Coral Gables
   store('t-hoja', 'Lounge La Hoja Dorada', 'Lounge de puros', 'habana', 'Pequeña Habana, Miami', 25.7655, -80.219, 'Ismael Fonseca', 6, 'yanelis', -86, 'activo', ALL, 1.5, 330),
   store('t-ficha', 'Tabaquería Ficha Doble', 'Tabaquería', 'habana', 'Pequeña Habana, Miami', 25.7712, -80.2276, 'Mirtha Calzada', 7, 'yanelis', -75, 'activo', pickSet('bis-rob', 'eve-cor', 'cor-petit', 'tam-rob', 'eve-torp'), 0.8, 200, { overdue: true }),
-  store('t-ocho', 'Bodega Ocho y Medio', 'Bodega', 'habana', 'Pequeña Habana, Miami', 25.766, -80.2085, 'Alberto Ríos', 8, 'yanelis', -50, 'activo', pickSet('eve-cor', 'cor-petit', 'bis-rob'), 0.7, 290),
+  store('t-ocho', 'Bodega Ocho y Medio', 'Bodega', 'habana', 'Pequeña Habana, Miami', 25.766, -80.2085, 'Alberto Ríos', 8, 'yanelis', -50, 'activo', pickSet('eve-cor', 'cor-petit', 'bis-rob', 'mz-toro-hab', 'mz-toro-mad', 'mz-torp-mad', 'mz-rob-mad'), 0.7, 290),
   store('t-club', 'Club de Humo Coral', 'Lounge de puros', 'gables', 'Coral Gables', 25.7495, -80.26, 'Verónica Lago', 9, 'yanelis', -82, 'activo', pickSet('bis-church', 'eve-gordo', 'tam-lanc', 'tam-rob', 'cor-toro', 'bri-beli', 'eve-torp'), 1.3, 350),
   store('t-estanco', 'Estanco Gables', 'Tabaquería', 'gables', 'Coral Gables', 25.728, -80.268, 'Fernando Arce', 10, 'yanelis', null, 'firmado', [], 1, 395),
   // Rafael Ortega: Westchester y Kendall
-  store('t-tamiami', 'Bodega Tamiami 107', 'Bodega', 'westchester', 'Westchester', 25.7495, -80.3242, 'Gisela Marín', 11, 'rafael', -78, 'activo', pickSet('bis-rob', 'eve-cor', 'cor-petit', 'bri-cand'), 0.9, 240),
+  store('t-tamiami', 'Bodega Tamiami 107', 'Bodega', 'westchester', 'Westchester', 25.7495, -80.3242, 'Gisela Marín', 11, 'rafael', -78, 'activo', pickSet('bis-rob', 'eve-cor', 'cor-petit', 'bri-cand', 'mz-toro-hab', 'mz-toro-con', 'mz-chu-con', 'mz-rob-hab'), 0.9, 240),
   store('t-bird', 'Tabaquería Bird 87', 'Tabaquería', 'westchester', 'Westchester', 25.735, -80.311, 'Rolando Peña', 12, 'rafael', -66, 'activo', pickSet('bis-toro', 'eve-torp', 'cor-toro', 'bri-beli'), 1.0, 270, {
     final: 'pausado',
     pausedDay: -12,
     notes: 'Cerrado por remodelación; reabre a fin de mes.',
   }),
-  store('t-sunset', 'Licorería Sunset 88', 'Licorería', 'kendall', 'Kendall', 25.6866, -80.3133, 'Marisela Duarte', 13, 'rafael', -84, 'activo', pickSet('bis-rob', 'bis-toro', 'eve-cor', 'eve-gordo', 'cor-petit', 'bri-cand'), 1.1, 310),
+  store('t-sunset', 'Licorería Sunset 88', 'Licorería', 'kendall', 'Kendall', 25.6866, -80.3133, 'Marisela Duarte', 13, 'rafael', -84, 'activo', pickSet('bis-rob', 'bis-toro', 'eve-cor', 'eve-gordo', 'cor-petit', 'bri-cand', 'mz-toro-hab', 'mz-chu-hab'), 1.1, 310),
   store('t-pinos', 'Tabaquería Los Pinos', 'Tabaquería', 'kendall', 'Kendall', 25.6721, -80.3395, 'Ernesto Valle', 14, 'rafael', -60, 'activo', pickSet('tam-lanc', 'tam-rob', 'eve-torp', 'cor-toro'), 0.8, 420),
   // Lucía Paredes: Miami Beach y Fort Lauderdale
   store('t-ocean', 'Licorería Ocean Breeze', 'Licorería', 'beach', 'Miami Beach', 25.7905, -80.13, 'Daniel Sosa', 15, 'lucia', -72, 'activo', pickSet('bis-rob', 'bis-toro', 'bri-cand', 'eve-cor', 'cor-petit'), 1.2, 280),
   store('t-collins', 'Lounge Collins 41', 'Lounge de puros', 'beach', 'Miami Beach', 25.816, -80.1225, 'Carolina Méndez', 16, 'lucia', -45, 'activo', pickSet('bis-church', 'tam-lanc', 'eve-gordo', 'bri-beli', 'eve-torp'), 1.0, 360),
-  store('t-rio', 'Tabaquería Río Nuevo', 'Tabaquería', 'lauderdale', 'Fort Lauderdale', 26.1188, -80.139, 'Javier Lozano', 17, 'lucia', -64, 'activo', pickSet('bis-rob', 'eve-cor', 'cor-toro', 'bri-beli'), 0.9, 230),
+  store('t-rio', 'Tabaquería Río Nuevo', 'Tabaquería', 'lauderdale', 'Fort Lauderdale', 26.1188, -80.139, 'Javier Lozano', 17, 'lucia', -64, 'activo', pickSet('bis-rob', 'eve-cor', 'cor-toro', 'bri-beli', 'mz-toro-mad', 'mz-torp-nat'), 0.9, 230),
   store('t-puerto', 'Licorería Puerto Lauderdale', 'Licorería', 'lauderdale', 'Fort Lauderdale', 26.142, -80.126, 'Adriana Paz', 18, 'lucia', null, 'prospecto', [], 1, 330),
 ];
 

@@ -7,13 +7,17 @@ import type {
   Arrival,
   AuditEntry,
   Commission,
+  CaseUnit,
   CommissionPayout,
   Contract,
   ContractTemplate,
   Delivery,
+  DeliveryRoute,
   DirectoryAccount,
   EcosystemSettings,
   Entity,
+  Invitation,
+  Invoice,
   LineId,
   LineSettings,
   Lot,
@@ -21,6 +25,7 @@ import type {
   Movement,
   Payment,
   Photo,
+  PriceList,
   Product,
   Reorder,
   ReturnRecord,
@@ -84,6 +89,12 @@ export interface LineRepo {
   readonly settings: Table<LineSettings>;
   /** Plantillas PDF de contrato y de nota de entrega (versiones inmutables). */
   readonly templates: Table<ContractTemplate>;
+  /** Ronda 3: listas de precios, facturas en firme, cajas con trazabilidad, repartos e invitaciones. */
+  readonly priceLists: Table<PriceList>;
+  readonly invoices: Table<Invoice>;
+  readonly cases: Table<CaseUnit>;
+  readonly routes: Table<DeliveryRoute>;
+  readonly invitations: Table<Invitation>;
   readonly audit: AppendOnlyLog<AuditEntry>;
   /** Todo o nada: si algo falla adentro, no queda nada a medias. */
   transaction<R>(fn: () => Promise<R>): Promise<R>;
@@ -133,6 +144,11 @@ export const LINE_TABLES = [
   'settings',
   'audit',
   'templates',
+  'priceLists',
+  'invoices',
+  'cases',
+  'routes',
+  'invitations',
 ] as const;
 
 export const CORE_TABLES = ['session', 'settings', 'directory'] as const;

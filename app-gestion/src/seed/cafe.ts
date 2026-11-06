@@ -1,6 +1,8 @@
 // Datos de ejemplo de la línea Café. Lo único real es la marca Café El Mío con sus 9
 // productos y sus precios públicos (usados como PVP sugerido). El precio al local y los
 // costos son DE EJEMPLO. Locales, personas, teléfonos y direcciones son inventados.
+import { familyIdFor } from '../domain/products';
+import { internalEan13 } from '../lib/barcode';
 import { CAFE } from '../lines/config';
 import type { LineSeedDef, ProductSeed, StoreSeed } from './engine';
 
@@ -17,6 +19,8 @@ const z = {
 
 const L1 = 'Línea 1 · Espresso';
 const L2 = 'Línea 2 · Orígenes y muestras';
+
+let barcodeSeq = 5000;
 
 function coffee(
   key: string,
@@ -47,6 +51,11 @@ function coffee(
     notes,
     pairing,
     attrs: { ...attrs },
+    // Cada producto de El Mío es su propia familia (sus nombres ya dicen el tipo y el peso).
+    familyId: familyIdFor('cafe', name),
+    familyName: name,
+    variantLabel: '',
+    barcode: internalEan13((barcodeSeq += 1)),
     brandPhoto: handle,
     rate,
     shelfLifeDays,

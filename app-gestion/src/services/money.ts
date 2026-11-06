@@ -17,11 +17,14 @@ import { addDaysToDate, daysBetween, monthKey, toIsoDate } from '../lib/time';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
 import { scopedStores } from './stores';
 
+export const PAYMENT_METHODS = ['efectivo', 'cheque', 'zelle', 'transferencia', 'tarjeta'] as const satisfies readonly PaymentMethod[];
+
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   efectivo: 'Efectivo',
   cheque: 'Cheque',
   zelle: 'Zelle',
   transferencia: 'Transferencia',
+  tarjeta: 'Tarjeta (cobrada aparte)',
 };
 
 export const SETTLEMENT_STATUS_LABEL: Record<Settlement['status'], string> = {
@@ -172,7 +175,7 @@ export async function generateDueSettlements(ctx: Ctx): Promise<number> {
 
 const paymentSchema = z.object({
   amount: z.number({ error: 'Escribe el monto.' }).positive('El monto tiene que ser mayor que cero.'),
-  method: z.enum(['efectivo', 'cheque', 'zelle', 'transferencia']),
+  method: z.enum(PAYMENT_METHODS),
   reference: z.string().trim().max(60).default(''),
 });
 
@@ -304,7 +307,7 @@ export function summarizeCommissions(list: readonly CommissionView[]): Commissio
 }
 
 const payoutSchema = z.object({
-  method: z.enum(['efectivo', 'cheque', 'zelle', 'transferencia']),
+  method: z.enum(PAYMENT_METHODS),
   reference: z.string().trim().max(60).default(''),
 });
 

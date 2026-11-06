@@ -6,7 +6,8 @@ import type { AppendOnlyLog, CoreRepo, LineRepo, Table } from '../repo';
 import { CORE_TABLES, LINE_TABLES } from '../repo';
 
 /** Esquema de la versión 1 (no se toca: los navegadores que ya tienen datos suben a la 2). */
-const LINE_SCHEMA: Record<Exclude<(typeof LINE_TABLES)[number], 'templates'>, string> = {
+type V1Table = Exclude<(typeof LINE_TABLES)[number], 'templates' | 'priceLists' | 'invoices' | 'cases' | 'routes' | 'invitations'>;
+const LINE_SCHEMA: Record<V1Table, string> = {
   products: 'id, sku',
   photos: 'id, ownerId',
   warehouses: 'id',
@@ -102,6 +103,17 @@ export function openLineRepo(line: LineId, prefix = ''): LineRepo {
   db.version(1).stores(LINE_SCHEMA);
   // Versión 2: plantillas PDF. Dexie conserva las tablas de la versión 1 con sus datos.
   db.version(2).stores({ templates: 'id, kind' });
+  // Versión 3 (ronda 3): índices para buscar por código de barras y por familia, pagos de facturas,
+  // y las tablas de listas de precios, facturas en firme, cajas con trazabilidad, repartos e invitaciones.
+  db.version(3).stores({
+    products: 'id, sku, barcode, familyId',
+    payments: 'id, settlementId, storeId, invoiceId',
+    priceLists: 'id',
+    invoices: 'id, storeId, sellerId, status',
+    cases: 'id, code, productId, arrivalId, deliveryId',
+    routes: 'id, date, status',
+    invitations: 'id, accountId',
+  });
   const table = <T extends Entity>(name: string) => new DexieTableAdapter<T>(db.table(name));
   return {
     line,
@@ -131,6 +143,11 @@ export function openLineRepo(line: LineId, prefix = ''): LineRepo {
     zones: table('zones'),
     settings: table('settings'),
     templates: table('templates'),
+    priceLists: table('priceLists'),
+    invoices: table('invoices'),
+    cases: table('cases'),
+    routes: table('routes'),
+    invitations: table('invitations'),
     audit: new AuditAdapter(db.table('audit')),
     transaction: (fn) => runInTransaction(db, fn),
     clearAll: async () => {
