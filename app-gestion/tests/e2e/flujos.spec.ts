@@ -30,6 +30,8 @@ test('registrar tienda → contrato y firma → colocar producto (tabaco)', asyn
   await page.getByLabel('Número del permiso').fill('TP-E2E-1234');
   await page.getByRole('button', { name: 'Registrar tienda' }).last().click();
   await toast(page, /prospecto/);
+  // En el teléfono el aviso tapa la casilla del consentimiento y se queda con el toque: se cierra.
+  await page.getByRole('status').getByRole('button', { name: 'Cerrar aviso' }).first().click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
 
   await page.getByRole('button', { name: 'Preparar contrato' }).click();
@@ -172,7 +174,8 @@ test('restablecer la demo vuelve a cargar los datos de ejemplo', async ({ page }
   await page.getByRole('button', { name: 'Restablecer demo' }).click();
   await page.getByRole('button', { name: 'Sí, restablecer' }).click();
   await toast(page, /datos de ejemplo cargados/);
-  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('12')).toBeVisible();
+  // Ronda 3: 12 premium y 9 de mazo.
+  await expect(page.getByRole('article', { name: 'Línea Tabaco' }).getByText('21')).toBeVisible();
 });
 
 test('el local pide desde la ficha del producto: cuánto y listo', async ({ page }) => {

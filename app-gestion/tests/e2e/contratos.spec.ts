@@ -85,7 +85,8 @@ test('administración sube un PDF, ubica las firmas y el vendedor firma sobre es
   await toast(page, /Contrato firmado/);
   await expect(page.getByText(/Firmado el/).first()).toBeVisible();
   // El PDF firmado: la página de la plantilla con las firmas y el anexo de precios.
-  await expect(page.getByRole('img', { name: 'Contrato de consignación de Bodega La Esquina 49, página 2 de 2' })).toBeVisible();
+  // Con los 21 productos de la ronda 3, el anexo de precios ocupa más de una página.
+  await expect(page.getByRole('img', { name: /^Contrato de consignación de Bodega La Esquina 49, página 2 de \d+$/ })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Descargar PDF' })).toHaveAttribute('download', /contrato-bodega-la-esquina-49-v\d+\.pdf/);
 
   // Administración lo ve entre los firmados, marcado como PDF.
