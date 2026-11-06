@@ -1,6 +1,6 @@
 // Cobros (administración): antigüedad de lo que se debe, cuenta de cada local, facturas de venta en
 // firme, liquidaciones de consignación y pagos.
-import { CalendarClock, FileStack, HandCoins, Receipt } from 'lucide-react';
+import { CalendarClock, FileStack, HandCoins, Receipt, Zap } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { aging } from '../../domain/money-rules';
@@ -12,7 +12,7 @@ import { listInvoices, type InvoiceView } from '../../services/invoices';
 import { generateDueSettlements, generateSettlement, listSettlements, storeAccounts, type SettlementView } from '../../services/money';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
-import { Button, EmptyState, ErrorBox, Loading, Money, PageHeader, Pill, Section, Stat, Tabs } from '../../ui/kit';
+import { Button, EmptyState, ErrorBox, LinkButton, Loading, Money, PageHeader, Pill, Section, Stat, Tabs } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { InvoiceItem, InvoicePaymentSheet, InvoiceSheet } from '../sales/invoices';
 import { AdminOnly, AgingCards, PaymentSheet, SettlementSheet, SettlementStatusPill } from './shared';
@@ -82,6 +82,9 @@ function Collections() {
         actions={
           actor.readOnly ? null : (
             <>
+              <LinkButton to={p('venta-rapida')} icon={Zap}>
+                Venta rápida
+              </LinkButton>
               <Button
                 variant="primary"
                 icon={FileStack}

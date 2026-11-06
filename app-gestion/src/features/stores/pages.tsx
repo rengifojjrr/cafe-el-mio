@@ -17,6 +17,7 @@ import {
   Store as StoreIcon,
   Truck,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -595,6 +596,11 @@ export function StoreDetailPage() {
               <Button big icon={Truck} onClick={() => setRequestOpen(true)} disabled={!check.ok}>
                 {firm ? 'Tomar pedido' : 'Pedir producto'}
               </Button>
+              {isAdmin && s.status === 'activo' ? (
+                <LinkButton to={`${p('venta-rapida')}?local=${s.id}`} big icon={Zap}>
+                  Venta rápida
+                </LinkButton>
+              ) : null}
             </>
           ) : null}
           {isAdmin && s.status === 'firmado' ? (

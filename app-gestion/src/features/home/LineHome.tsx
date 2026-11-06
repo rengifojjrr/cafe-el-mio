@@ -34,6 +34,7 @@ import { Button, Card, EmptyState, LinkButton, Loading, PageHeader, Pill, Sectio
 import { useAction } from '../../ui/toast';
 import { DeliveryCard, ReportSalesSheet } from '../consignment/components';
 import { FirmStoreHome } from '../sales/store-home';
+import { QuickActions } from '../sales/quick-actions';
 import { StoreStatusPill } from '../common';
 
 export function LineHome() {
@@ -104,6 +105,7 @@ function AdminHome() {
   return (
     <>
       <PageHeader title="Centro de mando" subtitle={`${today(ctx.now())} · ${config.name}: locales, vendedores y almacén en el mapa.`} />
+      <QuickActions />
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="relative">
           <MapView

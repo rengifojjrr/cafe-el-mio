@@ -1,6 +1,6 @@
 // Consignación: visita con conteo, entregas (por preparar, listas, entregadas), nota de
 // entrega imprimible, pedidos de los locales y la pantalla «Pedir más» del local.
-import { CheckCircle2, ClipboardCheck, ClipboardList, MapPin, Printer, Send, ShoppingBag, Truck, XCircle } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, ClipboardList, ClipboardPaste, MapPin, Phone, Printer, Send, ShoppingBag, Truck, XCircle, Zap } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import type { Delivery, Reorder } from '../../data/types';
@@ -118,7 +118,7 @@ function Visit() {
 type DTab = Delivery['status'];
 
 export function DeliveriesPage() {
-  const { ctx, actor } = useLine();
+  const { ctx, actor, p } = useLine();
   const { data, error, loading } = useAsync(() => listDeliveries(ctx), [ctx]);
   const initial: DTab = actor.role === 'admin' ? 'solicitada' : 'preparada';
   const [tab, setTab] = useState<DTab>(initial);
@@ -131,7 +131,25 @@ export function DeliveriesPage() {
         : 'Lo que viene en camino a tu tienda y lo que ya recibiste.';
   return (
     <>
-      <PageHeader title="Entregas" subtitle={subtitle} />
+      <PageHeader
+        title="Entregas"
+        subtitle={subtitle}
+        actions={
+          actor.role === 'admin' && !actor.readOnly ? (
+            <>
+              <LinkButton to={p('venta-rapida')} variant="primary" icon={Zap}>
+                Venta rápida
+              </LinkButton>
+              <LinkButton to={p('pedido-telefono')} icon={Phone}>
+                Pedido por teléfono
+              </LinkButton>
+              <LinkButton to={p('pegar-pedido')} variant="ghost" icon={ClipboardPaste}>
+                Pegar pedido
+              </LinkButton>
+            </>
+          ) : null
+        }
+      />
       <div className="mb-4">
         <Tabs<DTab>
           label="Entregas por estado"
@@ -292,6 +310,15 @@ export function OrdersPage() {
             <LinkButton to={p('pedir')} variant="primary" big icon={ShoppingBag}>
               Pedir más
             </LinkButton>
+          ) : actor.role === 'admin' && !actor.readOnly ? (
+            <>
+              <LinkButton to={p('pedido-telefono')} variant="primary" icon={Phone}>
+                Pedido por teléfono
+              </LinkButton>
+              <LinkButton to={p('pegar-pedido')} icon={ClipboardPaste}>
+                Pegar pedido
+              </LinkButton>
+            </>
           ) : null
         }
       />
