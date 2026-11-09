@@ -1,7 +1,7 @@
 // Lo común del ecosistema (eco-core): la sesión, «Entrar como…», el nombre del ecosistema, el
 // arranque de las líneas y exportar o importar todo.
 import type { ContractTemplate, DirectoryAccount, EcosystemSettings, LineId, Photo, SessionState, User } from '../data/types';
-import { LINES } from '../data/types';
+import { isProgramLine, programLines } from '../lines/programa';
 import { getCoreRepo, getDbPrefix, getLineRepo } from '../data';
 import type { Actor } from '../domain/permissions';
 import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from '../seed/version';
@@ -73,7 +73,7 @@ export async function seedIfNeeded(now = new Date(), opts: { demo?: boolean } = 
   if (!(opts.demo ?? demoRequested())) {
     const real: LineId[] = [];
     const blank: LineId[] = [];
-    for (const line of LINES) ((await getLineDataMode(line)) === 'real' ? real : blank).push(line);
+    for (const line of programLines()) ((await getLineDataMode(line)) === 'real' ? real : blank).push(line);
     const { startLinesBlank } = await import('./seed-real');
     await startLinesBlank(blank, real, now, settings?.name);
     return;
@@ -81,7 +81,7 @@ export async function seedIfNeeded(now = new Date(), opts: { demo?: boolean } = 
   const stale = !settings || settings.seedVersion !== SEED_VERSION;
   const real: LineId[] = [];
   const reseed: LineId[] = [];
-  for (const line of LINES) {
+  for (const line of programLines()) {
     if ((await getLineDataMode(line)) === 'real') real.push(line);
     else if (stale || (await getLineRepo(line).products.count()) === 0) reseed.push(line);
   }
@@ -100,7 +100,7 @@ export async function resetDemo(now = new Date(), keepName?: string): Promise<vo
   const name = keepName ?? DEFAULT_ECOSYSTEM_NAME;
   if (typeof window !== 'undefined' && typeof Worker === 'function') {
     try {
-      await seedInWorker(now, name);
+      await seedInWorker(now, name, [...programLines()]);
       emitAll();
       return;
     } catch (e) {
@@ -108,11 +108,13 @@ export async function resetDemo(now = new Date(), keepName?: string): Promise<vo
     }
   }
   const core = getCoreRepo();
-  const repos = { tabaco: getLineRepo('tabaco'), cafe: getLineRepo('cafe') };
+  // Solo las líneas de este programa (el de Tabaco no abre ni crea la base del café).
+  const lines = programLines();
+  const repos = Object.fromEntries(lines.map((l) => [l, getLineRepo(l)]));
   // La semilla (datos y simulador) solo se descarga cuando hace falta.
   const { seedEverything } = await import('../seed');
-  await Promise.all([core.clearAll(), repos.tabaco.clearAll(), repos.cafe.clearAll()]);
-  await seedEverything(core, repos, now, name);
+  await Promise.all([core.clearAll(), ...lines.map((l) => getLineRepo(l).clearAll())]);
+  await seedEverything(core, repos, now, name, lines);
   emitAll();
 }
 
@@ -170,10 +172,11 @@ export interface AccountOption extends DirectoryAccount {
 /** Cuentas para «Entrar como…»: las principales y, aparte, el resto de vendedores y locales. */
 export async function listAccounts(): Promise<{ primary: AccountOption[]; others: Record<LineId, AccountOption[]> }> {
   await ensureSeeded();
-  const primary = (await getCoreRepo().directory.all()).sort((a, b) => order(a) - order(b));
+  // Dirección y las cuentas de las líneas de este programa (nunca las de otro).
+  const primary = (await getCoreRepo().directory.all()).filter((a) => a.line === null || isProgramLine(a.line)).sort((a, b) => order(a) - order(b));
   const primaryUserIds = new Set(primary.map((p) => `${p.line}:${p.userId}`));
   const others: Record<LineId, AccountOption[]> = { tabaco: [], cafe: [] };
-  for (const line of LINES) {
+  for (const line of programLines()) {
     const repo = getLineRepo(line);
     const [users, stores] = await Promise.all([repo.users.all(), repo.stores.all()]);
     const storesById = new Map(stores.map((s) => [s.id, s]));
@@ -205,9 +208,10 @@ function order(a: Pick<DirectoryAccount, 'role' | 'line'>): number {
 /** Busca una cuenta por id: «direccion», «tabaco:admin» o «tabaco:<idDeUsuario>». */
 export async function findAccount(accountId: string): Promise<DirectoryAccount | null> {
   const direct = await getCoreRepo().directory.get(accountId);
-  if (direct) return direct;
+  // Una cuenta de otra línea (por ejemplo, de café en el programa de Tabaco) no existe aquí.
+  if (direct) return direct.line === null || isProgramLine(direct.line) ? direct : null;
   const [line, userId] = accountId.split(':');
-  if ((line !== 'tabaco' && line !== 'cafe') || !userId) return null;
+  if (!isProgramLine(line) || !userId) return null;
   const u: User | undefined = await getLineRepo(line).users.get(userId);
   if (!u || !u.active) return null;
   return { id: accountId, role: u.role, line, userId: u.id, storeId: u.storeId, name: u.name, label: u.role, primary: false };
@@ -256,6 +260,7 @@ function actorFrom(acc: DirectoryAccount, readOnly: boolean): Actor {
  * acceso a esa línea (entonces la pantalla vuelve a la portada).
  */
 export async function resolveActor(line: LineId): Promise<{ actor: Actor; account: DirectoryAccount; viewing: DirectoryAccount | null } | null> {
+  if (!isProgramLine(line)) return null;
   await ensureSeeded();
   const s = await getSession();
   if (!s.accountId) return null;
@@ -312,7 +317,7 @@ export function dataUrlToBlob(url: string): Blob {
 export async function exportState(): Promise<string> {
   const core = await getCoreRepo().dump();
   const lines: Record<string, Record<string, unknown[]>> = {};
-  for (const line of LINES) {
+  for (const line of programLines()) {
     const dump = await getLineRepo(line).dump();
     dump.photos = await Promise.all(
       (dump.photos as Photo[]).map(async (p) => ({ ...p, blob: await blobToDataUrl(p.blob) })),
@@ -326,7 +331,7 @@ export async function exportState(): Promise<string> {
   const exportedAt = new Date().toISOString();
   const json = JSON.stringify({ app: EXPORT_APP, version: EXPORT_VERSION, exportedAt, core, lines });
   // El respaldo completo también es la copia de seguridad de cada línea con datos reales.
-  for (const line of LINES) {
+  for (const line of programLines()) {
     const repo = getLineRepo(line);
     const s = await repo.settings.get('settings');
     if (s?.dataMode === 'real') await repo.settings.put({ ...s, lastExportAt: exportedAt });
@@ -343,7 +348,8 @@ async function importSchema() {
     version: z.literal(EXPORT_VERSION, { error: 'El respaldo es de otra versión de la app.' }),
     exportedAt: z.string(),
     core: z.object({ session: tableSchema, settings: tableSchema, directory: tableSchema }),
-    lines: z.object({ tabaco: z.record(z.string(), tableSchema), cafe: z.record(z.string(), tableSchema) }),
+    // Las líneas de este programa; un respaldo viejo con las dos trae también la de café, que se ignora.
+    lines: z.object(Object.fromEntries(programLines().map((l) => [l, z.record(z.string(), tableSchema)]))),
   });
 }
 
@@ -360,8 +366,8 @@ export async function importState(json: string): Promise<{ blanked: LineId[] }> 
     throw new Error('El archivo no es un JSON válido.');
   }
   const data = (await importSchema()).parse(parsed);
-  for (const line of LINES) {
-    const tables = data.lines[line];
+  for (const line of programLines()) {
+    const tables = data.lines[line] ?? {};
     for (const row of [...(tables.products ?? []), ...(tables.stores ?? [])]) {
       if (typeof row.id !== 'string') throw new Error('El respaldo tiene registros sin identificador.');
     }
@@ -369,7 +375,7 @@ export async function importState(json: string): Promise<{ blanked: LineId[] }> 
   const allowDemo = demoRequested();
   const blanked: LineId[] = [];
   const blankAdmins: DirectoryAccount[] = [];
-  for (const line of LINES) {
+  for (const line of programLines()) {
     const tables = { ...data.lines[line] };
     const real = (tables.settings?.[0] as { dataMode?: unknown } | undefined)?.dataMode === 'real';
     if (!real && !allowDemo) {
@@ -385,8 +391,9 @@ export async function importState(json: string): Promise<{ blanked: LineId[] }> 
     await getLineRepo(line).load(tables);
   }
   // De las líneas que quedaron en blanco, en «Entrar como…» queda solo su Administración.
+  // Las cuentas de otra línea (el café de un respaldo de antes) no entran a este programa.
   const directory = [
-    ...data.core.directory.filter((a) => a.line === null || !blanked.includes(a.line as LineId)),
+    ...data.core.directory.filter((a) => a.line === null || (isProgramLine(String(a.line)) && !blanked.includes(a.line as LineId))),
     ...blankAdmins,
   ];
   await getCoreRepo().load({ ...data.core, directory, session: [{ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null }] });

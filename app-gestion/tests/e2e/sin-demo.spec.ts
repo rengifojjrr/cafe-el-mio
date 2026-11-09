@@ -1,29 +1,33 @@
-// Sin datos de ejemplo: así abre la app cualquier navegador. Estas pruebas no llevan la marca de
-// pruebas (DEMO_STORAGE) que usan todas las demás para trabajar sobre la demo.
+// El programa de Tabaco sin datos de ejemplo: así lo abre cualquier navegador. Estas pruebas no
+// llevan la marca de pruebas (DEMO_STORAGE) que usan las demás para trabajar sobre la demo.
 import { fileURLToPath } from 'node:url';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { DEMO_STORAGE } from '../../playwright.config';
 import { enterAs, go, toast } from './helpers';
 
 const XLSX = fileURLToPath(new URL('../fixtures/odoo-variantes.xlsx', import.meta.url));
 const FLAG = DEMO_STORAGE.origins[0]!.localStorage[0]!.name;
 
+async function databases(page: Page): Promise<string[]> {
+  return page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name ?? ''));
+}
+
 test.describe('un navegador nuevo', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('las dos líneas arrancan en blanco: sin demo, sin recorrido y sin insignias', async ({ page }) => {
+  test('arranca en cero y solo con Tabaco: sin demo, sin café, sin recorrido ni insignias', async ({ page }) => {
     await page.goto('./#/');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Grupo Miami');
-    // Las cifras de la portada: nada inventado.
+    // Las cifras de la portada: nada inventado. Y el café es otro programa: aquí no está.
     await expect(page.getByRole('article', { name: 'Línea Tabaco' }).locator('dd')).toHaveText(['0', '0', '0']);
-    await expect(page.getByRole('article', { name: 'Línea Café' }).locator('dd')).toHaveText(['0', '0', '0']);
+    await expect(page.getByRole('article', { name: 'Línea Café' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Restablecer|Recorrido/ })).toHaveCount(0);
     await expect(page.getByText(/Datos de ejemplo|La demo/)).toHaveCount(0);
 
-    // «Entrar como…»: Dirección y la Administración de cada línea, nada más.
+    // «Entrar como…»: Dirección y Administración de Tabaco, nada más.
     await page.getByRole('button', { name: 'Entrar como…' }).first().click();
     const picker = page.getByRole('dialog', { name: 'Entrar como…' });
-    await expect(picker.locator('[data-account]')).toHaveCount(3);
+    await expect(picker.locator('[data-account]')).toHaveCount(2);
     // Ninguna fila más ancha que la pantalla (el texto largo se corta con «…» dentro de la fila).
     const rights = await picker.locator('[data-account]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
     expect(Math.max(...rights)).toBeLessThanOrEqual(page.viewportSize()!.width);
@@ -36,27 +40,63 @@ test.describe('un navegador nuevo', () => {
     await expect(page.getByRole('heading', { name: 'Almacén', level: 1 })).toBeVisible();
     await expect(page.getByText('(ubicación de ejemplo)')).toHaveCount(0);
 
-    // Café: los 9 cafés de El Mío, desactivados y sin precio hasta que se lo pongan.
-    await enterAs(page, 'cafe:admin');
-    await expect(page.getByText('Café está en blanco, lista para tus datos.')).toBeVisible();
+    // «/cafe» no existe en este programa: vuelve a la portada.
     await go(page, '/cafe/catalogo');
-    await expect(page.getByText('Todo está desactivado')).toBeVisible();
-    await page.getByRole('button', { name: 'Ver los 9 desactivados' }).click();
-    await expect(page.getByTestId('resultados')).toContainText('9 productos');
-    await expect(page.getByText('Sin precio').first()).toBeVisible();
-    await page.getByRole('link', { name: /Café Espresso El Mío/ }).first().click({ position: { x: 24, y: 24 } });
-    await expect(page.getByRole('heading', { name: 'Café Espresso El Mío', level: 1 })).toBeVisible();
-    await expect(page.getByText(/Le falta el precio al local/)).toBeVisible();
-    await page.getByRole('button', { name: 'Activar' }).click();
-    await toast(page, /todavía no tiene precio al local/);
+    await page.waitForURL((url) => url.hash === '#/');
+    // Las bases de datos son las del programa de Tabaco; nada del café ni de antes.
+    const names = await databases(page);
+    expect(names).toEqual(expect.arrayContaining(['tabaco-datos', 'tabaco-cuentas']));
+    expect(names.filter((n) => n.includes('cafe') || n.startsWith('eco-'))).toEqual([]);
+  });
+
+  test('las bases de antes (las dos líneas juntas) se borran si solo tenían ejemplos', async ({ page }) => {
+    // Una página vacía del mismo sitio, para dejar las bases como las tenía un navegador de antes.
+    await page.route('**/vacio.html', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>vacío</title>' }));
+    await page.goto('./vacio.html');
+    await page.evaluate(async () => {
+      const make = (name: string, settings?: Record<string, unknown>) =>
+        new Promise<void>((resolve, reject) => {
+          const req = indexedDB.open(name, 1);
+          req.onupgradeneeded = () => {
+            req.result.createObjectStore('settings', { keyPath: 'id' });
+          };
+          req.onerror = () => reject(req.error);
+          req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction('settings', 'readwrite');
+            if (settings) tx.objectStore('settings').put({ id: 'settings', ...settings });
+            tx.oncomplete = () => {
+              db.close();
+              resolve();
+            };
+          };
+        });
+      await make('eco-tabaco', {});
+      await make('eco-cafe', {});
+      await make('eco-core');
+    });
+    expect((await databases(page)).filter((n) => n.startsWith('eco-')).sort()).toEqual(['eco-cafe', 'eco-core', 'eco-tabaco']);
+    await page.goto('./#/');
+    await expect(page.getByRole('article', { name: 'Línea Tabaco' }).locator('dd')).toHaveText(['0', '0', '0']);
+    await expect.poll(async () => (await databases(page)).filter((n) => n.startsWith('eco-'))).toEqual([]);
   });
 });
 
-test.describe('un navegador que tenía la demo de antes', () => {
-  // Empieza como un navegador de antes: con la marca, la app carga la demo.
+test.describe('con la demo de las pruebas', () => {
+  // Con la marca, la app carga la demo (solo de Tabaco).
   test.use({ storageState: DEMO_STORAGE });
 
-  test('la pierde al abrir la versión nueva y lo real no se toca', async ({ page }) => {
+  test('al quitar la marca, lo de ejemplo se borra y queda en cero', async ({ page }) => {
+    await page.goto('./#/');
+    await expect(page.getByRole('article', { name: 'Línea Tabaco' }).locator('dd').first()).toHaveText('21');
+    await page.evaluate((flag) => localStorage.removeItem(flag), FLAG);
+    await page.reload();
+    await expect(page.getByRole('article', { name: 'Línea Tabaco' }).locator('dd')).toHaveText(['0', '0', '0']);
+    await page.getByRole('button', { name: 'Entrar como…' }).first().click();
+    await expect(page.getByRole('dialog', { name: 'Entrar como…' }).locator('[data-account]')).toHaveCount(2);
+  });
+
+  test('lo que ya era real no se toca', async ({ page }) => {
     // Tabaco ya tenía datos reales: empezó en blanco e importó sus productos.
     await enterAs(page, 'tabaco:admin');
     await go(page, '/tabaco/ajustes');
@@ -70,18 +110,13 @@ test.describe('un navegador que tenía la demo de antes', () => {
     await page.getByRole('button', { name: 'Ver vista previa' }).click();
     await page.getByRole('button', { name: 'Crear', exact: true }).click();
     await toast(page, /18 productos nuevos/);
-    // Café sigue con la demo de antes (sus locales y vendedores inventados).
-    await go(page, '/');
-    await expect(page.getByRole('article', { name: 'Línea Café' }).locator('dd').nth(1)).not.toHaveText('0');
 
     // Sale la versión nueva: ya no hay marca de pruebas.
     await page.evaluate((flag) => localStorage.removeItem(flag), FLAG);
+    await go(page, '/');
     await page.reload();
-
-    await expect(page.getByRole('article', { name: 'Línea Café' }).locator('dd')).toHaveText(['0', '0', '0']);
     await expect(page.getByRole('article', { name: 'Línea Tabaco' }).locator('dd').first()).toHaveText('18');
     await page.getByRole('button', { name: 'Entrar como…' }).first().click();
-    await expect(page.getByRole('dialog', { name: 'Entrar como…' }).locator('[data-account]')).toHaveCount(3);
     await page.getByRole('dialog', { name: 'Entrar como…' }).locator('[data-account="tabaco:admin"]').click();
     await page.waitForURL((url) => url.hash === '#/tabaco');
     await go(page, '/tabaco/catalogo');

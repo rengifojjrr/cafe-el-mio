@@ -3,7 +3,8 @@
 import { Bell, Eye, LogOut, Menu, Moon, Sun, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useNavigate, useParams } from 'react-router';
-import { isLineId, lineConfig } from '../lines/config';
+import { lineConfig } from '../lines/config';
+import { PROGRAM_LINE, isProgramLine } from '../lines/programa';
 import { lineCtx } from '../services/context';
 import { unreadNotifications } from '../services/messages';
 import { directorOpenLine, getEcosystem, leave, listAccounts, resolveActor, saveEcosystem, viewAs } from '../services/session';
@@ -17,7 +18,8 @@ import { NAV, ROLE_LABEL } from './nav';
 export function LineLayout() {
   const params = useParams();
   const line = params.line;
-  if (!isLineId(line)) return <Navigate to="/" replace />;
+  // Solo las líneas de este programa: «/cafe» en el programa de Tabaco vuelve a la portada.
+  if (!isProgramLine(line)) return <Navigate to="/" replace />;
   return <LineShell line={line} />;
 }
 
@@ -296,6 +298,6 @@ function ViewAsSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
 
 function useLineSafe() {
   const params = useParams();
-  const line = isLineId(params.line) ? params.line : 'tabaco';
+  const line = isProgramLine(params.line) ? params.line : PROGRAM_LINE;
   return { line, p: (path = '') => `/${line}${path ? `/${path}` : ''}` };
 }

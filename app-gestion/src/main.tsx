@@ -33,6 +33,9 @@ root.render(
   </StrictMode>,
 );
 
+// Las bases de antes de separar Tabaco y Café: se borran las que solo tenían ejemplos.
+void import('./data/local/old-databases').then((m) => m.removeOldDatabases()).catch(() => undefined);
+
 ensureSeeded().catch((e: unknown) => {
   console.error(e);
   root.render(<Boot message={`No se pudo abrir la base de datos del navegador: ${e instanceof Error ? e.message : String(e)}. Prueba fuera del modo incógnito.`} />);

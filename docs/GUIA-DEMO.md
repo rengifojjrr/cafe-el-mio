@@ -5,24 +5,22 @@
 **Cambiar de cuenta:** el botón flotante «Cambiar de rol» (abajo a la derecha) o «Entrar como…» en la portada. Todavía
 no hay contraseñas: cualquiera con ese navegador entra con cualquier cuenta.
 
-## Cómo empieza: sin datos de ejemplo
+## Cómo empieza: solo Tabaco y en cero
 
-Desde el 6 de noviembre de 2026 la app ya no trae datos de ejemplo. Cada navegador que abre el link arranca con Tabaco
-y Café en blanco, ya como datos reales. El que tenía la demo de antes la pierde al abrir la versión nueva; lo que ya era
-real (una línea que empezó en blanco) no se toca.
+Desde el 9 de noviembre de 2026 este es **el programa de Tabaco**. El café es otro programa (con su link y sus bases de
+datos) y todavía no empieza: ver `CAFE-EN-ESPERA.md`. Cualquier navegador que abre el link arranca en cero, sin datos de
+ejemplo y con bases de datos propias del programa («tabaco-cuentas» y «tabaco-datos»). Las bases de antes, con las dos
+líneas juntas, se borran solas si solo tenían ejemplos.
 
-1. **Entrar:** «Entrar como…» tiene tres cuentas: Dirección, Administración de Tabaco y Administración de Café. Los
-   vendedores y los locales se crean en Usuarios y en Locales.
-2. **Tabaco:** Catálogo → «Importar» (el Excel o CSV que exporta Odoo). Si el archivo no trae precios ni costos, hay que
-   ponerlos antes de vender.
-3. **Café:** los 9 cafés de El Mío ya están, con sus fotos, su descripción y el PVP de la tienda, pero sin precio al
-   local ni costo y desactivados: Inicio → «Ponerles precio» → cada café → «Editar» → precio al local, costo y «Activo».
-   Sin precio al local no se pueden activar.
-4. **Ajustes de cada línea:** revisar los valores de partida (comisión progresiva de Tabaco 7–10 %, costo por km de
-   los repartos, frecuencia de liquidación, plantilla del contrato) y crear las listas de precios. La ubicación del
-   almacén es un punto de partida en Doral: todavía no hay una pantalla para cambiarla.
-5. **Copia:** los datos viven solo en ese navegador. Exportar la copia de cada línea (Ajustes → «Exportar copia») o de
-   todo (portada → «Exportar copia (JSON)») y guardarla fuera del teléfono. Una copia de la demo de antes ya no se carga.
+1. **Entrar:** «Entrar como…» tiene dos cuentas: Dirección (solo mirar) y Administración de Tabaco. Los vendedores y
+   los locales se crean en Usuarios y en Locales.
+2. **Catálogo:** «Importar» (el Excel o CSV que exporta Odoo). Si el archivo no trae precios ni costos, hay que ponerlos
+   antes de vender.
+3. **Ajustes:** revisar los valores de partida (comisión progresiva 7–10 %, costo por km de los repartos, frecuencia
+   de liquidación, plantilla del contrato) y crear las listas de precios. La ubicación del almacén es un punto de
+   partida en Doral: todavía no hay una pantalla para cambiarla.
+4. **Copia:** los datos viven solo en ese navegador. Exportar la copia (Ajustes → «Exportar copia», o la portada →
+   «Exportar copia (JSON)») y guardarla fuera del teléfono. Una copia de la demo de antes, o de café, no se carga.
 
 ## La demo de las pruebas automáticas
 
@@ -34,14 +32,14 @@ nunca se reemplaza por la demo.
 
 ### Recorrido de 5 pasos para enseñar
 
-1. **Dirección** (portada → «Dirección»): las dos líneas lado a lado, cada una con sus colores y sus cifras. La suma va
-   aparte, marcada como informativa. «Abrir Tabaco como Administración» entra en solo mirar.
+1. **Dirección** (portada → «Dirección»): Tabaco de un vistazo, en solo mirar: ventas, margen, lo que se debe,
+   inventario y comisiones. «Abrir Tabaco como Administración» entra en solo mirar.
 2. **Tabaco · Administración:** el centro de mando con el mapa (los locales con pedido pendiente laten). Catálogo →
    Everglades Torpedo: silueta a escala, stock bajo, «llegan 500 en 8 días».
 3. **Tabaco · Vendedor (Andrés):** Mis locales → Bodega La Esquina 49 → «Firmar contrato»: firman el encargado y el
    vendedor en el teléfono. Licorería Humo y Ron: permiso vencido, «Pedir producto» bloqueado.
-4. **Café · Local (Ventanita Azul):** lo que tiene en consignación y lo que gana por cada producto → «Pedir más».
-   Después Café · Vendedor confirma el pedido y Café · Administración lo prepara en Entregas.
+4. **Tabaco · Local:** lo que tiene en consignación y lo que gana por cada producto → «Pedir más». Después el
+   vendedor confirma el pedido y Administración lo prepara en Entregas.
 5. **Tabaco · Administración → Cobros:** Tabaquería Ficha Doble tiene liquidaciones vencidas; «Registrar pago»
    (solo el apunte). Con eso, las comisiones de su vendedora pasan a «por cobrar».
 
@@ -50,13 +48,10 @@ nunca se reemplaza por la demo.
 | Quiero ver | Cuenta | Dónde |
 |---|---|---|
 | Catálogo de tabaco con siluetas a escala | Tabaco · Administración | Catálogo |
-| Los 9 productos de El Mío | Café · cualquiera | Catálogo |
 | Importación en tránsito y en producción | Tabaco · Administración | Almacén → Importaciones |
-| Lotes de tostado y tanda programada | Café · Administración | Almacén → Lotes de tostado |
-| Café por vencer en un local | Café · Vendedor | Inicio («Atención») o Locales → Panadería Dulce Hogar |
 | Registrar tienda (OpenStreetMap o tocar el mapa) | Vendedor | Inicio → «Registrar tienda» |
-| Contrato con firma doble y PDF | Vendedor | Bodega La Esquina 49 (tabaco) o Mercado Sabor Latino (café) |
-| Aprobar un local firmado | Administración | Locales → Estanco Gables (tabaco) o Market Playa Norte (café) |
+| Contrato con firma doble y PDF | Vendedor | Bodega La Esquina 49 |
+| Aprobar un local firmado | Administración | Locales → Estanco Gables |
 | Visita con conteo | Vendedor | Un local activo → «Registrar visita» |
 | Pedido del local por confirmar | Vendedor | Inicio («Pendientes») o Pedidos |
 | Pedir un producto en dos toques | Local | Catálogo → «Pedir» en la tarjeta, o la ficha → «Pedir este producto» |

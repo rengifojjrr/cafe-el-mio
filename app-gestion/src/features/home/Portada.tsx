@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { LineId } from '../../data/types';
 import { lineConfig } from '../../lines/config';
+import { programLines } from '../../lines/programa';
+import { DEFAULT_ECOSYSTEM_NAME } from '../../seed/version';
 import { PUBLIC_URL, brandProductPhoto } from '../../lib/assets';
 import { useInstall } from '../../lib/pwa';
 import { lineTeaser } from '../../services/teaser';
@@ -26,7 +28,7 @@ export function Portada() {
   const [pendingImport, setPendingImport] = useState<File | null>(null);
   const [install, setInstall] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const name = eco.data?.name ?? 'Grupo Miami · Tabaco & Café';
+  const name = eco.data?.name ?? DEFAULT_ECOSYSTEM_NAME;
   const [first, ...restName] = name.split('·');
 
   useEffect(() => {
@@ -86,7 +88,7 @@ export function Portada() {
             {restName.length ? <span className="block text-muted">{restName.join('·').trim()}</span> : null}
           </h1>
           <p className="mt-4 max-w-[56ch] text-lg text-muted">
-            Distribución en consignación y contabilidad del grupo de Miami. Dos apps separadas, cada una con sus datos, su catálogo, su gente y sus cuentas.
+            Distribución de tabaco a tiendas y licorerías: consignación y venta en firme, cobros, comisiones y contabilidad.
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
             <Button variant="primary" big icon={LogIn} onClick={() => setPicker('all')}>
@@ -98,8 +100,8 @@ export function Portada() {
           </div>
         </section>
 
-        <section className="mt-10 grid gap-4 lg:grid-cols-2" aria-label="Las dos líneas">
-          {(['tabaco', 'cafe'] as const).map((l) => (
+        <section className={`mt-10 grid gap-4 ${programLines().length > 1 ? 'lg:grid-cols-2' : ''}`} aria-label="Líneas">
+          {programLines().map((l) => (
             <LineCard key={l} line={l} onEnter={() => setPicker(l)} />
           ))}
         </section>

@@ -1,5 +1,6 @@
 // Carga los datos de ejemplo de las dos líneas y el directorio común de cuentas.
 import type { DirectoryAccount, EcosystemSettings, LineId, Store, User } from '../data/types';
+import { LINES } from '../data/types';
 import type { CoreRepo, LineRepo } from '../data/repo';
 import { CAFE_SEED } from './cafe';
 import { type LineSeedDef, type SeedTables, simulateLine } from './engine';
@@ -55,15 +56,25 @@ export function lineAccounts(line: LineId, tables: SeedTables): DirectoryAccount
   ];
 }
 
-/** Las cuentas principales de «Entrar como…»: una por rol de cada línea, más Dirección. */
-export function primaryAccounts(tables: Record<LineId, SeedTables>): DirectoryAccount[] {
-  return [DIRECCION_ACCOUNT, ...lineAccounts('tabaco', tables.tabaco), ...lineAccounts('cafe', tables.cafe)];
+/** Las cuentas principales de «Entrar como…»: una por rol de cada línea sembrada, más Dirección. */
+export function primaryAccounts(tables: Partial<Record<LineId, SeedTables>>): DirectoryAccount[] {
+  return [DIRECCION_ACCOUNT, ...LINES.flatMap((line) => (tables[line] ? lineAccounts(line, tables[line]) : []))];
 }
 
-export async function seedEverything(core: CoreRepo, repos: Record<LineId, LineRepo>, now: Date, name = DEFAULT_ECOSYSTEM_NAME): Promise<void> {
-  const tables: Record<LineId, SeedTables> = { tabaco: buildLine('tabaco', now), cafe: buildLine('cafe', now) };
-  await repos.tabaco.load(tables.tabaco);
-  await repos.cafe.load(tables.cafe);
+/** Carga los datos de ejemplo de estas líneas (por defecto, las dos: lo usan las pruebas del motor). */
+export async function seedEverything(
+  core: CoreRepo,
+  repos: Partial<Record<LineId, LineRepo>>,
+  now: Date,
+  name = DEFAULT_ECOSYSTEM_NAME,
+  lines: readonly LineId[] = LINES,
+): Promise<void> {
+  const tables: Partial<Record<LineId, SeedTables>> = {};
+  for (const line of lines) {
+    const t = buildLine(line, now);
+    tables[line] = t;
+    await repos[line]!.load(t);
+  }
   const settings: EcosystemSettings = { id: 'ecosystem', name, theme: 'dark', seededAt: now.toISOString(), seedVersion: SEED_VERSION };
   await core.load({
     session: [{ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null }],
@@ -76,12 +87,12 @@ export async function seedEverything(core: CoreRepo, repos: Record<LineId, LineR
  * Vuelve a cargar los datos de ejemplo SOLO de estas líneas. Las otras (las que tienen datos
  * reales) no se tocan y conservan sus cuentas de «Entrar como…». La sesión también se conserva.
  */
-export async function seedLines(core: CoreRepo, repos: Record<LineId, LineRepo>, lines: readonly LineId[], now: Date, name?: string): Promise<void> {
+export async function seedLines(core: CoreRepo, repos: Partial<Record<LineId, LineRepo>>, lines: readonly LineId[], now: Date, name?: string): Promise<void> {
   const [prevDirectory, prevSettings, session] = await Promise.all([core.directory.all(), core.settings.get('ecosystem'), core.session.get('session')]);
   const fresh: DirectoryAccount[] = [];
   for (const line of lines) {
     const tables = buildLine(line, now);
-    await repos[line].load(tables);
+    await repos[line]!.load(tables);
     fresh.push(...lineAccounts(line, tables));
   }
   const kept = prevDirectory.filter((a) => a.line !== null && !lines.includes(a.line));

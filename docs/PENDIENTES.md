@@ -120,3 +120,14 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
   donde los creó: para trabajar en equipo hace falta el servidor (`SUPABASE.md`).
 - Quien escriba la marca `pruebas:datos-de-ejemplo` en su navegador ve la demo, pero solo en líneas que no son reales:
   no puede tapar ni borrar datos de la empresa.
+
+## Tabaco y Café separados (9 de noviembre de 2026)
+
+- **El link de Tabaco sigue dentro del sitio de Café El Mío** (`rengifojjrr.github.io/cafe-el-mio/gestion/`). Para que
+  estén separados de verdad, Tabaco debería tener su propio repositorio y su propio link (y más adelante su dominio).
+  Crear el repositorio lo hace el dueño de la cuenta de GitHub; mudarlo cambia el link y quien lo instaló lo instala de
+  nuevo.
+- **El café está en espera**, no borrado: para activarlo hace falta su link, su compilación y correr sus pruebas
+  (`CAFE-EN-ESPERA.md`). Lo correcto es activarlo ya con el servidor, cada programa con su proyecto.
+- Si en algún navegador quedaron bases viejas con datos reales (`eco-tabaco` o `eco-cafe`), no se ven en el programa:
+  recuperarlas es trabajo de un técnico (exportarlas desde las herramientas del navegador).

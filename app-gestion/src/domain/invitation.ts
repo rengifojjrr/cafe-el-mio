@@ -5,6 +5,7 @@
 // este navegador, igual que «Entrar como…». Con la nube, el servidor firma el token, lo guarda, lo
 // valida (vigente y no revocado) y crea o enlaza la cuenta de la persona al aceptarlo.
 import type { Invitation, IsoDateTime, LineId } from '../data/types';
+import { isProgramLine } from '../lines/programa';
 
 export interface InvitationToken {
   v: 1;
@@ -43,7 +44,8 @@ export function decodeInvitationToken(token: string): InvitationToken | null {
   if (!/^[A-Za-z0-9_-]{10,2000}$/.test(token)) return null;
   try {
     const o = JSON.parse(fromBase64Url(token)) as Partial<InvitationToken>;
-    if (o.v !== 1 || (o.line !== 'tabaco' && o.line !== 'cafe')) return null;
+    // Solo invitaciones a una línea de este programa (una de café no entra al de Tabaco).
+    if (o.v !== 1 || !isProgramLine(o.line)) return null;
     if (typeof o.accountId !== 'string' || typeof o.inv !== 'string' || typeof o.exp !== 'string') return null;
     if (!o.accountId.startsWith(`${o.line}:`) || Number.isNaN(Date.parse(o.exp))) return null;
     return { v: 1, line: o.line, accountId: o.accountId, inv: o.inv, exp: o.exp };

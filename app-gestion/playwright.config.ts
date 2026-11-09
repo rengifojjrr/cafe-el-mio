@@ -14,6 +14,8 @@ export const DEMO_STORAGE = {
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  // Las pruebas del café esperan su propio programa (docs/CAFE-EN-ESPERA.md): este es el de Tabaco.
+  testIgnore: ['**/cafe/**'],
   timeout: 120_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,

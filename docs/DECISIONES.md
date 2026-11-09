@@ -294,3 +294,27 @@ solo con lo real.
   una línea de ejemplo carga lo real y deja esa línea en blanco, y lo avisa.
 - **El aviso de copia** no cuenta los cafés de El Mío sin precio: no los cargó la empresa. El inicio de una línea sin
   nada con precio propone «Importar productos» (y en Café, «Ponerles precio»).
+
+## Tabaco y Café, programas separados (9 de noviembre de 2026)
+
+Pedido: «son dos programas distintos… enlaces separados, bases de datos separadas, todo separado»; el café todavía no
+empieza y queda guardado hasta activarlo. Y que el de Tabaco arranque desde cero.
+
+- **El programa publicado es solo de Tabaco** (`src/lines/programa.ts`): portada, «Entrar como…», rutas, Dirección,
+  copias, invitaciones y la demo de las pruebas trabajan solo con Tabaco. «/cafe» vuelve a la portada; una cuenta, una
+  copia o una invitación de café no entran («es de otro programa»). Dirección queda como «Tabaco, de un vistazo»,
+  sin suma de líneas. El nombre de partida pasa a «Grupo Miami · Tabaco» (también el de la app instalada).
+- **Bases de datos propias:** `tabaco-cuentas` (sesión, cuentas y ajustes del programa) y `tabaco-datos` (la línea).
+  Antes eran `eco-core`, `eco-tabaco` y `eco-cafe`, con las dos líneas juntas. Con nombres nuevos, cualquier navegador
+  arranca en cero, también uno donde alguien ya había cargado datos reales. Las bases viejas se borran al abrir si solo
+  tenían ejemplos; si una tenía datos reales, se deja quieta (no se ve, pero no se pierde) y con ella la común.
+- **Todos los sitios `rengifojjrr.github.io` comparten el almacenamiento del navegador**: la separación entre los dos
+  programas es por el nombre de sus bases (`tabaco-…`, `cafe-…`). La separación de verdad llega con el servidor (un
+  proyecto por programa) o con un dominio propio para cada uno.
+- **El café queda dormido en el mismo código, no en una copia congelada**: su configuración, su catálogo de El Mío,
+  sus pantallas y sus pruebas. Una copia aparte se quedaría atrás con cada arreglo del motor. Cómo se activa: ver
+  `CAFE-EN-ESPERA.md`. La versión con las dos líneas juntas queda en la historia de git (commit `088088b`).
+- **La compilación de Tabaco no lleva nada de la marca del café**: solo la letra; el logo y las fotos de El Mío se copian
+  solo al compilar el café (`PROGRAMA=cafe`). La precarga bajó de 5.5 MB a 4.4 MB.
+- **Las pruebas** del café pasan a `tests/e2e/cafe/` (fuera de la corrida). Las unitarias siguen probando el motor con
+  las dos líneas (`setProgramLines` en `tests/unit/setup.ts`) y `programa.test.ts` prueba el programa como se publica.

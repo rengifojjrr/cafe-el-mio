@@ -68,7 +68,7 @@ describe('un navegador nuevo', () => {
     const { others } = await listAccounts();
     expect(others).toEqual({ tabaco: [], cafe: [] });
     expect(await getSession()).toMatchObject({ accountId: null });
-    expect(await core.settings.get('ecosystem')).toMatchObject({ name: 'Grupo Miami · Tabaco & Café' });
+    expect(await core.settings.get('ecosystem')).toMatchObject({ name: 'Grupo Miami · Tabaco' });
 
     // El almacén conserva su nombre y su punto, pero no la dirección de ejemplo.
     const wh = (await getLineRepo('tabaco').warehouses.get('almacen')) as Warehouse;

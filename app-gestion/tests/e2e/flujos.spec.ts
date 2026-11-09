@@ -2,11 +2,12 @@
 import { expect, test } from '@playwright/test';
 import { capture, enterAs, go, sign, toast } from './helpers';
 
-test('portada: las dos líneas, el QR y «Entrar como…»', async ({ page }, info) => {
+test('portada: solo Tabaco, el QR y «Entrar como…»', async ({ page }, info) => {
   await page.goto('./#/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Grupo Miami');
   await expect(page.getByRole('article', { name: 'Línea Tabaco' })).toBeVisible();
-  await expect(page.getByRole('article', { name: 'Línea Café' })).toBeVisible();
+  // El café es otro programa: aquí no aparece.
+  await expect(page.getByRole('article', { name: 'Línea Café' })).toHaveCount(0);
   await expect(page.getByAltText(/Código QR/)).toBeVisible();
   await capture(page, info, 'E3-portada');
 });
@@ -75,38 +76,6 @@ test('registrar tienda → contrato y firma → colocar producto (tabaco)', asyn
   await capture(page, info, 'E3-local-con-consignacion');
 });
 
-test('el local pide → el vendedor confirma → administración entrega (café)', async ({ page }, info) => {
-  await enterAs(page, 'cafe:store');
-  await go(page, '/cafe/pedir');
-  await page.getByRole('button', { name: 'Agregar una caja de Café Espresso El Mío' }).click();
-  await capture(page, info, 'E3-local-pide');
-  await page.getByRole('button', { name: 'Enviar pedido' }).click();
-  await toast(page, /enviado/);
-  const code = (await page.getByRole('status').innerText()).match(/P-\d{4}/)?.[0];
-  expect(code).toBeTruthy();
-
-  await enterAs(page, 'cafe:seller');
-  await go(page, '/cafe/pedidos');
-  await page.getByRole('article', { name: `Pedido ${code}` }).getByRole('button', { name: 'Confirmar pedido' }).click();
-  await toast(page, /confirmado/);
-
-  await enterAs(page, 'cafe:admin');
-  await go(page, '/cafe/entregas');
-  await page.getByRole('article').filter({ hasText: `Pedido del local ${code}` }).getByRole('button', { name: 'Aprobar y preparar' }).click();
-  await toast(page, /Preparada/);
-
-  await enterAs(page, 'cafe:store');
-  await go(page, '/cafe');
-  await page.getByRole('button', { name: 'Recibir con firma' }).first().click();
-  await sign(page, page.getByRole('dialog').locator('canvas'));
-  await page.getByText('Recibí todo lo de esta lista, en buen estado').click();
-  await page.getByRole('button', { name: 'Firmar y recibir' }).click();
-  await toast(page, /Entregado/);
-  await go(page, '/cafe/pedidos');
-  await page.getByRole('tab', { name: /Entregados/ }).click();
-  await expect(page.getByRole('article', { name: `Pedido ${code}` })).toBeVisible();
-});
-
 test('registrar una visita con conteo (tabaco)', async ({ page }, info) => {
   await enterAs(page, 'tabaco:seller');
   await go(page, '/tabaco/locales/t-loc_0001/visita');
@@ -147,9 +116,10 @@ test('liquidar y registrar el pago (tabaco)', async ({ page }, info) => {
   await expect(page.getByRole('listitem').filter({ hasText: code! }).first()).toBeVisible();
 });
 
-test('Dirección: las dos líneas lado a lado y una línea en solo mirar', async ({ page }, info) => {
+test('Dirección: Tabaco de un vistazo y la línea en solo mirar', async ({ page }, info) => {
   await enterAs(page, 'direccion');
-  await expect(page.getByText('Suma informativa').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tabaco, de un vistazo', level: 1 })).toBeVisible();
+  await expect(page.getByText('Suma informativa')).toHaveCount(0);
   await capture(page, info, 'E5-direccion');
   await page.getByRole('button', { name: /Abrir Tabaco como Administración/ }).click();
   await expect(page.getByText(/Solo mirar/).first()).toBeVisible();

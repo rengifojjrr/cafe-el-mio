@@ -3,6 +3,7 @@ import { ChevronDown, Crown, Store as StoreIcon, Truck, UserCog } from 'lucide-r
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { LineId, Role } from '../data/types';
+import { programLines } from '../lines/programa';
 import { enterAs, listAccounts, type AccountOption } from '../services/session';
 import { LineMark } from '../ui/brand';
 import { Loading } from '../ui/kit';
@@ -11,7 +12,7 @@ import { useAsync } from './hooks';
 
 const ROLE_ICON: Record<Role, typeof Crown> = { direccion: Crown, admin: UserCog, seller: Truck, store: StoreIcon };
 const ROLE_HINT: Record<Role, string> = {
-  direccion: 'Las dos líneas lado a lado. Solo mirar.',
+  direccion: 'Las cifras de todo, para los socios. Solo mirar.',
   admin: 'Catálogo, almacén, locales, cobros, comisiones y contabilidad.',
   seller: 'Sus locales, visitas, contratos, entregas y comisiones.',
   store: 'Su consignación, lo que gana, sus cuentas y pedir más.',
@@ -42,11 +43,11 @@ export function AccountPicker({ onDone, only }: { onDone?: () => void; only?: Li
     }
   };
 
+  // Dirección y las líneas de este programa (en el de Tabaco, solo Tabaco).
   const groups: { key: LineId | 'eco'; items: AccountOption[] }[] = [
-    { key: 'eco', items: data.primary.filter((a) => a.line === null) },
-    { key: 'tabaco', items: data.primary.filter((a) => a.line === 'tabaco') },
-    { key: 'cafe', items: data.primary.filter((a) => a.line === 'cafe') },
-  ].filter((g) => !only || g.key === only) as { key: LineId | 'eco'; items: AccountOption[] }[];
+    { key: 'eco' as const, items: data.primary.filter((a) => a.line === null) },
+    ...programLines().map((l) => ({ key: l, items: data.primary.filter((a) => a.line === l) })),
+  ].filter((g) => !only || g.key === only);
 
   return (
     // grid-cols-1 en cada nivel: sin eso, la columna crece al ancho del texto y la fila se sale del teléfono.

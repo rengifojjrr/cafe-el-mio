@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { normalize } from '../../domain/products';
+import type { LineId } from '../../data/types';
 import { LINE_CONFIG } from '../../lines/config';
+import { programLines } from '../../lines/programa';
 import { type PersistState, isIos, isStandalone, isStoragePersisted, requestPersistentStorage } from '../../lib/storage';
 import { fmtDateTime } from '../../lib/time';
 import { type LineBackupSummary, backupStatus, importLine, previewLineBackup, startBlank } from '../../services/real-data';
@@ -14,6 +16,12 @@ import { DataBadge } from '../../ui/data-badge';
 import { Button, Card, LinkButton, Sheet, TextInput } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
 import { BackupNotice, useExportLine } from './BackupNotice';
+
+/** La otra línea del programa, si tiene (el programa de Tabaco no tiene otra). */
+function otherLineName(line: LineId): string | null {
+  const other = programLines().find((l) => l !== line);
+  return other ? LINE_CONFIG[other].name : null;
+}
 
 function persistText(state: PersistState | undefined): string {
   if (state === true) return 'El navegador guarda estos datos de forma persistente: no los borra para hacer espacio.';
@@ -40,7 +48,7 @@ export function DataPanel() {
   const [backup, setBackup] = useState<{ json: string; summary: LineBackupSummary; fileName: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const real = status.data?.mode === 'real';
-  const other = LINE_CONFIG[line === 'tabaco' ? 'cafe' : 'tabaco'].name;
+  const other = otherLineName(line);
   const canWrite = actor.role === 'admin' && !actor.readOnly;
 
   const pickBackup = async (file: File) => {
@@ -83,7 +91,8 @@ export function DataPanel() {
         </div>
       ) : (
         <p className="mt-2 max-w-[70ch] text-sm text-ink">
-          Ahora ves datos de ejemplo. Para cargar los de tu empresa, empieza en blanco: se borra lo de ejemplo de {config.name} y {other} no se toca. Después importa tus productos desde Excel o CSV.
+          Ahora ves datos de ejemplo. Para cargar los de tu empresa, empieza en blanco: se borra lo de ejemplo de {config.name}
+          {other ? ` y ${other} no se toca` : ''}. Después importa tus productos desde Excel o CSV.
         </p>
       )}
       {canWrite ? (
@@ -136,7 +145,7 @@ function StartBlankSheet({ open, real, onClose, onDone }: { open: boolean; real:
   const { run, busy } = useAction();
   const { exportNow, busy: exporting } = useExportLine();
   const [typed, setTyped] = useState('');
-  const other = LINE_CONFIG[line === 'tabaco' ? 'cafe' : 'tabaco'].name;
+  const other = otherLineName(line);
   const ok = normalize(typed) === normalize(config.name);
 
   const close = () => {
@@ -163,7 +172,8 @@ function StartBlankSheet({ open, real, onClose, onDone }: { open: boolean; real:
         </p>
         <p>
           Quedan los ajustes de la línea, el almacén, las zonas y una sola cuenta: «Administración» (le cambias el nombre en Usuarios).
-          {line === 'cafe' ? ' Vuelven los 9 cafés de El Mío, sin precio al local ni costo y desactivados.' : ''} {other} no se toca.
+          {line === 'cafe' ? ' Vuelven los 9 cafés de El Mío, sin precio al local ni costo y desactivados.' : ''}
+          {other ? ` ${other} no se toca.` : ''}
         </p>
         {real ? (
           <div className="rounded-2xl border border-danger bg-danger-soft p-3">

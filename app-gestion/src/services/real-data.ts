@@ -11,6 +11,7 @@ import { daysBetween, fmtDate, toIsoDate } from '../lib/time';
 import { emitAll } from './bus';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
 import { BLANK_ADMIN_NAME } from '../seed/version';
+import { isProgramLine } from '../lines/programa';
 import { realAdminAccount } from './seed-real';
 import { type DataMode, blobToDataUrl, dataUrlToBlob, demoRequested } from './session';
 
@@ -169,6 +170,9 @@ function checkBackup(ctx: Ctx, json: string): CheckedBackup {
   const r = backupSchema.safeParse(parsed);
   if (!r.success) throw new ValidationError(r.error.issues[0]?.message ?? 'El archivo no es una copia de esta app.');
   const data = r.data;
+  if (!isProgramLine(data.line)) {
+    throw new ValidationError(`Esta copia es de ${LINE_NAME[data.line]}, que es otro programa: aquí solo va ${ctx.config.name}.`);
+  }
   if (data.line !== ctx.line) {
     throw new ValidationError(`Esta copia es de ${LINE_NAME[data.line]}: impórtala desde la línea ${LINE_NAME[data.line]}.`);
   }

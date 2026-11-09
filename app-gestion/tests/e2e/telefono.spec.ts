@@ -25,8 +25,6 @@ const SCREENS: Record<string, string[]> = {
   ],
   'tabaco:seller': ['/tabaco', '/tabaco/locales', '/tabaco/pedidos', '/tabaco/comisiones', '/tabaco/contratos'],
   'tabaco:store': ['/tabaco', '/tabaco/catalogo', '/tabaco/cuentas', '/tabaco/entregas', '/tabaco/contratos'],
-  'cafe:admin': ['/cafe', '/cafe/catalogo', '/cafe/almacen', '/cafe/contabilidad'],
-  'cafe:store': ['/cafe', '/cafe/catalogo', '/cafe/cuentas'],
 };
 
 async function pageWidth(page: Page): Promise<{ scroll: number; client: number }> {

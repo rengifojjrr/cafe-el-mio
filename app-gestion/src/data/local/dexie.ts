@@ -1,6 +1,7 @@
-// Implementación `local` de los repositorios: una base IndexedDB por línea
-// (eco-tabaco, eco-cafe) y una común (eco-core). Lo de una línea nunca se escribe en la otra.
+// Implementación `local` de los repositorios: la base IndexedDB de la línea («tabaco-datos») y la del
+// programa («tabaco-cuentas»). Lo de una línea nunca se escribe en otra.
 import Dexie, { type Table as DexieTable } from 'dexie';
+import { DB_NAMESPACE, PROGRAM_LINE } from '../../lines/programa';
 import type { AuditEntry, Entity, LineId } from '../types';
 import type { AppendOnlyLog, CoreRepo, LineRepo, Table } from '../repo';
 import { CORE_TABLES, LINE_TABLES } from '../repo';
@@ -94,8 +95,18 @@ function runInTransaction<R>(db: Dexie, fn: () => Promise<R>): Promise<R> {
   return db.transaction('rw', db.tables, async () => await fn());
 }
 
+/**
+ * Bases de datos de este programa: «tabaco-datos» (la línea) y «tabaco-cuentas» (sesión, «Entrar
+ * como…» y ajustes del programa). Antes se llamaban «eco-tabaco», «eco-cafe» y «eco-core» (las dos
+ * líneas juntas); con nombres nuevos, el programa de Tabaco arranca en cero en cualquier navegador.
+ * Las pruebas del motor, que usan las dos líneas, guardan la otra en «tabaco-datos-cafe».
+ */
 export function lineDbName(line: LineId, prefix = ''): string {
-  return `${prefix}eco-${line}`;
+  return line === PROGRAM_LINE ? `${prefix}${DB_NAMESPACE}-datos` : `${prefix}${DB_NAMESPACE}-datos-${line}`;
+}
+
+export function coreDbName(prefix = ''): string {
+  return `${prefix}${DB_NAMESPACE}-cuentas`;
 }
 
 export function openLineRepo(line: LineId, prefix = ''): LineRepo {
@@ -173,7 +184,7 @@ export function openLineRepo(line: LineId, prefix = ''): LineRepo {
 }
 
 export function openCoreRepo(prefix = ''): CoreRepo {
-  const db = new Dexie(`${prefix}eco-core`);
+  const db = new Dexie(coreDbName(prefix));
   db.version(1).stores(CORE_SCHEMA);
   const table = <T extends Entity>(name: string) => new DexieTableAdapter<T>(db.table(name));
   return {

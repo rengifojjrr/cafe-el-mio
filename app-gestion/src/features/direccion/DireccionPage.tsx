@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router';
 import type { LineId, Market } from '../../data/types';
 import type { Actor } from '../../domain/permissions';
 import { lineConfig } from '../../lines/config';
+import { programLines } from '../../lines/programa';
 import { fmtMoney, fmtNumber, fmtPercent } from '../../lib/money';
 import { monthLabel } from '../money/shared';
 import { lineMarkets, lineOverview, type LineOverview } from '../../services/direccion';
@@ -58,9 +59,9 @@ function Overview() {
   const nav = useNavigate();
   const { push } = useToast();
   const [market, setMarket] = useState('');
-  // Mercados de las dos líneas (Miami, Houston…), por id.
+  // Mercados de las líneas del programa (Miami, Houston…), por id.
   const markets = useAsync(async () => {
-    const lists = await Promise.all([lineMarkets(DIRECTOR, 'tabaco'), lineMarkets(DIRECTOR, 'cafe')]);
+    const lists = await Promise.all(programLines().map((l) => lineMarkets(DIRECTOR, l)));
     const byId = new Map<string, Market>();
     for (const m of lists.flat()) if (!byId.has(m.id)) byId.set(m.id, m);
     return [...byId.values()];
@@ -68,8 +69,7 @@ function Overview() {
   const data = useAsync(async () => {
     const now = new Date();
     const opts = { marketId: market || null };
-    const [tabaco, cafe] = await Promise.all([lineOverview(DIRECTOR, 'tabaco', now, opts), lineOverview(DIRECTOR, 'cafe', now, opts)]);
-    return { tabaco, cafe };
+    return Promise.all(programLines().map((l) => lineOverview(DIRECTOR, l, now, opts)));
   }, [market]);
 
   const open = async (line: LineId) => {
@@ -86,6 +86,7 @@ function Overview() {
   };
 
   const d = data.data;
+  const several = programLines().length > 1;
   return (
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-5 lg:px-8">
@@ -97,9 +98,11 @@ function Overview() {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 pt-6 pb-32 lg:px-8">
-        <h1 className="font-display text-[2.2rem] leading-tight font-semibold sm:text-[3rem]">Las dos líneas, lado a lado</h1>
+        <h1 className="font-display text-[2.2rem] leading-tight font-semibold sm:text-[3rem]">{several ? 'Las líneas, lado a lado' : `${lineConfig(programLines()[0]!).name}, de un vistazo`}</h1>
         <p className="mt-2 max-w-[62ch] text-muted">
-          Solo lectura. Cada cifra sale de su propia línea: las cuentas de Tabaco y de Café no se mezclan. La suma de abajo es solo informativa.
+          {several
+            ? 'Solo lectura. Cada cifra sale de su propia línea: sus cuentas no se mezclan. La suma de abajo es solo informativa.'
+            : 'Solo lectura: ventas, margen, lo que se debe, inventario y comisiones. Para ver el detalle, ábrela como Administración en solo mirar.'}
         </p>
         {(markets.data ?? []).length > 1 ? (
           <div className="mt-4 max-w-xs">
@@ -115,11 +118,12 @@ function Overview() {
           </div>
         ) : d ? (
           <>
-            <div className="mt-6 grid gap-4 lg:grid-cols-2">
-              <LineColumn o={d.tabaco} onOpen={() => void open('tabaco')} />
-              <LineColumn o={d.cafe} onOpen={() => void open('cafe')} />
+            <div className={`mt-6 grid gap-4 ${several ? 'lg:grid-cols-2' : ''}`}>
+              {d.map((o) => (
+                <LineColumn key={o.line} o={o} onOpen={() => void open(o.line)} />
+              ))}
             </div>
-            <InformativeSum a={d.tabaco} b={d.cafe} />
+            {d.length === 2 ? <InformativeSum a={d[0]!} b={d[1]!} /> : null}
           </>
         ) : null}
       </main>

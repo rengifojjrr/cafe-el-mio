@@ -20,9 +20,9 @@ export default defineConfig({
       includeAssets: ['icons/*.png', 'icons/*.svg'],
       manifest: {
         id: BASE,
-        name: 'Grupo Miami · Tabaco & Café',
-        short_name: 'Grupo Miami',
-        description: 'Distribución en consignación y contabilidad de las líneas Tabaco y Café (demo).',
+        name: 'Grupo Miami · Tabaco',
+        short_name: 'Tabaco GM',
+        description: 'Distribución de tabaco: consignación, venta en firme, cobros y contabilidad.',
         lang: 'es',
         dir: 'ltr',
         start_url: BASE,

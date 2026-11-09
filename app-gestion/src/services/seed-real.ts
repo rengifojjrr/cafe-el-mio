@@ -3,7 +3,7 @@
 // Las líneas reales NUNCA se borran ni se vuelven a sembrar y conservan sus cuentas de «Entrar
 // como…». Solo las pruebas automáticas (re)cargan datos de ejemplo.
 import type { DirectoryAccount, LineId, User } from '../data/types';
-import { LINES } from '../data/types';
+import { programLines } from '../lines/programa';
 import { getCoreRepo, getLineRepo } from '../data';
 import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from '../seed/version';
 import { emitAll } from './bus';
@@ -76,7 +76,7 @@ async function seedDemoLines(lines: LineId[], now: Date, keepName?: string): Pro
     }
   }
   const { seedLines } = await import('../seed');
-  await seedLines(getCoreRepo(), { tabaco: getLineRepo('tabaco'), cafe: getLineRepo('cafe') }, lines, now, name);
+  await seedLines(getCoreRepo(), Object.fromEntries(lines.map((l) => [l, getLineRepo(l)])), lines, now, name);
   emitAll();
 }
 
@@ -124,7 +124,7 @@ async function keepRealLines(real: readonly LineId[], now: Date, name?: string):
   if (!session) {
     await core.session.put({ id: 'session', accountId: null, viewAsAccountId: null, directorLine: null });
     changed = true;
-  } else if (real.length === LINES.length) {
+  } else if (real.length === programLines().length) {
     // Si la cuenta con la que se entró (o la que se miraba) ya no existe, se vuelve a la portada.
     const gone = async (id: string | null) => id !== null && !(await findAccount(id));
     if ((await gone(session.accountId)) || (await gone(session.viewAsAccountId))) {

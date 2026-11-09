@@ -251,19 +251,6 @@ test('la visita del vendedor se cuenta escaneando: lo que no se escanea cuenta c
   await toast(page, /Visita registrada: \d+ vendidas/);
 });
 
-test('un tostado de café se abre y se recibe como antes, sin lista de empaque', async ({ page }) => {
-  const roast = (buildLine('cafe', new Date()).arrivals as Arrival[]).find((x) => x.status !== 'recibida')!;
-  await enterAs(page, 'cafe:admin');
-  await go(page, `/cafe/almacen/llegadas/${roast.id}`);
-  await expect(page.getByRole('heading', { name: roast.code, level: 1 })).toBeVisible();
-  await expect(page.getByText('Lista de empaque')).toHaveCount(0);
-  const w = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
-  expect(w.scroll).toBeLessThanOrEqual(w.client + 1);
-  await go(page, '/cafe/almacen?tab=llegadas');
-  await page.getByRole('listitem', { name: `Importación ${roast.code}` }).getByRole('button', { name: 'Recibir en almacén' }).click();
-  await toast(page, new RegExp(`${roast.code} recibida`));
-});
-
 test('nada de lo nuevo del almacén se sale del ancho del teléfono', async ({ page }, info) => {
   test.skip(info.project.name !== 'telefono', 'Solo tiene sentido en el teléfono.');
   const { arrivals } = seed();
