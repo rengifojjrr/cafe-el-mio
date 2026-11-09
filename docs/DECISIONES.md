@@ -364,3 +364,8 @@ Pedido: «mete el tabaco también, y que quede como separado, que cuando paguemo
   con un script para las fotos (`scripts/mudar-archivos.mjs`). Las llaves secretas nunca van al repositorio.
 - **La primera pantalla casi no crece**: lo de Administración (invitar, la lista de accesos) se baja solo en Usuarios, y
   el aviso del servidor no usa luxon. +9 KB comprimidos por todo el inicio de sesión y la sincronización.
+- **Las versiones nuevas entran solas al recargar** (9 de noviembre). Con el registro a mano del service worker
+  (`injectRegister: false`), el complemento de la PWA no activaba la versión nueva: quedaba «en espera» hasta cerrar
+  todas las pestañas de la app, y quien la tenía abierta seguía en la vieja aunque recargara (así se vio «Entrar
+  como…» después de publicar el servidor). Ahora el service worker se activa apenas se descarga y la página se
+  recarga sola; si una pantalla abierta pide un trozo de la versión anterior, también se recarga (una vez).

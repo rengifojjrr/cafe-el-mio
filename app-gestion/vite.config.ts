@@ -39,6 +39,11 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // La versión nueva entra apenas se descarga (y la página se recarga sola). Sin esto, con el
+        // registro a mano (injectRegister: false) se quedaba «en espera» hasta cerrar todas las
+        // pestañas de la app: quien la tenía abierta seguía en la versión vieja aunque recargara.
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,woff2,webp,png,svg}'],
         // El worker de pdf.js pesa más de 1 MB: no va en la precarga, se guarda la primera vez que se usa.
         globIgnores: ['**/pdf.worker*'],

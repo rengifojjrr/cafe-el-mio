@@ -22,6 +22,20 @@ if (conServidor()) {
   });
 }
 
+// Si una pantalla abierta pide un trozo de la versión anterior que ya no existe (se publicó otra
+// mientras estaba abierta), se recarga una vez para tomar la nueva.
+window.addEventListener('vite:preloadError', (e) => {
+  try {
+    const antes = Number(sessionStorage.getItem('recarga-version') ?? 0);
+    if (Date.now() - antes < 15_000) return;
+    sessionStorage.setItem('recarga-version', String(Date.now()));
+  } catch {
+    // Sin almacenamiento: se recarga igual.
+  }
+  e.preventDefault();
+  window.location.reload();
+});
+
 // Service worker solo con alcance /cafe-el-mio/gestion/ (nunca en la raíz de la web de marca).
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   void import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true }));
