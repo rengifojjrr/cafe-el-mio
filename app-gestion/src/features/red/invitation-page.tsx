@@ -6,6 +6,7 @@ import { useAsync } from '../../app/hooks';
 import { lineConfig } from '../../lines/config';
 import { fmtDate } from '../../lib/time';
 import { acceptInvitation, checkInvitation, type InvitationOutcome } from '../../services/invitations';
+import { conServidor } from '../../services/puerta';
 import { LineMark } from '../../ui/brand';
 import { Button, Loading } from '../../ui/kit';
 import { errorText, useToast } from '../../ui/toast';
@@ -13,6 +14,10 @@ import { errorText, useToast } from '../../ui/toast';
 /** Texto que pide el encargo para una invitación que no está en este teléfono. */
 export const CLOUD_TEXT =
   'Esta invitación necesita la nube: hoy cada teléfono guarda sus propios datos. Pide a administración el archivo de datos (Exportar) o espera a que la app pase a la nube.';
+
+/** Con el servidor, vendedores y locales todavía no entran (fase 2). */
+export const FASE2_TEXT =
+  'Los vendedores y los locales entran al servidor en la próxima etapa. Mientras tanto este link no abre la app: Administración te avisa cuando esté lista.';
 
 export function InvitationPage() {
   const { token = '' } = useParams();
@@ -74,7 +79,7 @@ function Outcome({ o, busy, onEnter, onHome }: { o: InvitationOutcome; busy: boo
     );
   }
   const map = {
-    nube: { icon: CloudOff, title: 'Falta la nube', text: CLOUD_TEXT },
+    nube: conServidor() ? { icon: CloudOff, title: 'Todavía no', text: FASE2_TEXT } : { icon: CloudOff, title: 'Falta la nube', text: CLOUD_TEXT },
     vencida: { icon: TimerOff, title: 'La invitación venció', text: `Venció el ${o.kind === 'vencida' ? fmtDate(o.expiresAt) : ''}. Pide una nueva a quien te la mandó.` },
     revocada: { icon: XCircle, title: 'La invitación ya no vale', text: 'La revocaron. Pide una nueva a quien te la mandó.' },
     invalida: { icon: XCircle, title: 'Este link no es una invitación', text: 'Revisa que se haya copiado completo, o pide que te lo manden de nuevo.' },

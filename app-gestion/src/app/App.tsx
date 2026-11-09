@@ -30,6 +30,7 @@ const admin = () => import('../features/admin/pages');
 const direccion = () => import('../features/direccion/DireccionPage');
 const red = () => import('../features/red/pages');
 const sales = () => import('../features/sales/pages');
+const acceso = () => import('../features/acceso/AccesoPage');
 const LineLayoutLazy = lazy(() => import('./LineLayout').then((m) => ({ default: m.LineLayout })));
 
 function RouteError() {
@@ -61,6 +62,8 @@ const router = createHashRouter([
       { path: '/', element: <Portada /> },
       { path: '/direccion', element: page(direccion, 'DireccionPage') },
       { path: '/invitacion/:token', element: page(red, 'InvitationPage') },
+      // Invitación al programa con el servidor: poner la contraseña y entrar.
+      { path: '/acceso/:token', element: page(acceso, 'AccesoPage') },
       {
         path: '/:line',
         element: (

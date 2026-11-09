@@ -7,6 +7,7 @@ import { useLine } from '../../app/line-context';
 import { DEFAULT_INVITATION_DAYS, INVITATION_DAYS, INVITATION_STATE_LABEL, invitationLink, invitationMessage, whatsappUrl } from '../../domain/invitation';
 import { fmtDate, fmtDateTime } from '../../lib/time';
 import { type InvitationView, type InviteTarget, createInvitation, listInvitations, revokeInvitation } from '../../services/invitations';
+import { conServidor } from '../../services/puerta';
 import { Button, Pill, SelectInput, Sheet } from '../../ui/kit';
 import { useAction, useToast } from '../../ui/toast';
 
@@ -18,7 +19,8 @@ function appBase(): string {
 export function InviteButton({ target, name, className = '' }: { target: InviteTarget; name: string; className?: string }) {
   const { actor } = useLine();
   const [open, setOpen] = useState(false);
-  if (actor.readOnly) return null;
+  // Con el servidor, vendedores y locales entran en la fase 2: hasta entonces este link no les sirve.
+  if (actor.readOnly || conServidor()) return null;
   return (
     <>
       <Button icon={Send} onClick={() => setOpen(true)} className={className}>

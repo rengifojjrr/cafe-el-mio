@@ -1,5 +1,9 @@
 // Implementación `local` de los repositorios: la base IndexedDB de la línea («tabaco-datos») y la del
 // programa («tabaco-cuentas»). Lo de una línea nunca se escribe en otra.
+//
+// Con el servidor conectado, cada cambio de la línea deja además su clave («tabla/id») en la tabla
+// `pendientes`, en el mismo todo-o-nada que el cambio: así nada se escapa de la subida, aunque el
+// teléfono se apague en el medio. La sincronización (src/servidor) sube lo que está ahí.
 import Dexie, { type Table as DexieTable } from 'dexie';
 import { DB_NAMESPACE, PROGRAM_LINE } from '../../lines/programa';
 import type { AuditEntry, Entity, LineId } from '../types';
@@ -43,8 +47,68 @@ const CORE_SCHEMA: Record<(typeof CORE_TABLES)[number], string> = {
   directory: 'id, line, role',
 };
 
+// ---------- Cambios pendientes de subir al servidor ----------
+
+/** La tabla de la base de la línea con las claves («tabla/id») de lo que falta subir. */
+export const PENDIENTES = 'pendientes';
+
+export interface Pendiente {
+  seq?: number;
+  /** «tabla/id» del registro que cambió (se sube como esté en ese momento: guardado o borrado). */
+  clave: string;
+}
+
+let anotar = false;
+const oyentes = new Set<() => void>();
+
+/** Solo con el servidor conectado se anotan los cambios (las pruebas y la demo no anotan nada). */
+export function anotarCambios(on: boolean): void {
+  anotar = on;
+}
+
+export function anotandoCambios(): boolean {
+  return anotar;
+}
+
+/** Avisa cada vez que se anota algo (la sincronización espera un momento y sube). */
+export function alAnotarCambios(fn: () => void): () => void {
+  oyentes.add(fn);
+  return () => oyentes.delete(fn);
+}
+
+export function clave(tabla: string, id: string): string {
+  return `${tabla}/${id}`;
+}
+
+async function anotarClaves(db: Dexie, claves: string[]): Promise<void> {
+  if (!claves.length) return;
+  await db.table(PENDIENTES).bulkAdd(claves.map((c) => ({ clave: c })));
+  for (const fn of oyentes) fn();
+}
+
+/** El cambio y su anotación van juntos: si uno falla, no queda ninguno. */
+function conAnotacion<R>(db: Dexie, tabla: string, fn: () => Promise<R>): Promise<R> {
+  const tx = Dexie.currentTransaction;
+  if (tx && tx.db === db && tx.storeNames.includes(PENDIENTES)) return fn();
+  return db.transaction('rw', [tabla, PENDIENTES], async () => await fn());
+}
+
+/** Las claves de todo lo que hay en la línea (para anotar un vaciado o una carga completa). */
+async function todasLasClaves(db: Dexie): Promise<string[]> {
+  const out: string[] = [];
+  for (const name of LINE_TABLES) {
+    const keys = name === 'audit' ? await db.table(name).orderBy('id').keys() : await db.table(name).toCollection().primaryKeys();
+    for (const k of keys) out.push(clave(name, String(k)));
+  }
+  return out;
+}
+
 class DexieTableAdapter<T extends Entity> implements Table<T> {
-  constructor(private readonly t: DexieTable<T, string>) {}
+  /** `sube`: los cambios de esta tabla se anotan para el servidor (las de la línea, no las del programa). */
+  constructor(
+    private readonly t: DexieTable<T, string>,
+    private readonly sube = false,
+  ) {}
   get(id: string) {
     return this.t.get(id);
   }
@@ -54,14 +118,28 @@ class DexieTableAdapter<T extends Entity> implements Table<T> {
   where(index: string, value: string | number) {
     return this.t.where(index).equals(value).toArray();
   }
+  private conCola(ids: string[], fn: () => Promise<unknown>): Promise<void> {
+    if (!this.sube || !anotar) return fn().then(() => undefined);
+    const db = this.t.db;
+    return conAnotacion(db, this.t.name, async () => {
+      await fn();
+      await anotarClaves(
+        db,
+        ids.map((id) => clave(this.t.name, id)),
+      );
+    });
+  }
   async put(item: T) {
-    await this.t.put(item);
+    await this.conCola([item.id], () => this.t.put(item));
   }
   async bulkPut(items: T[]) {
-    await this.t.bulkPut(items);
+    await this.conCola(
+      items.map((i) => i.id),
+      () => this.t.bulkPut(items),
+    );
   }
   async remove(id: string) {
-    await this.t.delete(id);
+    await this.conCola([id], () => this.t.delete(id));
   }
   count() {
     return this.t.count();
@@ -70,12 +148,26 @@ class DexieTableAdapter<T extends Entity> implements Table<T> {
 
 class AuditAdapter implements AppendOnlyLog<AuditEntry> {
   constructor(private readonly t: DexieTable<AuditEntry, number>) {}
+  private conCola(ids: string[], fn: () => Promise<unknown>): Promise<void> {
+    if (!anotar) return fn().then(() => undefined);
+    const db = this.t.db;
+    return conAnotacion(db, this.t.name, async () => {
+      await fn();
+      await anotarClaves(
+        db,
+        ids.map((id) => clave('audit', id)),
+      );
+    });
+  }
   async append(entry: AuditEntry) {
     const { seq: _ignored, ...rest } = entry;
-    await this.t.add(rest as AuditEntry);
+    await this.conCola([entry.id], () => this.t.add(rest as AuditEntry));
   }
   async bulkAppend(entries: AuditEntry[]) {
-    await this.t.bulkAdd(entries.map(({ seq: _ignored, ...rest }) => rest as AuditEntry));
+    await this.conCola(
+      entries.map((e) => e.id),
+      () => this.t.bulkAdd(entries.map(({ seq: _ignored, ...rest }) => rest as AuditEntry)),
+    );
   }
   all() {
     return this.t.orderBy('seq').toArray();
@@ -83,6 +175,14 @@ class AuditAdapter implements AppendOnlyLog<AuditEntry> {
   count() {
     return this.t.count();
   }
+}
+
+/** La base Dexie detrás de un repositorio de línea (solo para la sincronización). */
+const bases = new WeakMap<object, Dexie>();
+export function dexieDe(repo: LineRepo): Dexie {
+  const db = bases.get(repo);
+  if (!db) throw new Error('Ese repositorio no es de la base local.');
+  return db;
 }
 
 /**
@@ -125,8 +225,11 @@ export function openLineRepo(line: LineId, prefix = ''): LineRepo {
     routes: 'id, date, status',
     invitations: 'id, accountId',
   });
-  const table = <T extends Entity>(name: string) => new DexieTableAdapter<T>(db.table(name));
-  return {
+  // Versión 4: lo que falta subir al servidor (solo se usa con el servidor conectado).
+  db.version(4).stores({ [PENDIENTES]: '++seq, clave' });
+  const table = <T extends Entity>(name: string) => new DexieTableAdapter<T>(db.table(name), true);
+  const datos = () => db.tables.filter((t) => t.name !== PENDIENTES);
+  const repo: LineRepo = {
     line,
     products: table('products'),
     photos: table('photos'),
@@ -163,7 +266,10 @@ export function openLineRepo(line: LineId, prefix = ''): LineRepo {
     transaction: (fn) => runInTransaction(db, fn),
     clearAll: async () => {
       await db.transaction('rw', db.tables, async () => {
-        await Promise.all(db.tables.map((t) => t.clear()));
+        // Con el servidor conectado, vaciar también se sube (cada registro, como borrado).
+        const antes = anotar ? await todasLasClaves(db) : [];
+        await Promise.all(datos().map((t) => t.clear()));
+        await anotarClaves(db, antes);
       });
     },
     dump: async () => {
@@ -173,14 +279,21 @@ export function openLineRepo(line: LineId, prefix = ''): LineRepo {
     },
     load: async (data) => {
       await db.transaction('rw', db.tables, async () => {
+        const antes = anotar ? await todasLasClaves(db) : [];
         for (const name of LINE_TABLES) {
           await db.table(name).clear();
           const rows = data[name];
           if (Array.isArray(rows) && rows.length) await db.table(name).bulkPut(rows);
         }
+        if (anotar) {
+          const despues = LINE_TABLES.flatMap((name) => (Array.isArray(data[name]) ? data[name] : []).map((r) => clave(name, String((r as { id?: unknown }).id))));
+          await anotarClaves(db, [...new Set([...antes, ...despues])]);
+        }
       });
     },
   };
+  bases.set(repo, db);
+  return repo;
 }
 
 export function openCoreRepo(prefix = ''): CoreRepo {

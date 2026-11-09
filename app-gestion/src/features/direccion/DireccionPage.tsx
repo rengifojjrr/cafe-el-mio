@@ -10,7 +10,9 @@ import { programLines } from '../../lines/programa';
 import { fmtMoney, fmtNumber, fmtPercent } from '../../lib/money';
 import { monthLabel } from '../money/shared';
 import { lineMarkets, lineOverview, type LineOverview } from '../../services/direccion';
+import { conServidor, cuentaPermitida } from '../../services/puerta';
 import { directorOpenLine, findAccount, getSession, leave } from '../../services/session';
+import { EstadoServidor } from '../acceso/EstadoServidor';
 import { useAsync } from '../../app/hooks';
 import { LineMark } from '../../ui/brand';
 import { LinesChart } from '../../ui/charts';
@@ -38,13 +40,15 @@ export function DireccionPage() {
       </div>
     );
   }
-  if (!acc.data || acc.data.role !== 'direccion') {
+  if (!acc.data || acc.data.role !== 'direccion' || !cuentaPermitida(acc.data.id)) {
     return (
       <div className="mx-auto grid min-h-dvh max-w-md place-items-center p-6 text-center">
         <div className="glass p-6">
           <Crown className="mx-auto h-8 w-8 text-accent" aria-hidden />
           <h1 className="mt-2 font-display text-2xl font-semibold">Vista de Dirección</h1>
-          <p className="mt-2 text-muted">Esta vista es para los socios del grupo. Entra como Dirección desde la portada.</p>
+          <p className="mt-2 text-muted">
+            {conServidor() ? 'Esta vista es para los socios del grupo. Entra con tu correo y tu contraseña desde la portada.' : 'Esta vista es para los socios del grupo. Entra como Dirección desde la portada.'}
+          </p>
           <Button variant="primary" className="mt-4" onClick={() => nav('/')}>
             Ir a la portada
           </Button>
@@ -91,7 +95,8 @@ function Overview() {
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-5 lg:px-8">
         <LineMark line="eco" size="sm" />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1">
+          <EstadoServidor />
           <Button variant="ghost" icon={LogOut} onClick={() => void exit()}>
             Salir
           </Button>

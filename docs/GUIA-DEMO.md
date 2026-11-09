@@ -2,8 +2,8 @@
 
 **Link:** https://rengifojjrr.github.io/cafe-el-mio/gestion/ · también el QR de la portada.
 **Instalar:** Android/Chrome, en la portada «Instalar en el teléfono». iPhone/Safari: Compartir → «Agregar a pantalla de inicio».
-**Cambiar de cuenta:** el botón flotante «Cambiar de rol» (abajo a la derecha) o «Entrar como…» en la portada. Todavía
-no hay contraseñas: cualquiera con ese navegador entra con cualquier cuenta.
+**Entrar:** con tu correo y tu contraseña (portada → «Entrar»). Para tener cuenta hace falta una invitación de
+Administración. «Entrar como…» y «Cambiar de rol» quedan solo en las pruebas automáticas.
 
 ## Cómo empieza: solo Tabaco y en cero
 
@@ -12,35 +12,36 @@ datos) y todavía no empieza: ver `CAFE-EN-ESPERA.md`. Cualquier navegador que a
 ejemplo y con bases de datos propias del programa («tabaco-cuentas» y «tabaco-datos»). Las bases de antes, con las dos
 líneas juntas, se borran solas si solo tenían ejemplos.
 
-1. **Entrar:** «Entrar como…» tiene dos cuentas: Dirección (solo mirar) y Administración de Tabaco. Los vendedores y
-   los locales se crean en Usuarios y en Locales.
+1. **Entrar:** portada → «Entrar», con el correo y la contraseña. Entran Administración (carga y cambia todo) y Dirección
+   (solo mira las cifras). Los vendedores y los locales se crean en Usuarios y en Locales; todavía no entran a la app
+   desde sus teléfonos (llega en la próxima etapa).
 2. **Catálogo:** «Importar» (el Excel o CSV que exporta Odoo). Si el archivo no trae precios ni costos, hay que ponerlos
    antes de vender.
 3. **Ajustes:** revisar los valores de partida (comisión progresiva 7–10 %, costo por km de los repartos, frecuencia
    de liquidación, plantilla del contrato) y crear las listas de precios. La ubicación del almacén es un punto de
    partida en Doral: todavía no hay una pantalla para cambiarla.
-4. **Copia:** los datos viven solo en ese navegador. Exportar la copia (Ajustes → «Exportar copia», o la portada →
-   «Exportar copia (JSON)») y guardarla fuera del teléfono. Una copia de la demo de antes, o de café, no se carga.
+4. **Copia:** exportar la copia una vez por semana (portada → «Exportar copia (JSON)») y guardarla fuera del teléfono.
+   El servidor todavía está en un plan sin copias de seguridad.
 
-## Para que lo cargado quede guardado
+## El servidor: lo que conviene saber
 
-Sin servidor, los datos viven **solo en el navegador donde se cargan**. Quedan guardados de un día para otro y con
-cada actualización de la app (una línea con datos reales nunca se borra ni se reemplaza), con estas reglas:
+Lo que se carga queda **en el servidor del programa y en cada teléfono donde se entró**. Así la app funciona sin señal:
+guarda en el teléfono y sube cuando vuelve la señal. Arriba, en cada pantalla, el aviso del servidor dice cómo va:
+«Al día», «3 por subir», «Sin señal» o «Vuelve a entrar». Al tocarlo: «Sincronizar ahora» y «Cerrar sesión».
 
-1. **Un solo equipo carga.** Elegir el teléfono o la computadora de Administración y cargar siempre ahí. Lo que se
-   carga en otro teléfono queda en ese otro teléfono: no se juntan.
-2. **Instalar la app** en ese equipo (portada → «Instalar en el teléfono»). En iPhone es obligatorio: Safari borra los
-   datos de un sitio que no se abre en 7 días si no está en la pantalla de inicio.
-3. **Nunca en modo incógnito**, y no borrar los datos del sitio ni del navegador.
-4. **Exportar la copia** seguido (Ajustes → «Exportar copia», o la portada) y guardarla fuera del teléfono (correo,
-   Drive). Es lo único que salva los datos si se pierde o se borra el equipo. La app avisa a los 7 días.
-5. **«Importar copia» reemplaza todo** lo que hay en ese equipo: sirve para pasar los datos a otro equipo o
-   recuperarlos, nunca para juntar lo de dos personas.
-6. **Vendedores y locales** todavía no pueden trabajar sobre estos datos desde sus teléfonos: eso necesita el
-   servidor. Cuando llegue, lo cargado se podrá pasar con la copia, sin volver a escribirlo.
-
-Al entrar Administración, la app le pide al navegador que no borre estos datos aunque le falte espacio
-(Ajustes → «Datos de Tabaco» dice si lo concedió).
+1. **Invitar a alguien:** Usuarios → «Acceso con contraseña» → «Invitar» (nombre, correo, Dirección o
+   Administración). Sale un link para mandar por WhatsApp: sirve una sola vez y vence en los días elegidos. Quien lo
+   abre pone su contraseña y entra. Si alguien olvida su contraseña, se le invita otra vez.
+2. **Quitar el acceso:** en la misma lista, «Quitar acceso». Ese teléfono deja de sincronizar y pide volver a entrar.
+3. **La primera vez en cada teléfono:** si el teléfono ya tenía datos cargados (de antes del servidor) y el servidor
+   también, la app pregunta qué hacer: «Subir lo de este teléfono» (en el teléfono donde se cargó todo) o «Usar lo
+   del servidor». Antes deja bajar una copia. Si el servidor está vacío, el primer teléfono lo llena solo.
+4. **Si dos personas cambian lo mismo**, queda el último cambio que llega al servidor.
+5. **Instalar la app** en cada teléfono (portada → «Instalar en el teléfono»), sobre todo en iPhone: Safari borra los
+   datos de un sitio que no se abre en 7 días si no está en la pantalla de inicio. Lo que ya subió no se pierde, pero
+   lo que no había subido sí.
+6. **«Importar copia» reemplaza todo**: en ese teléfono y, al sincronizar, en el servidor y en los teléfonos de todos.
+   Sirve para recuperar los datos, nunca para juntar lo de dos personas.
 
 ## La demo de las pruebas automáticas
 

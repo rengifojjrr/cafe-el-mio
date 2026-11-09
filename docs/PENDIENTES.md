@@ -33,10 +33,12 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 
 ## Producto
 
-- **Pasar a servidor (Supabase)** para que varios usuarios compartan datos en tiempo real (plan en `SUPABASE.md`).
-  Sin servidor, el contrato que se firma en el teléfono del vendedor no lo ven ni administración ni el local en
-  sus teléfonos.
-  Hoy cada navegador tiene su copia; exportar/importar JSON sirve para llevar la demo a otro teléfono.
+- **Servidor (Supabase), fase 2:** que entren los vendedores y los locales, cada uno con lo suyo y sin costos
+  (`SUPABASE.md`). Hasta entonces, el contrato que se firma en el teléfono del vendedor no llega al servidor.
+- **Mudanza al proyecto propio** cuando el cliente pague (`MUDANZA.md`). Hasta entonces: plan gratis, sin copias de
+  seguridad automáticas (copia semanal a mano) y el proyecto se pausa si pasa una semana sin uso.
+- **Recuperar la contraseña por correo:** hoy se hace con otra invitación. Con el proyecto propio se puede activar la
+  recuperación por correo con su propio remitente.
 - Lista real de vendedores, zonas y locales; fotos reales de los tabacos.
 - Dominio propio (hoy GitHub Pages).
 
@@ -54,13 +56,14 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 ## Ronda 3 (lo que quedó y por qué)
 
 ### Datos reales sin servidor
-- **Todo vive en un navegador.** Lo que carga Administración en su teléfono no lo ven los vendedores ni los locales en
-  los suyos, salvo pasando la copia (Exportar / Importar). Para que el equipo trabaje junto hace falta el servidor
-  (`SUPABASE.md`): es el siguiente paso, y también lo necesitan las invitaciones de verdad.
+- **Resuelto en parte (9/11):** Administración y Dirección ya comparten los datos por el servidor. Los vendedores y los
+  locales todavía no (fase 2).
 - **Riesgo de perder datos:** Safari puede borrar los datos de un sitio que no se abre en 7 días si no está instalado
   en la pantalla de inicio; Chrome suele negar el almacenamiento persistente hasta instalar la app. Por eso el aviso de
   copia a los 7 días. La copia JSON lleva datos reales de la empresa: guardarla en un lugar privado.
-- **Sin contraseñas:** cualquiera con ese navegador entra como Administración de los datos reales.
+- **Contraseñas (resuelto 9/11):** con datos reales se entra con correo y contraseña. Los datos siguen guardados en
+  cada teléfono donde se entró (para funcionar sin señal): un teléfono perdido con la sesión abierta los muestra.
+  Quitarle el acceso a esa cuenta corta la sincronización, no lo que ya estaba en el teléfono.
 - **Banco y tienda en línea:** conectar el banco a la contabilidad necesita servidor, seguridad y el permiso del
   banco; la tienda al público necesita la licencia federal, control de edad (21+) y pagos. Quedan para después del
   servidor.
@@ -116,8 +119,8 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 - **El importador de Odoo todavía inventa precios** cuando el archivo no los trae ($25 por mazo, $40 premium, costo 0
   provisional). Es el mismo tipo de número que se acaba de quitar. Lo coherente: que entren sin precio y desactivados,
   como los cafés de El Mío. Queda para decidir con el equipo.
-- **Vendedores y locales no tienen nada que ver** hasta que Administración los cree, y aun así solo en el navegador
-  donde los creó: para trabajar en equipo hace falta el servidor (`SUPABASE.md`).
+- **Vendedores y locales no tienen nada que ver** hasta que Administración los cree, y todavía no entran desde sus
+  teléfonos (fase 2 del servidor, `SUPABASE.md`).
 - Quien escriba la marca `pruebas:datos-de-ejemplo` en su navegador ve la demo, pero solo en líneas que no son reales:
   no puede tapar ni borrar datos de la empresa.
 
@@ -131,3 +134,13 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
   (`CAFE-EN-ESPERA.md`). Lo correcto es activarlo ya con el servidor, cada programa con su proyecto.
 - Si en algún navegador quedaron bases viejas con datos reales (`eco-tabaco` o `eco-cafe`), no se ven en el programa:
   recuperarlas es trabajo de un técnico (exportarlas desde las herramientas del navegador).
+
+## Con el servidor (9 de noviembre de 2026)
+
+- **Probar con dos teléfonos de verdad**: entrar, cargar en uno y ver en el otro, sin señal y de vuelta. Está probado
+  con un servidor de mentira con las mismas reglas y con pruebas SQL en el de verdad, no en dos teléfonos.
+- **Dominio propio:** las páginas de `rengifojjrr.github.io` comparten el almacenamiento del navegador, también la
+  sesión guardada del programa. Con un dominio propio solo el programa la ve.
+- **La copia semanal sigue siendo a mano** mientras el servidor esté en el plan gratis.
+- **Fotos de un tipo raro** (por ejemplo HEIC de un iPhone si no se convirtió) no suben al depósito: quedan anotadas
+  como rechazadas en ese teléfono. La app convierte las fotos a WebP al cargarlas; los PDF suben tal cual (hasta 10 MB).

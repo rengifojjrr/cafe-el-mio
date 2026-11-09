@@ -22,6 +22,7 @@ import { CommissionSchemeSettings, SellerCommissionText, SellerSchemeButton } fr
 import { InviteButton } from '../red/invite';
 import { MarketSelect, MarketsSettings, RouteCostSettings } from '../red/markets';
 import { DataPanel } from '../data/DataPanel';
+import { AccesosCard } from '../acceso/AccesosCard';
 import { FirmSalesSettings } from '../sales/price-lists';
 
 function AdminOnly({ children }: { children: ReactNode }) {
@@ -93,6 +94,8 @@ function UsersInner() {
           ) : undefined
         }
       />
+
+      <AccesosCard />
 
       <Section title={`Vendedores (${sellers.length})`}>
         {sellers.length === 0 ? (

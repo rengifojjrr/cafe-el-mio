@@ -3,13 +3,23 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { DEMO_STORAGE } from '../../playwright.config';
+import { ServidorFalso } from '../servidor-falso';
 import { enterAs, go, toast } from './helpers';
+import { conServidorFalso, entrarConCorreo } from './servidor-helpers';
 
 const XLSX = fileURLToPath(new URL('../fixtures/odoo-variantes.xlsx', import.meta.url));
 const FLAG = DEMO_STORAGE.origins[0]!.localStorage[0]!.name;
 
 async function databases(page: Page): Promise<string[]> {
   return page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name ?? ''));
+}
+
+/** El servidor del programa (de mentira) con la cuenta de Administración. */
+async function servidorCon(page: Page): Promise<ServidorFalso> {
+  const servidor = new ServidorFalso();
+  servidor.agregarUsuario('admin@example.com', 'clave-segura-1', { rol: 'admin', usuario_app: 't-usr_admin', tienda: null, nombre: 'Administración' });
+  await conServidorFalso(page.context(), servidor);
+  return servidor;
 }
 
 test.describe('un navegador nuevo', () => {
@@ -24,15 +34,12 @@ test.describe('un navegador nuevo', () => {
     await expect(page.getByRole('button', { name: /Restablecer|Recorrido/ })).toHaveCount(0);
     await expect(page.getByText(/Datos de ejemplo|La demo/)).toHaveCount(0);
 
-    // «Entrar como…»: Dirección y Administración de Tabaco, nada más.
-    await page.getByRole('button', { name: 'Entrar como…' }).first().click();
-    const picker = page.getByRole('dialog', { name: 'Entrar como…' });
-    await expect(picker.locator('[data-account]')).toHaveCount(2);
-    // Ninguna fila más ancha que la pantalla (el texto largo se corta con «…» dentro de la fila).
-    const rights = await picker.locator('[data-account]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
-    expect(Math.max(...rights)).toBeLessThanOrEqual(page.viewportSize()!.width);
-    await picker.locator('[data-account="tabaco:admin"]').click();
+    // Se entra con correo y contraseña: no hay «Entrar como…» ni «Cambiar de rol».
+    await expect(page.getByRole('button', { name: 'Entrar como…' })).toHaveCount(0);
+    await servidorCon(page);
+    await entrarConCorreo(page, 'admin@example.com', 'clave-segura-1');
     await page.waitForURL((url) => url.hash === '#/tabaco');
+    await expect(page.getByTestId('cambiar-rol')).toHaveCount(0);
     await expect(page.getByText('Tabaco está en blanco, lista para tus datos.')).toBeVisible();
     await go(page, '/tabaco/catalogo');
     await expect(page.getByText('Aún no hay productos')).toBeVisible();
@@ -92,8 +99,18 @@ test.describe('con la demo de las pruebas', () => {
     await page.evaluate((flag) => localStorage.removeItem(flag), FLAG);
     await page.reload();
     await expect(page.getByRole('article', { name: 'Línea Tabaco' }).locator('dd')).toHaveText(['0', '0', '0']);
+    // Sin la marca de pruebas ya no hay «Entrar como…»: se entra con correo y contraseña.
+    await expect(page.getByRole('button', { name: 'Entrar como…' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible();
+  });
+
+  test('«Entrar como…» (solo en las pruebas): ninguna fila más ancha que la pantalla', async ({ page }) => {
+    await page.goto('./#/');
     await page.getByRole('button', { name: 'Entrar como…' }).first().click();
-    await expect(page.getByRole('dialog', { name: 'Entrar como…' }).locator('[data-account]')).toHaveCount(2);
+    const picker = page.getByRole('dialog', { name: 'Entrar como…' });
+    await expect(picker.locator('[data-account]').first()).toBeVisible();
+    const rights = await picker.locator('[data-account]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
+    expect(Math.max(...rights)).toBeLessThanOrEqual(page.viewportSize()!.width);
   });
 
   test('lo que ya era real no se toca', async ({ page }) => {
@@ -116,10 +133,12 @@ test.describe('con la demo de las pruebas', () => {
     await go(page, '/');
     await page.reload();
     await expect(page.getByRole('article', { name: 'Línea Tabaco' }).locator('dd').first()).toHaveText('18');
-    await page.getByRole('button', { name: 'Entrar como…' }).first().click();
-    await page.getByRole('dialog', { name: 'Entrar como…' }).locator('[data-account="tabaco:admin"]').click();
+    // Al entrar con su cuenta, el servidor (vacío) recibe lo de este navegador.
+    const servidor = await servidorCon(page);
+    await entrarConCorreo(page, 'admin@example.com', 'clave-segura-1');
     await page.waitForURL((url) => url.hash === '#/tabaco');
     await go(page, '/tabaco/catalogo');
     await expect(page.getByTestId('resultados')).toContainText('18 productos');
+    await expect.poll(() => [...servidor.vivos().keys()].filter((k) => k.startsWith('products/')).length, { timeout: 20_000 }).toBe(18);
   });
 });

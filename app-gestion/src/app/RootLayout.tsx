@@ -3,6 +3,7 @@
 import { Repeat } from 'lucide-react';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigationType } from 'react-router';
+import { conServidor } from '../services/puerta';
 import { getEcosystem } from '../services/session';
 import { Sheet } from '../ui/kit';
 import { AccountPicker } from './AccountPicker';
@@ -22,13 +23,15 @@ export function RootLayout() {
   // Las entradas sin estado (carga inicial, recargar, dirección escrita) se recuerdan por su ruta.
   useScrollMemory(loc.key === 'default' ? `ruta:${loc.pathname}${loc.search}` : loc.key, loc.pathname, navType);
 
-  const onHome = loc.pathname === '/';
+  const onHome = loc.pathname === '/' || loc.pathname.startsWith('/acceso/');
   const printing = loc.pathname.endsWith('/imprimir');
+  // Con el servidor cada quien entra con su cuenta: no hay «Cambiar de rol» (solo en las pruebas).
+  const switcher = !conServidor();
 
   return (
     <>
       <Outlet />
-      {!onHome && !printing ? (
+      {switcher && !onHome && !printing ? (
         <button
           type="button"
           onClick={() => setOpen(true)}

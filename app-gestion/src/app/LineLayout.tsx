@@ -6,6 +6,8 @@ import { Link, NavLink, Navigate, Outlet, useNavigate, useParams } from 'react-r
 import { lineConfig } from '../lines/config';
 import { PROGRAM_LINE, isProgramLine } from '../lines/programa';
 import { requestPersistentStorage } from '../lib/storage';
+import { EstadoServidor } from '../features/acceso/EstadoServidor';
+import { conServidor } from '../services/puerta';
 import { lineCtx } from '../services/context';
 import { unreadNotifications } from '../services/messages';
 import { directorOpenLine, getEcosystem, leave, listAccounts, resolveActor, saveEcosystem, viewAs } from '../services/session';
@@ -39,8 +41,9 @@ function LineShell({ line }: { line: 'tabaco' | 'cafe' }) {
   }, [line]);
 
   const r = resolved.data;
-  // Los datos viven solo en este navegador: cuando entra Administración (la que carga), se le pide
-  // que no los borre aunque le falte espacio. Chrome lo decide solo; Firefox puede preguntar.
+  // Los datos viven primero en este navegador (y lo pendiente, hasta que sube): cuando entra
+  // Administración (la que carga), se le pide que no los borre aunque le falte espacio. Chrome lo
+  // decide solo; Firefox puede preguntar.
   const loads = r?.actor.role === 'admin' && !r.actor.readOnly;
   useEffect(() => {
     if (loads) void requestPersistentStorage();
@@ -63,8 +66,12 @@ function LineShell({ line }: { line: 'tabaco' | 'cafe' }) {
     return (
       <div className="mx-auto grid min-h-dvh max-w-md place-items-center p-6 text-center">
         <div className="glass p-6">
-          <h1 className="font-display text-2xl font-semibold">Elige una cuenta de {lineConfig(line).name}</h1>
-          <p className="mt-2 text-muted">Tu sesión no tiene acceso a esta línea. Las cuentas de Tabaco y de Café no se cruzan.</p>
+          <h1 className="font-display text-2xl font-semibold">{conServidor() ? 'Entra con tu cuenta' : `Elige una cuenta de ${lineConfig(line).name}`}</h1>
+          <p className="mt-2 text-muted">
+            {conServidor()
+              ? 'Para ver esto, entra desde la portada con tu correo y tu contraseña.'
+              : 'Tu sesión no tiene acceso a esta línea. Las cuentas de Tabaco y de Café no se cruzan.'}
+          </p>
           <Button variant="primary" className="mt-4" onClick={() => nav('/')}>
             Ir a la portada
           </Button>
@@ -170,6 +177,7 @@ function Shell({ state }: { state: LineState }) {
             </p>
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-1">
+            <EstadoServidor />
             {canViewAs && !actor.readOnly ? (
               <Button variant="ghost" icon={Eye} onClick={() => setViewSheet(true)} className="hidden sm:inline-flex">
                 Ver como…

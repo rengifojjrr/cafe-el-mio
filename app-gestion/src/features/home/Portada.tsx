@@ -1,7 +1,6 @@
-// Portada del ecosistema: las dos líneas como protagonistas, «Entrar como…», el QR del link,
-// instalar y la copia de todo (exportar o importar). Sin datos de ejemplo: lo que se ve es lo
-// que la empresa cargó en este navegador.
-import { Crown, Download, LogIn, Moon, Pencil, Smartphone, Sun, Upload } from 'lucide-react';
+// Portada del ecosistema: la línea como protagonista, entrar (con correo y contraseña; en las
+// pruebas, «Entrar como…»), el QR del link, instalar y la copia de todo (exportar o importar).
+import { Crown, Download, LogIn, LogOut, Moon, Pencil, Smartphone, Sun, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { LineId } from '../../data/types';
@@ -11,8 +10,14 @@ import { DEFAULT_ECOSYSTEM_NAME } from '../../seed/version';
 import { PUBLIC_URL, brandProductPhoto } from '../../lib/assets';
 import { useInstall } from '../../lib/pwa';
 import { lineTeaser } from '../../services/teaser';
-import { enterAs, exportState, getEcosystem, importState, saveEcosystem } from '../../services/session';
+import { enterAs, getEcosystem, importState, saveEcosystem } from '../../services/session';
+import { type Diferencias, type Entrada, cerrarSesion, seguir } from '../../services/acceso';
+import { conServidor } from '../../services/puerta';
 import { AccountPicker } from '../../app/AccountPicker';
+import { DecidirConexion, EntrarSheet } from '../acceso/EntrarSheet';
+import { EstadoServidor } from '../acceso/EstadoServidor';
+import { descargarCopia } from '../acceso/copia';
+import { useSesionServidor } from '../acceso/hooks';
 import { useAsync } from '../../app/hooks';
 import { CigarSilhouette, LineMark } from '../../ui/brand';
 import { Button, Sheet, TextInput } from '../../ui/kit';
@@ -30,6 +35,37 @@ export function Portada() {
   const fileRef = useRef<HTMLInputElement>(null);
   const name = eco.data?.name ?? DEFAULT_ECOSYSTEM_NAME;
   const [first, ...restName] = name.split('·');
+  // Con el servidor se entra con correo y contraseña; «Entrar como…» queda solo para las pruebas.
+  const servidor = conServidor();
+  const sesion = useSesionServidor();
+  const [entrar, setEntrar] = useState(false);
+  const [decision, setDecision] = useState<Diferencias | null>(null);
+  const esAdmin = !servidor || sesion?.cuenta?.rol === 'admin';
+  const puedeCopiar = !servidor || (!!sesion && esAdmin);
+
+  const adentro = (r: Entrada) => {
+    if (r.tipo === 'decidir') setDecision(r.diferencias);
+    else {
+      setDecision(null);
+      nav(r.destino);
+    }
+  };
+  const seguirAdentro = async () => {
+    try {
+      adentro(await seguir());
+    } catch (e) {
+      push('error', errorText(e));
+    }
+  };
+  const salir = async () => {
+    try {
+      await cerrarSesion();
+      push('ok', 'Cerraste la sesión.');
+    } catch (e) {
+      push('error', errorText(e));
+    }
+  };
+  const entrarALinea = (l: LineId) => (servidor ? (sesion ? void seguirAdentro() : setEntrar(true)) : setPicker(l));
 
   useEffect(() => {
     delete document.documentElement.dataset.line;
@@ -44,16 +80,7 @@ export function Portada() {
     }
   };
 
-  const doExport = async () => {
-    const json = await exportState();
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `copia-grupo-miami-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const doExport = () => descargarCopia();
 
   const doImport = async (file: File) => {
     setPendingImport(null);
@@ -71,13 +98,14 @@ export function Portada() {
       <header className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-5 lg:px-8">
         <span className="font-display text-xl font-semibold">Grupo Miami</span>
         <div className="ml-auto flex items-center gap-1">
+          <EstadoServidor />
           <Button
             variant="ghost"
             icon={eco.data?.theme === 'light' ? Moon : Sun}
             aria-label="Cambiar entre modo claro y oscuro"
             onClick={() => void saveEcosystem({ theme: eco.data?.theme === 'light' ? 'dark' : 'light' })}
           />
-          <Button variant="ghost" icon={Pencil} onClick={() => setRename(true)} aria-label="Cambiar el nombre del ecosistema" />
+          {esAdmin && (!servidor || sesion) ? <Button variant="ghost" icon={Pencil} onClick={() => setRename(true)} aria-label="Cambiar el nombre del ecosistema" /> : null}
         </div>
       </header>
 
@@ -91,18 +119,40 @@ export function Portada() {
             Distribución de tabaco a tiendas y licorerías: consignación y venta en firme, cobros, comisiones y contabilidad.
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
-            <Button variant="primary" big icon={LogIn} onClick={() => setPicker('all')}>
-              Entrar como…
-            </Button>
-            <Button big icon={Crown} onClick={() => void goDireccion()}>
-              Dirección
-            </Button>
+            {!servidor ? (
+              <>
+                <Button variant="primary" big icon={LogIn} onClick={() => setPicker('all')}>
+                  Entrar como…
+                </Button>
+                <Button big icon={Crown} onClick={() => void goDireccion()}>
+                  Dirección
+                </Button>
+              </>
+            ) : sesion ? (
+              <>
+                <Button variant="primary" big icon={sesion.cuenta?.rol === 'direccion' ? Crown : LogIn} onClick={() => void seguirAdentro()}>
+                  {sesion.cuenta?.rol === 'direccion' ? 'Ver las cifras' : 'Seguir'}
+                </Button>
+                <Button big variant="ghost" icon={LogOut} onClick={() => void salir()}>
+                  Cerrar sesión
+                </Button>
+              </>
+            ) : (
+              <Button variant="primary" big icon={LogIn} onClick={() => setEntrar(true)}>
+                Entrar
+              </Button>
+            )}
           </div>
+          {servidor && sesion ? (
+            <p className="mt-3 text-sm text-muted">
+              Entraste como <b className="text-ink">{sesion.cuenta?.nombre || sesion.usuario.correo}</b> ({sesion.usuario.correo}).
+            </p>
+          ) : null}
         </section>
 
         <section className={`mt-10 grid gap-4 ${programLines().length > 1 ? 'lg:grid-cols-2' : ''}`} aria-label="Líneas">
           {programLines().map((l) => (
-            <LineCard key={l} line={l} onEnter={() => setPicker(l)} />
+            <LineCard key={l} line={l} onEnter={() => entrarALinea(l)} />
           ))}
         </section>
 
@@ -111,19 +161,26 @@ export function Portada() {
             <div className="sm:col-span-2">
               <h2 className="text-lg font-bold">Tus datos</h2>
               <p className="text-muted">
-                Todo vive en este navegador, sin servidor: lo que cargas aquí no lo ve otro teléfono. Instala la app y exporta una copia seguido; con ella pasas todo a otro
-                teléfono. Guárdala en un lugar privado: lleva los datos de la empresa.
+                {!servidor
+                  ? 'Todo vive en este navegador, sin servidor: lo que cargas aquí no lo ve otro teléfono. Instala la app y exporta una copia seguido; con ella pasas todo a otro teléfono. Guárdala en un lugar privado: lleva los datos de la empresa.'
+                  : sesion
+                    ? 'Lo que se carga queda en el servidor del programa y en cada teléfono donde entraste: así funciona sin señal y sube cuando vuelve. Igual, exporta una copia cada semana (el servidor todavía no guarda copias de seguridad) y guárdala en un lugar privado.'
+                    : 'Los datos del programa están en su servidor. Entra con tu correo y tu contraseña para verlos o cargarlos.'}
               </p>
             </div>
             <Button icon={Smartphone} onClick={() => setInstall(true)}>
               Instalar en el teléfono
             </Button>
-            <Button icon={Download} onClick={() => void run(doExport, 'Copia descargada.')}>
-              Exportar copia (JSON)
-            </Button>
-            <Button icon={Upload} onClick={() => fileRef.current?.click()} busy={busy}>
-              Importar copia (JSON)
-            </Button>
+            {puedeCopiar ? (
+              <>
+                <Button icon={Download} onClick={() => void run(doExport, 'Copia descargada.')}>
+                  Exportar copia (JSON)
+                </Button>
+                <Button icon={Upload} onClick={() => fileRef.current?.click()} busy={busy}>
+                  Importar copia (JSON)
+                </Button>
+              </>
+            ) : null}
             <input
               ref={fileRef}
               type="file"
@@ -147,12 +204,19 @@ export function Portada() {
         <AccountPicker onDone={() => setPicker(null)} only={picker === 'all' || picker === null ? undefined : picker} />
       </Sheet>
 
+      <EntrarSheet open={entrar} onClose={() => setEntrar(false)} />
+      <Sheet open={decision !== null} onClose={() => setDecision(null)} title="Este teléfono y el servidor">
+        {decision ? <DecidirConexion diferencias={decision} onListo={adentro} /> : null}
+      </Sheet>
+
       <RenameSheet open={rename} onClose={() => setRename(false)} current={name} />
       <InstallSheet open={install} onClose={() => setInstall(false)} />
 
       <Sheet open={pendingImport !== null} onClose={() => setPendingImport(null)} title="Importar la copia">
         <p className="text-ink">
-          La copia reemplaza las dos líneas: Tabaco y Café se cambian por lo del archivo «{pendingImport?.name}». Lo de ahora se pierde, salvo que lo exportes antes.
+          {servidor
+            ? `La copia reemplaza todo lo del programa por lo del archivo «${pendingImport?.name ?? ''}»: en este teléfono y, al sincronizar, en el servidor y en los teléfonos de todos. Lo de ahora se pierde, salvo que lo exportes antes.`
+            : `La copia reemplaza las dos líneas: Tabaco y Café se cambian por lo del archivo «${pendingImport?.name ?? ''}». Lo de ahora se pierde, salvo que lo exportes antes.`}
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <Button variant="danger" icon={Upload} busy={busy} onClick={() => pendingImport && void doImport(pendingImport)}>

@@ -11,6 +11,7 @@ import { LINE_CONFIG } from '../../lines/config';
 import { programLines } from '../../lines/programa';
 import { type PersistState, isIos, isStandalone, isStoragePersisted, requestPersistentStorage } from '../../lib/storage';
 import { fmtDateTime } from '../../lib/time';
+import { conectado } from '../../servidor/sincronizar';
 import { type LineBackupSummary, backupStatus, importLine, previewLineBackup, startBlank } from '../../services/real-data';
 import { DataBadge } from '../../ui/data-badge';
 import { Button, Card, LinkButton, Sheet, TextInput } from '../../ui/kit';
@@ -167,9 +168,13 @@ function StartBlankSheet({ open, real, onClose, onDone }: { open: boolean; real:
     <Sheet open={open} onClose={close} title="Empezar en blanco">
       <div className="grid gap-3 text-ink">
         <p>
-          Se borra todo lo de <strong>{config.name}</strong> en este navegador: catálogo y fotos, almacén (llegadas, lotes y movimientos), locales, contratos, entregas,
-          visitas, ventas, devoluciones, pedidos, cobros, comisiones, mensajes, avisos, listas de precios, facturas, repartos, invitaciones y plantillas.
+          Se borra todo lo de <strong>{config.name}</strong> {conectado() ? 'en este teléfono y en el servidor' : 'en este navegador'}: catálogo y fotos, almacén (llegadas, lotes
+          y movimientos), locales, contratos, entregas, visitas, ventas, devoluciones, pedidos, cobros, comisiones, mensajes, avisos, listas de precios, facturas, repartos,
+          invitaciones y plantillas.
         </p>
+        {conectado() ? (
+          <p className="font-semibold">Con el servidor, se borra también en los teléfonos de todos al sincronizar. La auditoría se queda.</p>
+        ) : null}
         <p>
           Quedan los ajustes de la línea, el almacén, las zonas y una sola cuenta: «Administración» (le cambias el nombre en Usuarios).
           {line === 'cafe' ? ' Vuelven los 9 cafés de El Mío, sin precio al local ni costo y desactivados.' : ''}
@@ -236,7 +241,10 @@ function ImportBackupSheet({
             «{backup?.fileName}»: copia de {config.name} del {fmtDateTime(s.exportedAt)}, con {s.products} {s.products === 1 ? 'producto' : 'productos'}, {s.stores}{' '}
             {s.stores === 1 ? 'local' : 'locales'} y {s.users} {s.users === 1 ? 'cuenta' : 'cuentas'}. {s.mode === 'real' ? 'Son datos reales.' : 'Son datos de ejemplo.'}
           </p>
-          <p className="rounded-2xl border border-danger bg-danger-soft p-3 font-semibold">Reemplaza todo lo que hay ahora en {config.name}. La otra línea no se toca.</p>
+          <p className="rounded-2xl border border-danger bg-danger-soft p-3 font-semibold">
+            Reemplaza todo lo que hay ahora en {config.name}
+            {conectado() ? ': en este teléfono, en el servidor y, al sincronizar, en los teléfonos de todos.' : '. La otra línea no se toca.'}
+          </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="danger" icon={Upload} busy={busy} onClick={() => void confirm()}>
               Sí, reemplazar

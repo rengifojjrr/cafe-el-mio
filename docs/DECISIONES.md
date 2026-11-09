@@ -326,3 +326,41 @@ empieza y queda guardado hasta activarlo. Y que el de Tabaco arranque desde cero
   repositorio de la misma cuenta de GitHub no pierde datos (el navegador lo ve como el mismo sitio); un dominio
   propio sí cambia el sitio y los datos se pasan con la copia.
 
+
+## La app con el servidor (9 de noviembre de 2026)
+
+Pedido: «mete el tabaco también, y que quede como separado, que cuando paguemos podamos separarlo».
+
+- **Se entra con correo y contraseña** (Supabase Auth). «Entrar como…» y «Cambiar de rol» quedan solo para las pruebas
+  automáticas (marca `pruebas:datos-de-ejemplo`): con datos reales, cada quien entra con su propia cuenta y la app no
+  deja usar otra (`services/puerta.ts`). Fase 1: Administración y Dirección; los vendedores y los locales, en la fase 2,
+  y hasta entonces sus invitaciones no se muestran (sus links no tendrían con qué entrar).
+- **Sin librería de Supabase**: unas pocas llamadas `fetch` (`src/servidor/cliente.ts`). La librería oficial pesa
+  ~50 KB comprimidos y, sin señal, puede dar la sesión por perdida; aquí la sesión queda guardada y la app sigue
+  funcionando sin red. La sesión se guarda con un nombre propio y atada a la dirección del servidor (al mudarse, deja de
+  valer sola). El token se renueva con un candado entre pestañas: el servidor anula un token de renovación usado dos
+  veces.
+- **El teléfono sigue guardando primero** (funciona sin señal). Cada cambio deja su clave («tabla/id») en la tabla local
+  `pendientes`, en la misma transacción que el cambio: si se apaga el teléfono, no queda un cambio sin anotar. Se sube
+  el registro como está al momento de subir (guardado o borrado), en tandas todo-o-nada. Se eligió anotar en la capa de
+  datos y no en cada servicio: ningún camino de escritura (importar, vaciar, cargar una copia) se escapa.
+- **Quién gana:** el último cambio que llega al servidor. Lo que un teléfono tiene sin subir nunca se pisa con lo que
+  baja; se sube después. El libro de movimientos no tiene el problema (cada movimiento es un registro nuevo); la
+  auditoría solo se agrega (nunca se borra en el servidor, aunque un teléfono vacíe la línea).
+- **La primera vez de cada teléfono** se comparan los dos lados: servidor vacío → este teléfono lo llena; teléfono sin
+  nada propio (solo el arranque en blanco) → toma lo del servidor; los dos con datos distintos → la persona decide, con
+  una copia a mano antes. Nunca se reemplaza nada en silencio.
+- **Fotos y PDF van al depósito**, no a la base: el registro lleva la ruta del archivo. Lo que el depósito o la base no
+  aceptan (tipo de archivo, tamaño) queda anotado como rechazado, solo en ese teléfono, y no frena lo demás.
+- **La bajada viene por tandas de hasta 500 filas** sin partir nunca una transacción (`tabaco_3`). El primer teléfono que
+  se conecta a un servidor grande no baja todo de un golpe.
+- **Invitaciones con link, sin correos del proyecto**: la configuración de correos del proyecto compartido es de otras
+  apps (sus enlaces apuntarían a otro sitio). Administración crea la invitación, manda el link por WhatsApp y la persona
+  pone su contraseña. La cuenta se crea confirmada y marcada «programa: tabaco»; solo a esas se les puede poner
+  contraseña nueva con otra invitación. Una cuenta que ya existía en el proyecto (de otra app) entra con su contraseña
+  de siempre: una invitación nunca la toca.
+- **La dirección del servidor está en un solo archivo** (`src/servidor/config.ts`) y es pública (la llave «publishable»
+  va dentro de cualquier app web con Supabase). La mudanza al proyecto propio está escrita paso a paso en `MUDANZA.md`,
+  con un script para las fotos (`scripts/mudar-archivos.mjs`). Las llaves secretas nunca van al repositorio.
+- **La primera pantalla casi no crece**: lo de Administración (invitar, la lista de accesos) se baja solo en Usuarios, y
+  el aviso del servidor no usa luxon. +9 KB comprimidos por todo el inicio de sesión y la sincronización.

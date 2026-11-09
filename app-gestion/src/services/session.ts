@@ -6,6 +6,10 @@ import { getCoreRepo, getDbPrefix, getLineRepo } from '../data';
 import type { Actor } from '../domain/permissions';
 import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from '../seed/version';
 import { emitAll, emitChange } from './bus';
+import { demoRequested } from './demo';
+import { cuentaPermitida } from './puerta';
+
+export { DEMO_FLAG, allowDemoData, demoRequested } from './demo';
 
 const EXPORT_APP = 'grupo-miami-ecosistema';
 const EXPORT_VERSION = 1;
@@ -13,29 +17,6 @@ const EXPORT_VERSION = 1;
 let seeding: Promise<void> | null = null;
 
 export type DataMode = 'demo' | 'real';
-
-/**
- * La app ya no trae datos de ejemplo. Solo las pruebas automáticas los cargan, y lo piden con esta
- * marca en el navegador (Playwright la pone en cada prueba) o con `allowDemoData` (Vitest).
- */
-export const DEMO_FLAG = 'pruebas:datos-de-ejemplo';
-
-let demoOverride: boolean | null = null;
-
-/** Para las pruebas unitarias: con `true`, la app se comporta como antes y carga los ejemplos. */
-export function allowDemoData(allow: boolean | null): void {
-  demoOverride = allow;
-}
-
-/** ¿Estas pruebas piden los datos de ejemplo? Fuera de las pruebas, siempre no. */
-export function demoRequested(): boolean {
-  if (demoOverride !== null) return demoOverride;
-  try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(DEMO_FLAG) === '1';
-  } catch {
-    return false;
-  }
-}
 
 /** ¿La línea tiene datos de ejemplo o los datos reales de la empresa? (Sin ajustes: ejemplo.) */
 export async function getLineDataMode(line: LineId): Promise<DataMode> {
@@ -218,6 +199,8 @@ export async function findAccount(accountId: string): Promise<DirectoryAccount |
 }
 
 export async function enterAs(accountId: string): Promise<DirectoryAccount> {
+  // Con el servidor, solo se entra con la cuenta de quien entró con su correo y su contraseña.
+  if (!cuentaPermitida(accountId)) throw new Error('Entra con tu correo y tu contraseña.');
   await ensureSeeded();
   const acc = await findAccount(accountId);
   if (!acc) throw new Error('Esa cuenta no existe.');
@@ -263,7 +246,7 @@ export async function resolveActor(line: LineId): Promise<{ actor: Actor; accoun
   if (!isProgramLine(line)) return null;
   await ensureSeeded();
   const s = await getSession();
-  if (!s.accountId) return null;
+  if (!s.accountId || !cuentaPermitida(s.accountId)) return null;
   const acc = await findAccount(s.accountId);
   if (!acc) return null;
   if (acc.role === 'direccion') {

@@ -14,6 +14,7 @@ import { DEFAULT_INVITATION_DAYS, INVITATION_DAYS, type InvitationState, decodeI
 import { addDays } from '../lib/time';
 import { emitChange } from './bus';
 import { type Ctx, NotFoundError, ValidationError, audit, guard, mutate, nowIso } from './context';
+import { conServidor } from './puerta';
 import { enterAs, ensureSeeded, findAccount } from './session';
 
 export type InviteTarget = { kind: 'seller'; userId: string } | { kind: 'store'; storeId: string };
@@ -134,6 +135,8 @@ export type InvitationOutcome =
 export async function checkInvitation(token: string, now = new Date()): Promise<InvitationOutcome> {
   const t = decodeInvitationToken(token);
   if (!t) return { kind: 'invalida' };
+  // Con el servidor, vendedores y locales entran en la fase 2: el link todavía no abre la app.
+  if (conServidor()) return { kind: 'nube', line: t.line };
   await ensureSeeded();
   const inv = await getLineRepo(t.line).invitations.get(t.inv);
   if (!inv) {

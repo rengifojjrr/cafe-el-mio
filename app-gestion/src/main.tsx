@@ -3,9 +3,24 @@ import { createRoot } from 'react-dom/client';
 import './styles/index.css';
 import { App } from './app/App';
 import { captureInstallPrompt } from './lib/pwa';
+import { alCambiarSesion, salir, sesionActual } from './servidor/cliente';
+import { alCambiarEstado, estadoSync, iniciar } from './servidor/sincronizar';
+import { emitChange } from './services/bus';
+import { conServidor } from './services/puerta';
 import { ensureSeeded } from './services/session';
 
 captureInstallPrompt();
+
+// Con el servidor: la sincronización de fondo arranca antes que nada (así ningún cambio se queda
+// sin anotar) y entrar o salir, también desde otra pestaña, hace que las pantallas vuelvan a mirar.
+if (conServidor()) {
+  iniciar();
+  alCambiarSesion(() => emitChange('core'));
+  // Si el servidor dice que esta cuenta ya no tiene acceso, se cierra la sesión en este teléfono.
+  alCambiarEstado(() => {
+    if (estadoSync().fase === 'sin-acceso' && sesionActual()) void salir();
+  });
+}
 
 // Service worker solo con alcance /cafe-el-mio/gestion/ (nunca en la raíz de la web de marca).
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
