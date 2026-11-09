@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useAsync } from '../../app/hooks';
 import { fmtDate } from '../../lib/time';
-import { type Diferencias, type Entrada, aceptarInvitacion, enlazarInvitacion, verInvitacion } from '../../services/acceso';
+import { type Diferencias, type Entrada, type InvitacionServidor, aceptarInvitacion, enlazarInvitacion, verInvitacion } from '../../services/acceso';
 import { LineMark } from '../../ui/brand';
 import { Button, Loading, TextInput } from '../../ui/kit';
 import { errorText } from '../../ui/toast';
@@ -24,6 +24,13 @@ export function AccesoPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [decidir, setDecidir] = useState<Diferencias | null>(null);
+  const [entrando, setEntrando] = useState(false);
+  // Lo que dijo el servidor al abrir el link: al aceptar, la invitación pasa a «usada» y la pantalla
+  // se vuelve a pedir sola; no debe decir «ya se usó» justo cuando la persona está entrando.
+  const [fija, setFija] = useState<InvitacionServidor | null>(null);
+  useEffect(() => {
+    if (inv.data && !fija) setFija(inv.data);
+  }, [inv.data, fija]);
 
   useEffect(() => {
     document.documentElement.dataset.line = 'tabaco';
@@ -34,10 +41,13 @@ export function AccesoPage() {
 
   const seguir = (r: Entrada) => {
     if (r.tipo === 'decidir') setDecidir(r.diferencias);
-    else nav(r.destino, { replace: true });
+    else {
+      setEntrando(true);
+      nav(r.destino, { replace: true });
+    }
   };
 
-  const i = inv.data;
+  const i = fija ?? inv.data;
   const yaTiene = i?.cuenta === 'otra';
 
   const enviar = async () => {
@@ -57,8 +67,15 @@ export function AccesoPage() {
   };
 
   let body;
-  if (inv.loading && !i) body = <Loading rows={3} />;
-  else if (inv.error) {
+  if (entrando) {
+    body = (
+      <>
+        <p className="mb-3 font-semibold text-ink">Entrando…</p>
+        <Loading rows={2} />
+      </>
+    );
+  } else if (inv.loading && !i) body = <Loading rows={3} />;
+  else if (inv.error && !i) {
     body = (
       <>
         <h1 className="font-display text-2xl font-semibold">No se pudo abrir la invitación</h1>

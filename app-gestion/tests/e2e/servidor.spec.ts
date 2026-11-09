@@ -89,6 +89,11 @@ test.describe('con el servidor', () => {
     await expect(tres.getByRole('alert')).toContainText('no son iguales');
     await tres.getByLabel('Repítela').fill('clave-de-la-socia');
     await tres.getByRole('button', { name: 'Guardar y entrar' }).click();
+    // Mientras entra, nunca dice que la invitación «ya se usó» (la acaba de usar ella).
+    const yaUsada = tres.getByRole('heading', { name: 'Esta invitación ya se usó' });
+    const vistazo = tres.getByRole('heading', { name: /de un vistazo/ });
+    await expect(yaUsada.or(vistazo)).toBeVisible();
+    await expect(yaUsada).toHaveCount(0);
     await tres.waitForURL((url) => url.hash === '#/direccion');
     await expect(tres.getByRole('heading', { level: 1 })).toContainText('Tabaco, de un vistazo');
     // El link ya no sirve otra vez.
