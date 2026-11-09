@@ -2,8 +2,10 @@
 
 **Link:** https://rengifojjrr.github.io/cafe-el-mio/gestion/ · también el QR de la portada.
 **Instalar:** Android/Chrome, en la portada «Instalar en el teléfono». iPhone/Safari: Compartir → «Agregar a pantalla de inicio».
-**Entrar:** con tu correo y tu contraseña (portada → «Entrar»). Para tener cuenta hace falta una invitación de
-Administración. «Entrar como…» y «Cambiar de rol» quedan solo en las pruebas automáticas.
+**Entrar:** con tu correo y tu contraseña (portada → «Entrar»), una sola vez en cada teléfono o computadora: la sesión
+queda guardada y, al abrir la app, entra sola. Para salir: el aviso del servidor (arriba) → «Cerrar sesión». En una
+ventana de incógnito no se guarda. Para tener cuenta hace falta una invitación de Administración. «Entrar como…» y
+«Cambiar de rol» quedan solo en las pruebas automáticas.
 
 ## Cómo empieza: solo Tabaco y en cero
 

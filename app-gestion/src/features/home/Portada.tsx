@@ -23,6 +23,28 @@ import { CigarSilhouette, LineMark } from '../../ui/brand';
 import { Button, Sheet, TextInput } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
 
+// Quien ya entró en este teléfono no vuelve a escribir la contraseña: la sesión queda guardada y se
+// renueva sola. Además, al abrir la app en la portada va directo a lo suyo. Una vez por pestaña: si
+// después vuelve a la portada (o recarga ahí), se queda en la portada.
+const ENTRO_SOLO = 'portada:entro-solo';
+const ARRANCO_EN_PORTADA = typeof window !== 'undefined' && ['', '#', '#/'].includes(window.location.hash);
+try {
+  if (!ARRANCO_EN_PORTADA) sessionStorage.setItem(ENTRO_SOLO, '1');
+} catch {
+  // Sin almacenamiento de la pestaña: no se entra solo.
+}
+
+function entrarSoloAhora(): boolean {
+  if (!ARRANCO_EN_PORTADA) return false;
+  try {
+    if (sessionStorage.getItem(ENTRO_SOLO)) return false;
+    sessionStorage.setItem(ENTRO_SOLO, '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function Portada() {
   const eco = useAsync(getEcosystem, []);
   const nav = useNavigate();
@@ -70,6 +92,18 @@ export function Portada() {
   useEffect(() => {
     delete document.documentElement.dataset.line;
   }, []);
+
+  // Con la sesión que ya estaba al abrir (no la de quien entra en este momento: esa sigue su camino).
+  const sesionAlAbrir = useRef(sesion?.cuentaApp ?? null);
+  const adentroRef = useRef(adentro);
+  adentroRef.current = adentro;
+  useEffect(() => {
+    if (!servidor || !sesionAlAbrir.current || !entrarSoloAhora()) return;
+    // Si falla (sin señal la primera vez, por ejemplo), se queda en la portada con «Seguir».
+    void seguir()
+      .then((r) => adentroRef.current(r))
+      .catch(() => undefined);
+  }, [servidor]);
 
   const goDireccion = async () => {
     try {

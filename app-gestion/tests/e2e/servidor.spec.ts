@@ -56,6 +56,18 @@ test.describe('con el servidor', () => {
     await expect.poll(() => [...servidor.vivos().keys()].filter((k) => k.startsWith('products/')).length, { timeout: 20_000 }).toBe(18);
     await alDia(uno);
 
+    // Al volver a abrir la app en este teléfono no pide la contraseña: entra solo a lo suyo.
+    const otraVez = await uno.context().newPage();
+    await otraVez.goto('./#/');
+    await otraVez.waitForURL((url) => url.hash === '#/tabaco');
+    await expect(otraVez.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
+    // Y si después vuelve a la portada, se queda ahí (con «Seguir»).
+    await go(otraVez, '/');
+    await expect(otraVez.getByRole('button', { name: 'Seguir' })).toBeVisible();
+    await otraVez.waitForTimeout(1500);
+    expect(new URL(otraVez.url()).hash).toBe('#/');
+    await otraVez.close();
+
     // ---- Teléfono 2: entra con la misma cuenta y ve lo mismo ----
     const dos = await telefono(browser, servidor, { width: 1280, height: 800 });
     await dos.goto('./#/');
