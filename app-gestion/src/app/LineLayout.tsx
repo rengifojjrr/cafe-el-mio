@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useNavigate, useParams } from 'react-router';
 import { lineConfig } from '../lines/config';
 import { PROGRAM_LINE, isProgramLine } from '../lines/programa';
+import { requestPersistentStorage } from '../lib/storage';
 import { lineCtx } from '../services/context';
 import { unreadNotifications } from '../services/messages';
 import { directorOpenLine, getEcosystem, leave, listAccounts, resolveActor, saveEcosystem, viewAs } from '../services/session';
@@ -38,6 +39,13 @@ function LineShell({ line }: { line: 'tabaco' | 'cafe' }) {
   }, [line]);
 
   const r = resolved.data;
+  // Los datos viven solo en este navegador: cuando entra Administración (la que carga), se le pide
+  // que no los borre aunque le falte espacio. Chrome lo decide solo; Firefox puede preguntar.
+  const loads = r?.actor.role === 'admin' && !r.actor.readOnly;
+  useEffect(() => {
+    if (loads) void requestPersistentStorage();
+  }, [loads]);
+
   const state = useMemo<LineState | null>(() => {
     if (!r) return null;
     const ctx = lineCtx(line, r.actor);

@@ -318,3 +318,11 @@ empieza y queda guardado hasta activarlo. Y que el de Tabaco arranque desde cero
   solo al compilar el café (`PROGRAMA=cafe`). La precarga bajó de 5.5 MB a 4.4 MB.
 - **Las pruebas** del café pasan a `tests/e2e/cafe/` (fuera de la corrida). Las unitarias siguen probando el motor con
   las dos líneas (`setProgramLines` en `tests/unit/setup.ts`) y `programa.test.ts` prueba el programa como se publica.
+- **Almacenamiento persistente al entrar** (9 de noviembre): antes se pedía solo al «Empezar en blanco» o al importar
+  una copia; como ahora todo arranca en blanco solo, nunca se pedía. Ahora se pide cada vez que entra Administración
+  (`navigator.storage.persist()`): el navegador decide (Chrome sin preguntar; Firefox puede preguntar).
+- **Lo cargado no se toca con las actualizaciones**: las bases `tabaco-…` quedan con este nombre. Un cambio futuro que
+  necesite otra forma de guardar trae su migración o se avisa antes con «Exportar copia». Mudar Tabaco a otro
+  repositorio de la misma cuenta de GitHub no pierde datos (el navegador lo ve como el mismo sitio); un dominio
+  propio sí cambia el sitio y los datos se pasan con la copia.
+

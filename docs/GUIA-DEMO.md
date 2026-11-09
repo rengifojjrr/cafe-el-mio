@@ -22,6 +22,26 @@ líneas juntas, se borran solas si solo tenían ejemplos.
 4. **Copia:** los datos viven solo en ese navegador. Exportar la copia (Ajustes → «Exportar copia», o la portada →
    «Exportar copia (JSON)») y guardarla fuera del teléfono. Una copia de la demo de antes, o de café, no se carga.
 
+## Para que lo cargado quede guardado
+
+Sin servidor, los datos viven **solo en el navegador donde se cargan**. Quedan guardados de un día para otro y con
+cada actualización de la app (una línea con datos reales nunca se borra ni se reemplaza), con estas reglas:
+
+1. **Un solo equipo carga.** Elegir el teléfono o la computadora de Administración y cargar siempre ahí. Lo que se
+   carga en otro teléfono queda en ese otro teléfono: no se juntan.
+2. **Instalar la app** en ese equipo (portada → «Instalar en el teléfono»). En iPhone es obligatorio: Safari borra los
+   datos de un sitio que no se abre en 7 días si no está en la pantalla de inicio.
+3. **Nunca en modo incógnito**, y no borrar los datos del sitio ni del navegador.
+4. **Exportar la copia** seguido (Ajustes → «Exportar copia», o la portada) y guardarla fuera del teléfono (correo,
+   Drive). Es lo único que salva los datos si se pierde o se borra el equipo. La app avisa a los 7 días.
+5. **«Importar copia» reemplaza todo** lo que hay en ese equipo: sirve para pasar los datos a otro equipo o
+   recuperarlos, nunca para juntar lo de dos personas.
+6. **Vendedores y locales** todavía no pueden trabajar sobre estos datos desde sus teléfonos: eso necesita el
+   servidor. Cuando llegue, lo cargado se podrá pasar con la copia, sin volver a escribirlo.
+
+Al entrar Administración, la app le pide al navegador que no borre estos datos aunque le falte espacio
+(Ajustes → «Datos de Tabaco» dice si lo concedió).
+
 ## La demo de las pruebas automáticas
 
 Las pruebas (Vitest y Playwright) siguen usando los datos de ejemplo de siempre; lo que sigue describe esa demo. Para
