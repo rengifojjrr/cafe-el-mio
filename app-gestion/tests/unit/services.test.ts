@@ -417,9 +417,12 @@ describe('registrar tienda → contrato y firma → colocar producto', () => {
   });
   let storeId = '';
 
-  it('el vendedor registra la tienda a su nombre; en tabaco el permiso es obligatorio', async () => {
-    await expect(registerStore(T(andres), input(false))).rejects.toThrow(/permiso/);
+  it('el vendedor registra la tienda a su nombre; en tabaco el permiso se pide antes del contrato', async () => {
     await expect(registerStore(T(faroUser), input(true))).rejects.toThrow(ForbiddenError);
+    // Un prospecto se puede anotar sin el permiso (por ejemplo, en un recorrido); el contrato no sale sin él.
+    const sinPermiso = await registerStore(T(andres), { ...input(false), name: 'Tabaquería Prueba 78' });
+    expect(sinPermiso.tobaccoPermit).toBeUndefined();
+    await expect(issueContract(T(andres), sinPermiso.id)).rejects.toThrow(/permiso de venta de tabaco/);
     const s = await registerStore(T(andres), input(true));
     storeId = s.id;
     expect(s.status).toBe('prospecto');

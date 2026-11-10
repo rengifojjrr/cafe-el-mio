@@ -27,6 +27,9 @@ test('registrar tienda → contrato y firma → colocar producto (tabaco)', asyn
   await expect(page.getByText(/Punto elegido:/)).toBeVisible();
   await page.getByLabel('Nombre del encargado').fill('Encargado de Prueba');
   await page.getByLabel('Teléfono').fill('(305) 555-0177');
+  // Un prospecto arranca sin horario (no se inventa uno): se elige.
+  await expect(page.getByText('Queda así: sin horario (se anota en la visita)')).toBeVisible();
+  await page.getByRole('button', { name: 'Lun–Sáb 9–8 · Dom cerrado' }).click();
   await expect(page.getByText(/Queda así: Lun–Sáb 9 a\. m\.–8 p\. m\./)).toBeVisible();
   await page.getByLabel('Número del permiso').fill('TP-E2E-1234');
   await page.getByRole('button', { name: 'Registrar tienda' }).last().click();

@@ -127,9 +127,13 @@ const PRESETS: { label: string; ranges: HoursRange[] }[] = [
   },
 ];
 
-export function HoursPicker({ value, onChange }: { value: string; onChange: (text: string) => void }) {
+/**
+ * Horario por días. Con `optional` (un prospecto, por ejemplo) arranca vacío si no hay horario
+ * guardado, en vez de poner uno de ejemplo que nadie confirmó.
+ */
+export function HoursPicker({ value, onChange, optional }: { value: string; onChange: (text: string) => void; optional?: boolean }) {
   const id = useId();
-  const [ranges, setRanges] = useState<HoursRange[]>(() => parseHours(value) ?? PRESETS[0]!.ranges);
+  const [ranges, setRanges] = useState<HoursRange[]>(() => parseHours(value) ?? (optional ? [] : PRESETS[0]!.ranges));
   const [legacy] = useState(() => (value && !parseHours(value) ? value : ''));
 
   useEffect(() => {
@@ -156,6 +160,11 @@ export function HoursPicker({ value, onChange }: { value: string; onChange: (tex
             {p.label}
           </button>
         ))}
+        {optional ? (
+          <button type="button" className="pill min-h-9 cursor-pointer px-3 hover:border-accent" aria-pressed={ranges.length === 0} onClick={() => setRanges([])}>
+            Todavía no lo sé
+          </button>
+        ) : null}
       </div>
       <div className="mt-2 grid gap-3">
         {ranges.map((r, i) => (
@@ -210,12 +219,16 @@ export function HoursPicker({ value, onChange }: { value: string; onChange: (tex
         ))}
       </div>
       {ranges.length < 3 ? (
-        <button type="button" className="btn btn-ghost mt-1 justify-start" onClick={() => setRanges((rs) => [...rs, { days: [], open: '10:00', close: '18:00' }])}>
-          <Plus aria-hidden /> Otro horario para otros días
+        <button
+          type="button"
+          className="btn btn-ghost mt-1 justify-start"
+          onClick={() => setRanges((rs) => [...rs, rs.length === 0 ? { days: [0, 1, 2, 3, 4, 5], open: '10:00', close: '20:00' } : { days: [], open: '10:00', close: '18:00' }])}
+        >
+          <Plus aria-hidden /> {ranges.length === 0 ? 'Poner el horario' : 'Otro horario para otros días'}
         </button>
       ) : null}
       <p id={`${id}-res`} className="field-hint">
-        Queda así: <span className="font-semibold text-ink">{hoursText(ranges) || 'sin horario'}</span>
+        Queda así: <span className="font-semibold text-ink">{hoursText(ranges) || (optional ? 'sin horario (se anota en la visita)' : 'sin horario')}</span>
         {legacy ? <span className="block">Antes decía: «{legacy}»</span> : null}
       </p>
     </fieldset>

@@ -20,7 +20,7 @@ Tipos en `app-gestion/src/data/types.ts`; esquema Dexie en `src/data/local/dexie
 | `lots` | Lotes: producto, costo por unidad, llegada de origen; en café, tostado, «consumir antes de» y línea de producción. | `productId`, `arrivalId` |
 | `arrivals` | Llegadas con sus ítems. Tabaco: producción → tránsito → aduana → recibida. Café: programado → tostado → en almacén. | `status` |
 | `movements` | **El libro.** Entrada, salida a consignación, venta reportada, devolución, merma y ajuste; cada uno con lote, cantidad, de dónde y a dónde. | `productId`, `storeId`, `at`, `type` |
-| `stores` | Locales: datos, punto en el mapa, vendedor, zona, estado (prospecto → contrato enviado → firmado → activo → pausado/cerrado) e historial; en tabaco, permiso de venta. | `sellerId`, `status`, `zoneId` |
+| `stores` | Locales: datos, punto en el mapa, vendedor, zona, estado (prospecto → contrato enviado → firmado → activo → pausado/cerrado) e historial; en tabaco, permiso de venta; las visitas de recorrido mientras es prospecto (`prospectVisits`: qué pasó y una nota). Un prospecto puede no tener encargado, teléfono ni permiso: se piden antes del contrato. | `sellerId`, `status`, `zoneId` |
 | `contracts` | Contrato por local y versión: texto resuelto, anexo de productos, firmas (trazo, nombre, fecha y hora, ubicación). | `storeId` |
 | `deliveries` | Notas de entrega en consignación: solicitada → preparada → entregada (o rechazada), con lo preparado y la firma de quien recibe. | `storeId`, `sellerId`, `status` |
 | `visits` | Visitas con conteo (esperado y contado por producto) y ubicación si la dan. | `storeId`, `sellerId`, `at` |

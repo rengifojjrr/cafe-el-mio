@@ -81,6 +81,9 @@ export async function issueContract(ctx: Ctx, storeId: string): Promise<Contract
     if (!store) throw new NotFoundError('el local');
     guard(ctx, 'contract.issue', { type: 'store', store });
     if (store.status === 'cerrado') throw new ValidationError('El local está cerrado.');
+    // Un prospecto puede haberse guardado sin encargado ni teléfono: el contrato los necesita.
+    if (store.managerName.trim().length < 3) throw new ValidationError('Completa el nombre del encargado del local antes de emitir el contrato.');
+    if (!store.phone.trim()) throw new ValidationError('Completa el teléfono del local antes de emitir el contrato.');
     if (ctx.config.requiresTobaccoPermit) {
       const st = permitState(store, ctx.now());
       if (st === 'sin_permiso') throw new ValidationError('Registra el permiso de venta de tabaco del local antes de emitir el contrato.');

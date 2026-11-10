@@ -45,6 +45,21 @@ guarda en el teléfono y sube cuando vuelve la señal. Arriba, en cada pantalla,
 6. **«Importar copia» reemplaza todo**: en ese teléfono y, al sincronizar, en el servidor y en los teléfonos de todos.
    Sirve para recuperar los datos, nunca para juntar lo de dos personas.
 
+## Recorridos de prospectos
+
+Para salir a visitar locales que todavía no son clientes: **Recorridos** (en el menú, o Locales → «Recorridos»).
+
+1. **Anotar los locales.** Locales → «Registrar tienda» con lo que se sepa: nombre, dirección y el punto en el mapa.
+   El encargado, el teléfono, el horario y el permiso pueden quedar vacíos: se piden antes del contrato.
+2. **El recorrido.** Los prospectos salen por zona y en orden de cercanía (desde el centro del mercado o, con
+   «Ordenar desde donde estoy», desde el teléfono). «Abrir el recorrido en Google Maps» arma la ruta: Google Maps en el
+   teléfono abre hasta 4 paradas por vez, así que una zona con más sale en tramos («Paradas 1 a 4», «5 a 8»…).
+3. **En cada parada:** «Anotar visita» → qué pasó (le interesa, lo va a pensar, no le interesa, no estaba el
+   encargado, estaba cerrado) y lo que dio el local. Lo que se deja vacío no borra lo anotado. Cada parada dice lo que
+   falta («Falta: encargado, correo…»).
+4. **Después:** la visita sale del recorrido (salvo «No estaba el encargado», que queda para volver) y queda en la
+   ficha del local, en «Visitas de recorrido». Con los datos completos, en la ficha: «Preparar contrato».
+
 ## La demo de las pruebas automáticas
 
 Las pruebas (Vitest y Playwright) siguen usando los datos de ejemplo de siempre; lo que sigue describe esa demo. Para

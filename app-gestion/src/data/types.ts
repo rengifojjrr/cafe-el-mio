@@ -246,6 +246,18 @@ export interface Store extends Entity {
   createdBy: string;
   approvedAt?: IsoDateTime;
   statusHistory: { status: StoreStatus; at: IsoDateTime; by: string }[];
+  /** Visitas de recorrido mientras es prospecto (qué dijo y qué se anotó). */
+  prospectVisits?: ProspectVisit[];
+}
+
+/** Qué pasó en la visita a un prospecto. */
+export type ProspectResult = 'interesado' | 'lo_piensa' | 'no_interesa' | 'sin_encargado' | 'cerrado';
+
+export interface ProspectVisit {
+  at: IsoDateTime;
+  by: string;
+  result: ProspectResult;
+  note: string;
 }
 
 export interface Signature {

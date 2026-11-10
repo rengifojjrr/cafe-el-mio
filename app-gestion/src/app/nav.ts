@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Coins,
   FileSignature,
+  Footprints,
   Home,
   Map,
   MessageCircle,
@@ -43,6 +44,7 @@ export const NAV: Record<Exclude<Role, 'direccion'>, NavItem[]> = {
     { path: 'almacen', label: 'Almacén', icon: Boxes },
     { path: 'codigos', label: 'Buscar código', icon: ScanBarcode },
     { path: 'locales', label: 'Locales', icon: Store, bottom: true },
+    { path: 'recorridos', label: 'Recorridos', icon: Footprints },
     { path: 'entregas', label: 'Entregas', icon: Truck, bottom: true },
     { path: 'repartos', label: 'Repartos', icon: Route },
     { path: 'venta-rapida', label: 'Venta rápida', icon: Zap },
@@ -61,6 +63,7 @@ export const NAV: Record<Exclude<Role, 'direccion'>, NavItem[]> = {
   seller: [
     { path: '', label: 'Hoy', icon: Home, bottom: true },
     { path: 'locales', label: 'Mis locales', short: 'Locales', icon: Store, bottom: true },
+    { path: 'recorridos', label: 'Recorridos', icon: Footprints },
     { path: 'catalogo', label: 'Catálogo', icon: BookOpen, bottom: true },
     { path: 'comisiones', label: 'Comisiones', icon: Coins, bottom: true },
     { path: 'pedidos', label: 'Pedidos', icon: ClipboardList },

@@ -4,7 +4,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
+  ClipboardPen,
   FileSignature,
+  Footprints,
   MapPin,
   MessageCircle,
   Navigation,
@@ -38,6 +40,7 @@ import { listSettlements } from '../../services/money';
 import { priceListOptions } from '../../services/prices';
 import {
   STORE_STATUS_LABEL,
+  faltaParaFormalizar,
   getStorePhoto,
   listSellers,
   listStores,
@@ -73,6 +76,8 @@ import {
   TextInput,
 } from '../../ui/kit';
 import { HoursPicker } from '../../ui/hours';
+import { PROSPECT_RESULT_LABEL } from '../../domain/recorridos';
+import { RESULT_TONE, VisitaProspectoSheet } from './visita-prospecto';
 import { PhotoPicker, useStoredPhoto } from '../../ui/media';
 import { errorText, useAction, useToast } from '../../ui/toast';
 import { PermitPill, StoreStatusPill } from '../common';
@@ -113,9 +118,14 @@ export function StoresPage() {
         subtitle={actor.role === 'seller' ? 'Tus tiendas: inscríbelas, firma el contrato y colócales producto.' : `Las tiendas de ${config.name}, su estado, su consignación y lo que deben.`}
         actions={
           canRegister ? (
-            <LinkButton to={p('locales/nuevo')} variant="primary" big icon={Plus}>
-              Registrar tienda
-            </LinkButton>
+            <>
+              <LinkButton to={p('recorridos')} big icon={Footprints}>
+                Recorridos
+              </LinkButton>
+              <LinkButton to={p('locales/nuevo')} variant="primary" big icon={Plus}>
+                Registrar tienda
+              </LinkButton>
+            </>
           ) : null
         }
       />
@@ -294,6 +304,9 @@ function StoreForm({ initial }: { initial?: Store }) {
   }));
   const lists = useAsync(() => (actor.role === 'admin' ? priceListOptions(ctx) : Promise.resolve([])), [ctx, actor.role]);
   const set = <K extends keyof StoreFormState>(k: K, v: StoreFormState[K]) => setF((s) => ({ ...s, [k]: v }));
+  // Un prospecto (por ejemplo, uno que se anota en un recorrido) se guarda con lo que se sepa: el encargado,
+  // el teléfono y el permiso se piden antes del contrato.
+  const prospecto = !initial || initial.status === 'prospecto';
 
   // Mercado: el elegido, o el de la zona, o el primero (Miami).
   const marketList = markets.data ?? [];
@@ -442,18 +455,18 @@ function StoreForm({ initial }: { initial?: Store }) {
         <div className="grid content-start gap-4">
           <Card className="grid gap-4 p-4 sm:p-5">
             <h2 className="font-bold">Encargado y contacto</h2>
-            <TextInput label="Nombre del encargado" value={f.managerName} onChange={(e) => set('managerName', e.target.value)} autoComplete="name" required />
-            <TextInput label="Teléfono" type="tel" inputMode="tel" value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="(305) 555-0123" required />
+            <TextInput label="Nombre del encargado" value={f.managerName} onChange={(e) => set('managerName', e.target.value)} autoComplete="name" required={!prospecto} hint={prospecto ? 'Si todavía no lo sabes, déjalo vacío: se pide antes del contrato.' : undefined} />
+            <TextInput label="Teléfono" type="tel" inputMode="tel" value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="(305) 555-0123" required={!prospecto} />
             <TextInput label="Correo" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} placeholder="opcional" />
-            <HoursPicker value={f.hours} onChange={(text) => set('hours', text)} />
+            <HoursPicker value={f.hours} onChange={(text) => set('hours', text)} optional={prospecto} />
           </Card>
           {config.requiresTobaccoPermit ? (
             <Card className="grid gap-4 p-4 sm:p-5">
               <h2 className="font-bold">Permiso de venta de tabaco</h2>
               <p className="text-sm text-muted">En Florida lo otorga el DBPR; en Texas, el Comptroller. Sin permiso vigente no se le puede consignar tabaco, y el local se compromete a vender solo a mayores de 21 años.</p>
-              <TextInput label="Número del permiso" value={f.permitNumber} onChange={(e) => set('permitNumber', e.target.value)} required />
+              <TextInput label="Número del permiso" value={f.permitNumber} onChange={(e) => set('permitNumber', e.target.value)} required={!prospecto} hint={prospecto ? 'Si todavía no lo tienes, déjalo vacío: se pide antes del contrato.' : undefined} />
               <SelectInput label="Quién lo emite" value={permitIssuer} onChange={(e) => set('permitIssuer', e.target.value)} options={issuerOptions(permitIssuer)} />
-              <TextInput label="Vence el" type="date" value={f.permitExpires} onChange={(e) => set('permitExpires', e.target.value)} required />
+              <TextInput label="Vence el" type="date" value={f.permitExpires} onChange={(e) => set('permitExpires', e.target.value)} required={!prospecto} />
             </Card>
           ) : null}
           <FiscalFormCard value={f.fiscal} onChange={(v) => set('fiscal', v)} />
@@ -555,6 +568,7 @@ export function StoreDetailPage() {
   const [returnOpen, setReturnOpen] = useState(false);
   const [salesOpen, setSalesOpen] = useState(false);
   const [statusSheet, setStatusSheet] = useState<StoreStatus | null>(null);
+  const [visitaOpen, setVisitaOpen] = useState(false);
 
   if (store.loading && !store.data) return <Loading rows={5} />;
   if (store.error) return <ErrorBox error={store.error} />;
@@ -568,6 +582,7 @@ export function StoreDetailPage() {
   const permit = config.requiresTobaccoPermit ? permitState(s, now) : null;
   const check = supplyCheck(line, s, now);
   const firm = s.saleMode === 'firme';
+  const falta = s.status === 'prospecto' || s.status === 'contrato_enviado' ? faltaParaFormalizar(ctx, s) : null;
   const tab: DetailTab = tabPicked ?? (firm ? 'facturas' : 'consignacion');
   const invList = invoices.data ?? [];
   const units = (consignment.data ?? []).reduce((a, c) => a + c.qty, 0);
@@ -619,9 +634,24 @@ export function StoreDetailPage() {
         </div>
       ) : null}
 
+      {falta && canWork ? (
+        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-warn bg-warn-soft p-4" data-testid="falta-para-contrato">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-none text-warn" aria-hidden />
+          <div>
+            <p className="font-semibold text-ink">Antes del contrato falta {falta}.</p>
+            <p className="mt-0.5 text-muted">Se anota en la visita: pídeselo al encargado y complétalo en «Editar».</p>
+          </div>
+        </div>
+      ) : null}
+
       {/* Siguiente paso, grande y claro */}
       {canWork ? (
         <div className="mb-5 grid gap-2 sm:flex sm:flex-wrap">
+          {s.status === 'prospecto' ? (
+            <Button big icon={ClipboardPen} onClick={() => setVisitaOpen(true)}>
+              Anotar visita
+            </Button>
+          ) : null}
           {s.status === 'prospecto' && !firm ? (
             <Button variant="primary" big icon={FileSignature} busy={busy} onClick={prepareContract}>
               Preparar contrato
@@ -681,8 +711,18 @@ export function StoreDetailPage() {
         <Card className="p-4 sm:p-5">
           <KeyValue
             items={[
-              ['Encargado', s.managerName],
-              ['Teléfono', <a key="tel" href={`tel:${s.phone.replace(/[^0-9+]/g, '')}`} className="inline-flex items-center gap-1.5 underline"><Phone className="h-4 w-4" aria-hidden />{s.phone}</a>],
+              ['Encargado', s.managerName || '—'],
+              [
+                'Teléfono',
+                s.phone ? (
+                  <a key="tel" href={`tel:${s.phone.replace(/[^0-9+]/g, '')}`} className="inline-flex items-center gap-1.5 underline">
+                    <Phone className="h-4 w-4" aria-hidden />
+                    {s.phone}
+                  </a>
+                ) : (
+                  '—'
+                ),
+              ],
               ['Correo', s.email || '—'],
               ['Horario', s.hours || '—'],
               ...(config.requiresTobaccoPermit
@@ -728,6 +768,24 @@ export function StoreDetailPage() {
       <div className="mt-4">
         <StoreFiscalSection store={s} canEdit={canWork} />
       </div>
+
+      {s.prospectVisits?.length ? (
+        <Card className="mt-4 p-4 sm:p-5">
+          <h2 className="font-bold">Visitas de recorrido</h2>
+          <ul className="mt-2 grid gap-2" aria-label="Visitas de recorrido">
+            {[...s.prospectVisits].reverse().map((v) => (
+              <li key={v.at} className="rounded-xl bg-surface-2 px-3 py-2">
+                <p className="flex flex-wrap items-center gap-1.5 text-sm">
+                  <Pill tone={RESULT_TONE[v.result]}>{PROSPECT_RESULT_LABEL[v.result]}</Pill>
+                  <span className="text-muted">{fmtAgo(v.at, now)}</span>
+                </p>
+                {v.note ? <p className="mt-1 text-sm text-ink">{v.note}</p> : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+      {visitaOpen ? <VisitaProspectoSheet store={s} open onClose={() => setVisitaOpen(false)} /> : null}
 
       {s.status !== 'prospecto' ? (
         <>

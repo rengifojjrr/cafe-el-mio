@@ -27,6 +27,8 @@ prohibido y comprueban que falla.
 | Ver un local (`store.read`) | ✔ | si es suyo | si es el suyo | — |
 | Registrar tienda (`store.create`) | ✔ | ✔ (queda a su nombre) | — | — |
 | Editar tienda (`store.update`) | ✔ | si es suya | — | — |
+| Ver los recorridos de prospectos (`store.list`) | todos | los suyos | — | — |
+| Anotar la visita a un prospecto (`store.update`) | ✔ | si es suyo | — | — |
 | Aprobar, pausar, cerrar (`store.approve`) | ✔ | — | — | — |
 | Ver contrato (`contract.read`) | ✔ | si es suyo | el suyo | — |
 | Emitir y firmar contrato (`contract.issue`, `contract.sign`) | ✔ | si es suyo | — | — |

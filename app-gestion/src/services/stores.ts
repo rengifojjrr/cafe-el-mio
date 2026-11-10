@@ -196,11 +196,14 @@ const storeSchema = z.object({
   lng: z.number({ error: 'Ubica la tienda en el mapa.' }),
   /** Mercado (Miami, Houston…). Si falta, el de la zona. */
   marketId: z.string().optional(),
-  managerName: z.string().trim().min(3, 'Escribe el nombre del encargado.'),
+  // Un prospecto se guarda con lo que se sepa (se completa en la visita); al pasar de prospecto,
+  // encargado y teléfono hacen falta (ver `validateRequired`).
+  managerName: z.string().trim().max(80).default(''),
   phone: z
     .string()
     .trim()
-    .regex(/^[0-9 ()+.-]{7,20}$/, 'Escribe un teléfono válido.'),
+    .default('')
+    .refine((v) => v === '' || /^[0-9 ()+.-]{7,20}$/.test(v), 'Escribe un teléfono válido.'),
   email: z.union([z.literal(''), z.string().trim().email('Escribe un correo válido.')]),
   hours: z.string().trim().max(120).default(''),
   notes: z.string().trim().max(500).default(''),
@@ -235,11 +238,37 @@ const storeSchema = z.object({
 export type StoreInput = z.input<typeof storeSchema>;
 export type StoreTerms = z.input<typeof storeSchema>['terms'];
 
-function validatePermit(ctx: Ctx, data: z.output<typeof storeSchema>): void {
+function validatePermit(ctx: Ctx, data: z.output<typeof storeSchema>, status: StoreStatus): void {
   if (!ctx.config.requiresTobaccoPermit) return;
-  if (!data.tobaccoPermit || data.tobaccoPermit.number.length < 4) {
+  const number = data.tobaccoPermit?.number ?? '';
+  // Un prospecto puede no tener el permiso todavía: se pide antes del contrato (contracts.ts).
+  if (status === 'prospecto' && number === '') return;
+  if (number.length < 4) {
     throw new ValidationError('En tabaco hay que registrar el número del permiso de venta de tabaco del local.');
   }
+}
+
+/**
+ * Lo que hace falta según el estado. Un prospecto se guarda con lo que se sepa (el recorrido lo
+ * completa en la visita); un local que ya pasó de prospecto necesita encargado, teléfono y permiso.
+ */
+function validateRequired(ctx: Ctx, data: z.output<typeof storeSchema>, status: StoreStatus): void {
+  if (status !== 'prospecto') {
+    if (data.managerName.length < 3) throw new ValidationError('Escribe el nombre del encargado.');
+    if (data.phone === '') throw new ValidationError('Escribe un teléfono válido.');
+  }
+  validatePermit(ctx, data, status);
+}
+
+/**
+ * Lo que le falta a un prospecto para el contrato o para activarse (encargado, teléfono y, en tabaco,
+ * el permiso), o null si está completo.
+ */
+export function faltaParaFormalizar(ctx: Ctx, store: Pick<Store, 'managerName' | 'phone' | 'tobaccoPermit'>): string | null {
+  if (store.managerName.trim().length < 3) return 'el nombre del encargado';
+  if (!store.phone.trim()) return 'el teléfono';
+  if (ctx.config.requiresTobaccoPermit && permitState(store, ctx.now()) === 'sin_permiso') return 'el permiso de venta de tabaco';
+  return null;
 }
 
 /** Tax ID normalizado («12-3456789»), vacío para borrarlo o undefined para conservarlo. */
@@ -267,7 +296,7 @@ async function resolveLocation(ctx: Ctx, data: z.output<typeof storeSchema>): Pr
 }
 
 function permitFrom(ctx: Ctx, data: z.output<typeof storeSchema>, prev?: Store): Store['tobaccoPermit'] {
-  if (!ctx.config.requiresTobaccoPermit || !data.tobaccoPermit) return undefined;
+  if (!ctx.config.requiresTobaccoPermit || !data.tobaccoPermit || data.tobaccoPermit.number === '') return undefined;
   const issuer = data.tobaccoPermit.issuer || prev?.tobaccoPermit?.issuer || DEFAULT_PERMIT_ISSUER;
   return { number: data.tobaccoPermit.number, expiresOn: data.tobaccoPermit.expiresOn, issuer };
 }
@@ -322,7 +351,7 @@ async function applyTerms(ctx: Ctx, store: Store, terms: z.output<typeof storeSc
 export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store> {
   guard(ctx, 'store.create');
   const data = storeSchema.parse(input);
-  validatePermit(ctx, data);
+  validateRequired(ctx, data, 'prospecto');
   parseTaxId(data.taxId);
   const sellerId = ctx.actor.role === 'seller' ? ctx.actor.userId : data.sellerId;
   if (!sellerId) throw new ValidationError('Elige el vendedor responsable de la tienda.');
@@ -364,12 +393,12 @@ export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store>
 
 export async function updateStore(ctx: Ctx, storeId: string, input: StoreInput): Promise<Store> {
   const data = storeSchema.parse(input);
-  validatePermit(ctx, data);
   parseTaxId(data.taxId);
   return mutate(ctx, async () => {
     const s = await ctx.repo.stores.get(storeId);
     if (!s) throw new NotFoundError('el local');
     guard(ctx, 'store.update', { type: 'store', store: s });
+    validateRequired(ctx, data, s.status);
     const marketId = await resolveLocation(ctx, data);
     const next: Store = withFiscal({
       ...s,
@@ -428,6 +457,11 @@ export async function setStoreStatus(ctx: Ctx, storeId: string, status: StoreSta
     if (!s) throw new NotFoundError('el local');
     if (!transitionsFor(s).includes(status)) {
       throw new ValidationError(`Un local «${STORE_STATUS_LABEL[s.status]}» no puede pasar a «${STORE_STATUS_LABEL[status]}».`);
+    }
+    // Un prospecto que compra en firme se activa sin contrato: tiene que tener lo que pide el contrato.
+    if (status === 'activo' && (s.status === 'prospecto' || s.status === 'contrato_enviado')) {
+      const falta = faltaParaFormalizar(ctx, s);
+      if (falta) throw new ValidationError(`Antes de activarlo, completa ${falta} en los datos del local.`);
     }
     if (status === 'cerrado') {
       const snap = await loadInventory(ctx);
