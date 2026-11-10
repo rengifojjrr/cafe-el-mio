@@ -40,7 +40,8 @@ test('un prospecto sin encargado, teléfono ni permiso se registra, sale en su r
   await expect(page.getByRole('heading', { name: 'Recorridos', level: 1 })).toBeVisible();
   const card = await buscarParada(page, name);
   await expect(card.getByTestId('falta-recolectar')).toContainText('encargado, teléfono, correo, horario, permiso de tabaco');
-  await expect(card.getByRole('link', { name: 'Cómo llegar' })).toHaveAttribute('href', /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=456%20Calle%20Prueba/);
+  // Google Maps busca el local por su nombre y su dirección.
+  await expect(card.getByRole('link', { name: 'Cómo llegar' })).toHaveAttribute('href', /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=Prospecto%20Recorrido%20\w+%2C%20456%20Calle%20Prueba%2C%20Hialeah%2C%20FL&travelmode=driving$/);
   await expect(page.getByRole('link', { name: /Google Maps/ }).first()).toHaveAttribute('href', /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1/);
   await capture(page, info, 'H-recorridos');
 

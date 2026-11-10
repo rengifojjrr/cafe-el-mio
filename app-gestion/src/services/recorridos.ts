@@ -40,7 +40,11 @@ export interface Recorridos {
   desde: 'ubicacion' | 'centro';
 }
 
-const direccion = (s: Store) => `${s.address}, ${s.city}`;
+/**
+ * Lo que se le pasa a Google Maps: el nombre del local y su dirección. Con el nombre encuentra el
+ * negocio, aunque la dirección no traiga el número de la calle (pasa con locales sacados del mapa).
+ */
+const destino = (s: Store) => `${s.name}, ${s.address}, ${s.city}`;
 
 /**
  * Los prospectos por zona. Vendedor: los suyos; Administración: todos. Si llega `desde` (donde está
@@ -70,7 +74,7 @@ export async function recorridos(ctx: Ctx, opts: { desde?: Point } = {}): Promis
         falta: faltaRecolectar(s, conPermiso),
         ultima: visits[visits.length - 1],
         kmDesdeAnterior: Math.round(haversineKm(anterior, s) * 10) / 10,
-        comoLlegar: linkParada({ lat: s.lat, lng: s.lng, direccion: direccion(s) }),
+        comoLlegar: linkParada({ lat: s.lat, lng: s.lng, direccion: destino(s) }),
       };
     };
     const terminada = (s: Store) => {
@@ -95,7 +99,7 @@ export async function recorridos(ctx: Ctx, opts: { desde?: Point } = {}): Promis
       paradas,
       hechas,
       km: kmDeIda(inicio, pendientes),
-      tramos: tramosGoogleMaps(pendientes.map((s) => ({ lat: s.lat, lng: s.lng, direccion: direccion(s) }))),
+      tramos: tramosGoogleMaps(pendientes.map((s) => ({ lat: s.lat, lng: s.lng, direccion: destino(s) }))),
     });
   }
   // Primero los que tienen más por visitar; a igual cantidad, por nombre de la zona.

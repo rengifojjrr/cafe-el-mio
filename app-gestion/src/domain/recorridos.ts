@@ -43,7 +43,7 @@ export function kmDeIda(desde: Point, paradas: readonly Point[]): number {
 }
 
 export interface ParadaMapa extends Point {
-  /** Dirección completa («calle, ciudad»): Google la encuentra mejor que un punto suelto. */
+  /** Lo que se busca en Google Maps («nombre, calle, ciudad»): encuentra el negocio mejor que un punto suelto. */
   direccion?: string;
 }
 

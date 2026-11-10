@@ -196,7 +196,9 @@ describe('recorridos en la app', () => {
     expect(r.paradas.map((x) => x.store.name)).toEqual(['Parada A', 'Parada B', 'Parada C']);
     expect(r.paradas[0]!.falta).toEqual(['encargado', 'telefono', 'correo', 'horario', 'permiso']);
     expect(r.tramos).toHaveLength(1);
-    expect(new URL(r.tramos[0]!.url).searchParams.get('destination')).toBe('Parada C 100 (dirección de ejemplo), Houston, TX');
+    // Google Maps busca el local por su nombre y su dirección.
+    expect(new URL(r.tramos[0]!.url).searchParams.get('destination')).toBe('Parada C, Parada C 100 (dirección de ejemplo), Houston, TX');
+    expect(new URL(r.paradas[0]!.comoLlegar).searchParams.get('destination')).toBe('Parada A, Parada A 100 (dirección de ejemplo), Houston, TX');
     expect(r.km).toBeGreaterThan(0);
     expect(r.hechas).toEqual([]);
     // Desde donde está la persona (al lado de C), C va primero.
