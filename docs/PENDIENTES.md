@@ -35,8 +35,9 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 
 - **Servidor (Supabase), fase 2:** que entren los vendedores y los locales, cada uno con lo suyo y sin costos
   (`SUPABASE.md`). Hasta entonces, el contrato que se firma en el teléfono del vendedor no llega al servidor.
-- **Mudanza al proyecto propio** cuando el cliente pague (`MUDANZA.md`). Hasta entonces: plan gratis, sin copias de
-  seguridad automáticas (copia semanal a mano) y el proyecto se pausa si pasa una semana sin uso.
+- **Mudanza al proyecto propio** cuando el cliente pague (`MUDANZA.md`). Hasta entonces: plan gratis, con las copias
+  automáticas del propio programa (una cada madrugada, 30 días, en el mismo proyecto: cubren errores, no la pérdida
+  del proyecto; conviene una copia al mes en el teléfono) y el proyecto se pausa si pasa una semana sin uso.
 - **Recuperar la contraseña por correo:** hoy se hace con otra invitación. Con el proyecto propio se puede activar la
   recuperación por correo con su propio remitente.
 - Lista real de vendedores, zonas y locales; fotos reales de los tabacos.

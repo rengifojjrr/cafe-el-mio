@@ -38,7 +38,7 @@ test('un prospecto sin encargado, teléfono ni permiso se registra, sale en su r
 
   // Desde el inicio: la tarjeta de recorridos lleva a la pantalla.
   await go(page, '/tabaco');
-  await expect(page.getByTestId('tarjeta-recorridos')).toContainText(/locales? por visitar/);
+  await expect(page.getByTestId('tarjeta-recorridos')).toContainText(/\d+ (local|locales) por visitar/);
   await page.getByTestId('tarjeta-recorridos').getByRole('link', { name: 'Abrir recorridos' }).click();
   await expect(page.getByRole('heading', { name: 'Recorridos', level: 1 })).toBeVisible();
   const card = await buscarParada(page, name);
