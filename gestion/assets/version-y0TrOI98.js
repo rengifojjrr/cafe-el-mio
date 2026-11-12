@@ -1,0 +1,1 @@
+var e=`Grupo Miami · Tabaco`,t=`Administración`;export{e as n,t};
