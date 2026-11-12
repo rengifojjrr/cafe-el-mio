@@ -65,7 +65,8 @@ export function fmtShortDate(v: IsoDateTime | IsoDate | Date): string {
 }
 
 export function fmtDateTime(v: IsoDateTime | Date): string {
-  return ny(v).toFormat("d LLL yyyy, h:mm a").replace('.', '').replace('AM', 'a. m.').replace('PM', 'p. m.');
+  // El punto se le quita solo al mes («nov.» → «nov»): «p. m.» conserva los suyos.
+  return `${fmtDate(v)}, ${fmtTime(v)}`;
 }
 
 export function fmtTime(v: IsoDateTime | Date): string {
