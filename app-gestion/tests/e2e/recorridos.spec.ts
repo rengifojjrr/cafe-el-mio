@@ -36,7 +36,10 @@ test('un prospecto sin encargado, teléfono ni permiso se registra, sale en su r
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
   await expect(page.getByTestId('falta-para-contrato')).toContainText('el nombre del encargado');
 
-  await go(page, '/tabaco/recorridos');
+  // Desde el inicio: la tarjeta de recorridos lleva a la pantalla.
+  await go(page, '/tabaco');
+  await expect(page.getByTestId('tarjeta-recorridos')).toContainText(/locales? por visitar/);
+  await page.getByTestId('tarjeta-recorridos').getByRole('link', { name: 'Abrir recorridos' }).click();
   await expect(page.getByRole('heading', { name: 'Recorridos', level: 1 })).toBeVisible();
   const card = await buscarParada(page, name);
   await expect(card.getByTestId('falta-recolectar')).toContainText('encargado, teléfono, correo, horario, permiso de tabaco');

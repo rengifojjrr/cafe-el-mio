@@ -46,6 +46,11 @@ test.describe('con el servidor', () => {
     await alDia(uno);
     // El servidor estaba vacío: este teléfono lo llenó con su arranque en blanco.
     expect(servidor.vivos().get('settings/settings')).toMatchObject({ dataMode: 'real' });
+    // Con sesión, la copia de seguridad es la automática del servidor (ya no «los datos viven solo en este navegador»).
+    await expect(uno.getByTestId('copia-servidor')).toHaveAttribute('data-estado', 'al-dia');
+    await expect(uno.getByTestId('copia-servidor')).toContainText('hace 3 h');
+    await expect(uno.getByText(/viven solo en este navegador/)).toHaveCount(0);
+    await expect(uno.getByTestId('aviso-copia')).toHaveCount(0);
 
     // Carga productos: suben solos.
     await go(uno, '/tabaco/catalogo/importar');

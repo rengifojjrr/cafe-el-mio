@@ -15,7 +15,7 @@ import { LINE_TABLES } from '../data/repo';
 import { PENDIENTES, alAnotarCambios, anotarCambios, clave, dexieDe, type Pendiente } from '../data/local/dexie';
 import { PROGRAM_LINE } from '../lines/programa';
 import { emitAll, emitChange } from '../services/bus';
-import { type Cuenta, ErrorServidor, SesionVencida, SinConexion, bajarArchivo, borrarArchivos, rpc, sesionActual, subirArchivo } from './cliente';
+import { type Cuenta, ErrorServidor, SesionVencida, SinConexion, bajarArchivo, rpc, sesionActual, subirArchivo } from './cliente';
 import { SERVIDOR } from './config';
 import { aDatos, campoArchivo, desdeDatos, estable, iguales, peso, rutaArchivo, tipoArchivo } from './registros';
 
@@ -412,7 +412,6 @@ async function subir(db: Dexie): Promise<void> {
     const maxSeq = lote[lote.length - 1]!.seq!;
     const claves = [...new Set(lote.map((p) => p.clave))];
     const cambios: Cambio[] = [];
-    const archivosBorrados: string[] = [];
     const rechazados = new Set<string>();
     for (const k of claves) {
       const corte = k.indexOf('/');
@@ -423,8 +422,9 @@ async function subir(db: Dexie): Promise<void> {
       if (!fila) {
         // La auditoría no se borra en el servidor (aunque aquí se haya vaciado la línea).
         if (tabla === 'audit') continue;
+        // La foto o el PDF se quedan en el depósito: si el registro vuelve de una copia de seguridad,
+        // encuentra su archivo.
         cambios.push({ tabla, id, op: 'borrar' });
-        if (campoArchivo(tabla)) archivosBorrados.push(rutaArchivo(tabla, id));
         continue;
       }
       const campo = campoArchivo(tabla);
@@ -446,7 +446,6 @@ async function subir(db: Dexie): Promise<void> {
     poner({ progreso: cambios.length > 20 ? `Subiendo ${cambios.length} cambios…` : null });
     await aplicarEnServidor(cambios, rechazados);
     await db.table(PENDIENTES).where('seq').belowOrEqual(maxSeq).delete();
-    if (archivosBorrados.length) await borrarArchivos(archivosBorrados).catch(() => undefined);
     poner({ pendientes: await contarPendientes(db) });
   }
 }

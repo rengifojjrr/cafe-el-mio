@@ -295,13 +295,5 @@ export async function bajarArchivo(ruta: string, tipo?: string): Promise<Blob> {
   return tipo && blob.type !== tipo ? new Blob([blob], { type: tipo }) : blob;
 }
 
-/** Borra archivos del depósito (si ya no están, no pasa nada). */
-export async function borrarArchivos(rutas: string[]): Promise<void> {
-  if (!rutas.length) return;
-  const res = await pedir(
-    `/storage/v1/object/${SERVIDOR.deposito}`,
-    { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prefixes: rutas }) },
-    await tokenVigente(),
-  );
-  if (!res.ok && res.status !== 404) throw await leerError(res);
-}
+// Los archivos del depósito no se borran desde la app: una foto o un PDF tienen que seguir ahí si su
+// registro vuelve de una copia de seguridad del servidor.

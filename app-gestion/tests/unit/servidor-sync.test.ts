@@ -177,13 +177,14 @@ describe('servidor', () => {
     expect(await pendientes()).toBe(0);
   });
 
-  it('borrar en un teléfono borra en el otro (y su foto en el depósito)', async () => {
+  it('borrar en un teléfono borra en el otro; la foto se queda en el depósito (por si vuelve de una copia)', async () => {
     await usar(B);
     await repo().photos.remove('t-pho_1');
     await repo().products.remove('t-prd_2');
     await sincronizar();
     expect(servidor.vivos().has('products/t-prd_2')).toBe(false);
-    expect(servidor.archivos.has('photos/t-pho_1')).toBe(false);
+    expect(servidor.vivos().has('photos/t-pho_1')).toBe(false);
+    expect(servidor.archivos.has('photos/t-pho_1')).toBe(true);
     await usar(A);
     await sincronizar();
     expect(await repo().products.get('t-prd_2')).toBeUndefined();

@@ -15,8 +15,8 @@ Cuando el cliente pague, el tabaco pasa a su propio proyecto en plan Pro: es una
 **Qué se separa:** los datos (esquema propio), el acceso (hace falta una cuenta activa en `tabaco.cuentas`: tener sesión
 en el proyecto no alcanza), los archivos (depósito privado propio), las funciones (con prefijo `tabaco_`) y la sesión
 guardada en el teléfono (con un nombre propio). **Qué no se separa dentro de un mismo proyecto:** la lista de usuarios
-y contraseñas, la clave maestra, la configuración de correos, el espacio del plan y las copias de seguridad (el plan
-gratis no tiene). Por eso, mientras siga en el plan gratis: copia propia semanal (Portada → Exportar copia).
+y contraseñas, la clave maestra, la configuración de correos, el espacio del plan y las copias de seguridad de Supabase
+(el plan gratis no tiene). Por eso el programa hace las suyas: ver «Copias de seguridad», más abajo.
 
 ## Cómo está armado
 
@@ -35,6 +35,7 @@ gratis no tiene). Por eso, mientras siga en el plan gratis: copia propia semanal
     quién entra y quita o devuelve el acceso (no puede quitarse el suyo ni dejar el programa sin Administración).
   - `tabaco_invitacion_ver` y `tabaco_invitacion_aceptar` (sin sesión: las usa quien abre el link) y
     `tabaco_invitacion_enlazar` (para quien ya tenía cuenta en el proyecto).
+  - `tabaco_copias`: cuándo fue la última copia automática y cuántas hay (Administración y Dirección).
 - **La auditoría solo se agrega**: no se cambia ni se borra (lo frenan las funciones y además la tabla). Un reintento de
   algo ya guardado se ignora.
 - **Depósito `tabaco-archivos`**: privado, hasta 10 MB por archivo, solo fotos y PDF. Rutas `<tabla>/<id>`.
@@ -62,6 +63,30 @@ gratis no tiene). Por eso, mientras siga en el plan gratis: copia propia semanal
 - **El aviso del servidor** (arriba, en cada pantalla): «Al día», «N por subir», «Sin señal», «Vuelve a entrar». Al
   tocarlo: detalles, «Sincronizar ahora» y «Cerrar sesión».
 
+## Copias de seguridad
+
+- **Cada madrugada** la tarea `tabaco-copia-diaria` (pg_cron, 08:17 UTC: 2:17 a. m. en Houston, 3:17 a. m. en Miami)
+  copia todo `tabaco.registros` en `tabaco.copias` y `tabaco.copias_registros`. Se guardan 30 días, y siempre las 7
+  últimas aunque sean más viejas.
+- **Antes de vaciar una tabla** (por ejemplo, al importar una copia que reemplaza todo) `tabaco_aplicar` hace una copia
+  de lo que había, una sola cada 10 minutos.
+- **La app la muestra**: con sesión, el inicio y «Datos» dicen cuándo fue la última. Si pasa un día y medio sin copia,
+  el aviso se pone amarillo. «Bajar una copia» guarda además una en el teléfono.
+- **Las fotos y los PDF no se borran nunca del depósito** (la app dejó de borrarlos): un registro que vuelve de una
+  copia encuentra su archivo. No entran en la copia porque no hace falta.
+- **Volver a una copia** no se puede desde la app, a propósito. En la consola SQL del proyecto:
+
+  ```sql
+  select id, hecha_en, motivo, registros from tabaco.copias order by id desc;
+  select tabaco.restaurar_copia(<id>);  -- antes copia lo de ahora; la auditoría no se toca
+  ```
+
+  Lo que se creó después de esa copia queda marcado como borrado y los teléfonos se enteran al sincronizar. Antes de
+  restaurar, conviene que todos estén «Al día»: lo que un teléfono tenga sin subir se sube después.
+- **Lo que no cubre**: las copias viven en el mismo proyecto. Protegen de errores (algo borrado, una importación
+  equivocada), no de perder el proyecto. Para eso: una copia al mes en el teléfono («Bajar una copia») hasta la mudanza
+  al plan Pro, que tiene copias diarias propias.
+
 ## Lo que falta
 
 1. **Fase 2 · vendedores y locales:** `tabaco_traer` filtra en el servidor lo de cada uno y **quita los costos**, y
@@ -78,7 +103,8 @@ gratis no tiene). Por eso, mientras siga en el plan gratis: copia propia semanal
   Supabase y no abre nada por sí sola: lo que protege los datos son las cuentas y las funciones `tabaco_*`.
 - **Mismo sitio, mismo almacenamiento.** Todas las páginas de `rengifojjrr.github.io` comparten el almacenamiento del
   navegador, también la sesión guardada. Con un dominio propio para el programa eso se cierra.
-- **Sin copias de seguridad en el plan gratis**: la copia semanal a mano sigue siendo necesaria hasta la mudanza.
+- **Las copias automáticas viven en el mismo proyecto**: cubren errores, no la pérdida del proyecto. Hasta la mudanza,
+  una copia al mes en el teléfono («Bajar una copia»).
 
 ## Pruebas hechas
 
@@ -89,6 +115,9 @@ gratis no tiene). Por eso, mientras siga en el plan gratis: copia propia semanal
   por tandas devuelve cada transacción entera y no repite nada; una invitación crea la cuenta (marcada como del
   programa) con su contraseña, no se usa dos veces, no acepta contraseñas cortas, no sirve para otro correo y no toca
   una cuenta de otra app; en el depósito, alguien de otra app no sube ni ve archivos y Administración sí.
+- **Copias** (en el servidor de verdad, dentro de una transacción que se deshizo al final): restaurar devuelve un local
+  cambiado y una zona borrada, y marca como borrado lo creado después; dos «vaciar» seguidos hacen una sola copia
+  previa; nadie de afuera ni con sesión de la app puede hacer ni restaurar copias, y la app solo puede ver la última.
 - **En la app, sin internet** (`tests/servidor-falso.ts`, un servidor de mentira con las mismas reglas):
   `tests/unit/servidor-sync.test.ts` (entrar, primera conexión en sus tres casos, subir y bajar con fotos, borrar,
   quién gana, sin señal, token vencido, cuenta quitada, rechazos, tandas, vaciar e invitaciones) y

@@ -107,6 +107,17 @@ export async function recorridos(ctx: Ctx, opts: { desde?: Point } = {}): Promis
   return { markets: idx.markets, recorridos: out, desde: opts.desde ? 'ubicacion' : 'centro' };
 }
 
+/** Para el inicio: cuántos prospectos faltan por visitar y en cuántas zonas. */
+export async function resumenRecorridos(ctx: Ctx): Promise<{ pendientes: number; zonas: number }> {
+  guard(ctx, 'store.list');
+  const pendientes = (await scopedStores(ctx)).filter((s) => {
+    if (s.status !== 'prospecto') return false;
+    const u = s.prospectVisits?.[s.prospectVisits.length - 1];
+    return !u || !visitaTerminada(u.result);
+  });
+  return { pendientes: pendientes.length, zonas: new Set(pendientes.map((s) => s.zoneId)).size };
+}
+
 const RESULTADOS = ['interesado', 'lo_piensa', 'no_interesa', 'sin_encargado', 'cerrado'] as const satisfies readonly ProspectResult[];
 
 const visitaSchema = z.object({

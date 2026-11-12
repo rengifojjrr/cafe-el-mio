@@ -22,8 +22,9 @@ líneas juntas, se borran solas si solo tenían ejemplos.
 3. **Ajustes:** revisar los valores de partida (comisión progresiva 7–10 %, costo por km de los repartos, frecuencia
    de liquidación, plantilla del contrato) y crear las listas de precios. La ubicación del almacén es un punto de
    partida en Doral: todavía no hay una pantalla para cambiarla.
-4. **Copia:** exportar la copia una vez por semana (portada → «Exportar copia (JSON)») y guardarla fuera del teléfono.
-   El servidor todavía está en un plan sin copias de seguridad.
+4. **Copia:** el servidor copia todo cada madrugada y guarda 30 días; en Inicio se ve cuándo fue la última. Antes de
+   que una importación reemplace datos, hace otra. «Bajar una copia» (en Inicio) guarda además una en el teléfono:
+   conviene una al mes, guardada fuera del teléfono.
 
 ## El servidor: lo que conviene saber
 
@@ -43,11 +44,13 @@ guarda en el teléfono y sube cuando vuelve la señal. Arriba, en cada pantalla,
    datos de un sitio que no se abre en 7 días si no está en la pantalla de inicio. Lo que ya subió no se pierde, pero
    lo que no había subido sí.
 6. **«Importar copia» reemplaza todo**: en ese teléfono y, al sincronizar, en el servidor y en los teléfonos de todos.
-   Sirve para recuperar los datos, nunca para juntar lo de dos personas.
+   Sirve para recuperar los datos, nunca para juntar lo de dos personas. Antes de reemplazar, el servidor guarda una
+   copia de lo que había.
 
 ## Recorridos de prospectos
 
-Para salir a visitar locales que todavía no son clientes: **Recorridos** (en el menú, o Locales → «Recorridos»).
+Para salir a visitar locales que todavía no son clientes: **Recorridos** (la tarjeta «Recorridos» en Inicio, en el menú,
+o Locales → «Recorridos»).
 
 1. **Anotar los locales.** Locales → «Registrar tienda» con lo que se sepa: nombre, dirección y el punto en el mapa.
    El encargado, el teléfono, el horario y el permiso pueden quedar vacíos: se piden antes del contrato.

@@ -12,7 +12,7 @@ import { seedEverything } from '../../src/seed';
 import { saveZone } from '../../src/services/admin';
 import { lineCtx } from '../../src/services/context';
 import { issueContract } from '../../src/services/contracts';
-import { anotarVisitaProspecto, recorridos } from '../../src/services/recorridos';
+import { anotarVisitaProspecto, recorridos, resumenRecorridos } from '../../src/services/recorridos';
 import { faltaParaFormalizar, registerStore, setStoreStatus, updateStore, type StoreInput } from '../../src/services/stores';
 
 const NOW = new Date('2026-11-10T15:00:00Z');
@@ -235,6 +235,17 @@ describe('recorridos en la app', () => {
     expect(r.hechas.map((x) => x.store.name)).toEqual(['Parada A']);
     const audits = await repo.audit.all();
     expect(audits.some((x) => x.action === 'local.visita_prospecto' && x.summary.includes('Parada A: Le interesa'))).toBe(true);
+  });
+
+  it('el resumen del inicio cuenta lo mismo que los recorridos', async () => {
+    for (const u of [tomas(), admin()]) {
+      const r = await recorridos(ctxOf(u));
+      const conParadas = r.recorridos.filter((x) => x.paradas.length > 0);
+      expect(await resumenRecorridos(ctxOf(u))).toEqual({ pendientes: conParadas.reduce((a, x) => a + x.paradas.length, 0), zonas: conParadas.length });
+    }
+    // Tomás ya visitó «Parada A» (le interesa): no cuenta.
+    const deTomas = await resumenRecorridos(ctxOf(tomas()));
+    expect(deTomas.pendientes).toBeGreaterThan(0);
   });
 
   it('el vendedor ve y anota solo lo suyo; un local que ya no es prospecto no sale ni se anota así', async () => {

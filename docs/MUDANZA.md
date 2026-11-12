@@ -23,8 +23,9 @@ solo con el servidor nuevo.
    Las llaves secretas y las contraseñas nunca van al repositorio.
 
 2. **Armarlo.** Aplicar en orden las migraciones de `app-gestion/supabase/migrations/`
-   (`tabaco_1…`, `tabaco_2…`, `tabaco_3…`). Quedan el esquema, las funciones, el depósito y sus reglas,
-   iguales a los de hoy.
+   (`tabaco_1…`, `tabaco_2…`, `tabaco_3…`, `tabaco_4…`). Quedan el esquema, las funciones, el depósito y
+   sus reglas, y la tarea diaria de copias, iguales a los de hoy. Las copias del proyecto viejo
+   (`tabaco.copias`) no se mudan: el nuevo empieza las suyas, y el plan Pro tiene además las de Supabase.
 
 3. **Las cuentas y los datos.** Con `psql` y las dos conexiones de base (`VIEJO_DB`, `NUEVO_DB`, de
    Ajustes → Base de datos de cada proyecto). Las contraseñas se copian tal cual (cifradas): cada
@@ -71,6 +72,7 @@ solo con el servidor nuevo.
 8. **Limpiar el proyecto viejo** (cuando el nuevo lleve unos días andando):
    - Vaciar el depósito `tabaco-archivos` desde el panel (o con la API) y borrarlo.
    - Borrar las cuatro reglas del depósito que empiezan con «tabaco:».
+   - Quitar la tarea de copias: `select cron.unschedule('tabaco-copia-diaria');`.
    - Borrar las funciones `public.tabaco_*` y el esquema (`drop schema tabaco cascade`).
    - Borrar del proyecto viejo las cuentas que creó el programa y no usa ninguna otra app:
      `delete from auth.users where raw_app_meta_data ->> 'programa' = 'tabaco'`. Las cuentas que ya

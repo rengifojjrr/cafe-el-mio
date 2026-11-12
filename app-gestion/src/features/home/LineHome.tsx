@@ -40,6 +40,7 @@ import { FirmStoreHome } from '../sales/store-home';
 import { QuickActions } from '../sales/quick-actions';
 import { StoreStatusPill } from '../common';
 import { BackupNotice } from '../data/BackupNotice';
+import { RecorridosCard } from './RecorridosCard';
 
 export function LineHome() {
   const { actor } = useLine();
@@ -122,6 +123,7 @@ function AdminHome() {
     <>
       <PageHeader title="Centro de mando" subtitle={`${today(ctx.now())} · ${config.name}: locales, vendedores y almacén en el mapa.`} />
       <BackupNotice className="mb-4" firstSteps />
+      <RecorridosCard className="mb-4" />
       <QuickActions />
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="relative">
@@ -227,6 +229,7 @@ function SellerHome() {
   return (
     <>
       <PageHeader title={`Hola, ${first}`} subtitle={today(now)} />
+      <RecorridosCard className="mb-3" />
       <div className="grid gap-2 sm:grid-cols-3">
         <LinkButton to={p('locales/nuevo')} variant="primary" big icon={Plus} className="w-full" aria-label="Registrar tienda">
           Registrar tienda

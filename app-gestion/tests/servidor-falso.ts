@@ -87,6 +87,12 @@ export class ServidorFalso {
   registros = new Map<string, Fila>();
   archivos = new Map<string, { tipo: string; bytes: Uint8Array }>();
   invitaciones: InvitacionFalsa[] = [];
+  /** Lo que contesta `tabaco_copias`: por defecto, una copia automática de hace 3 horas. */
+  copias: { ultima: { hecha_en: string; motivo: string; registros: number } | null; guardadas: number; desde: string | null } = {
+    ultima: { hecha_en: new Date(Date.now() - 3 * 3_600_000).toISOString(), motivo: 'diaria', registros: 0 },
+    guardadas: 1,
+    desde: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+  };
   private tx = 1000;
   /** Sin señal: toda llamada falla como si no hubiera internet. */
   sinSenal = false;
@@ -231,6 +237,11 @@ export class ServidorFalso {
         if (u.id === yo!.id && !a.p_activa) throw new NoSePuede('No puedes quitarte el acceso a ti mismo.', '22023');
         u.cuenta.activa = !!a.p_activa;
         return undefined;
+      }
+      case 'tabaco_copias': {
+        const rol = this.rol(yo);
+        if (rol !== 'admin' && rol !== 'direccion') throw new NoSePuede('No tienes cuenta en el programa de Tabaco');
+        return this.copias;
       }
       case 'tabaco_invitacion_anular': {
         if (this.rol(yo) !== 'admin') throw new NoSePuede('Solo Administración anula invitaciones.');
