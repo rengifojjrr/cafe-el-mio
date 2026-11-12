@@ -30,6 +30,9 @@ export const FILTER_TITLE: Record<string, string> = {
   stock: 'Existencias',
 };
 
+/** La procedencia es opcional: los productos sin ella se agrupan y se filtran como «Sin procedencia». */
+export const SIN_PROCEDENCIA = 'sin-procedencia';
+
 /** El valor de un producto para una clave de filtro (o vacío si no aplica). */
 export function facetValue(item: FilterItem, key: string): string {
   const p = item.product;
@@ -37,10 +40,12 @@ export function facetValue(item: FilterItem, key: string): string {
   if (key === 'stock') return item.stock.available > 0 ? 'con' : 'sin';
   if (key === 'brand') return p.kind === 'premium' ? String(p.attrs.brand ?? '').trim() : '';
   if (key === 'vitola') return titleCase(String(p.attrs.vitola ?? ''));
+  if (key === 'originCountry') return String(p.attrs.originCountry ?? '').trim() || SIN_PROCEDENCIA;
   return String(p.attrs[key] ?? '').trim();
 }
 
 export function facetLabel(key: string, value: string): string {
+  if (key === 'originCountry' && value === SIN_PROCEDENCIA) return 'Sin procedencia';
   if (key === 'kind') return KIND_LABEL[value as ProductKind] ?? value;
   if (key === 'capa') return capaLabel(value);
   if (key === 'strength') return STRENGTH_LABEL[value] ?? value;
@@ -127,7 +132,8 @@ export function buildFacets(items: readonly FilterItem[], keys: readonly string[
           ? STRENGTH_ORDER.indexOf(a.value) - STRENGTH_ORDER.indexOf(b.value)
           : key === 'kind'
             ? a.value.localeCompare(b.value)
-            : a.label.localeCompare(b.label, 'es'),
+            : // «Sin procedencia» va al final.
+              Number(a.value === SIN_PROCEDENCIA) - Number(b.value === SIN_PROCEDENCIA) || a.label.localeCompare(b.label, 'es'),
       );
     out.push({ key, title: FILTER_TITLE[key] ?? key, options });
   }

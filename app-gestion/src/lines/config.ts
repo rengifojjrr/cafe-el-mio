@@ -84,7 +84,8 @@ export const TABACO: LineConfig = {
     { key: 'ringGauge', label: 'Cepo', kind: 'number', unit: '/64″', step: 1, min: 20, hint: 'Grosor en 64avos de pulgada (52 = 52/64″).', required: true },
     { key: 'capa', label: 'Capa', kind: 'select', options: CAPAS.map((c) => ({ value: c.value, label: c.label })), required: true },
     { key: 'strength', label: 'Fortaleza', kind: 'select', options: STRENGTHS, required: true },
-    { key: 'originCountry', label: 'Procedencia', kind: 'text', placeholder: 'Nicaragua', required: true },
+    // Opcional (ronda 4): se puede guardar sin procedencia. Si se escribe, nunca Cuba (OFAC).
+    { key: 'originCountry', label: 'Procedencia', kind: 'text', placeholder: 'Nicaragua', hint: 'Opcional. Nunca Cuba (embargo de EE. UU.).' },
     { key: 'originRegion', label: 'Región', kind: 'text', placeholder: 'Estelí' },
     { key: 'brand', label: 'Marca', kind: 'text', placeholder: 'GM Tabacos', kinds: ['premium'], required: true },
     { key: 'edition', label: 'Línea o edición', kind: 'text', placeholder: 'Serie Biscayne', kinds: ['premium'] },
