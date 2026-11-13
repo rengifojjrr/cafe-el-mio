@@ -145,3 +145,20 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 - **La copia semanal sigue siendo a mano** mientras el servidor esté en el plan gratis.
 - **Fotos de un tipo raro** (por ejemplo HEIC de un iPhone si no se convirtió) no suben al depósito: quedan anotadas
   como rechazadas en ese teléfono. La app convierte las fotos a WebP al cargarlas; los PDF suben tal cual (hasta 10 MB).
+
+## Ronda 5: colita del Behike y cuatro capas (13 de noviembre de 2026)
+
+- **Color de Doble Capa:** se dibuja con el tono de Maduro (la silueta, el punto de color y el 3D). Que el cliente
+  confirme el color; cambiarlo es una línea (`CAPAS_OFRECIDAS` en `app-gestion/src/domain/products.ts`).
+- **«Doble» o «double» delante de una vitola no es la capa:** «Doble Corona», «Double Toro», «Doble Robusto»… siguen
+  siendo la vitola. Solo «doble capa», «double wrapper» y «doble» o «double» sueltos son Doble Capa (al pegar un
+  pedido, en la recepción y al importar). Si en sus archivos la escriben de otra forma (por ejemplo «DC»), hay que
+  agregarla.
+- **La cabeza se guarda con los atributos del producto** (`cabeza`: vacío es automática, o `redonda`, `colita`,
+  `punta`), como la capa o la vitola. El servidor guarda esos atributos tal cual: no hubo que cambiarlo ni agregarle
+  una columna.
+- **Los productos con una capa que ya no se ofrece no se tocaron** (Natural, Corojo, Criollo, Sumatra, Rosado, Oscuro,
+  Candela). Si el cliente quiere pasarlos a una de las cuatro, se hace desde «Editar» en cada uno, o se decide una
+  equivalencia y se aplica de una vez.
+- **Salomón ahora se dibuja en punta también en la silueta** (antes solo en comparar y en el 3D): es la misma regla para
+  todos los dibujos.

@@ -4,46 +4,53 @@
 import { Ruler, Search, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { type HeadShape, colitaSvg, colitaTramos, headShape, headTaper } from '../../domain/cabeza';
 import { applyFilters, groupFamilies } from '../../domain/catalog-filters';
 import { capaShade, sizeText } from '../../domain/products';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { listProducts, type ProductView } from '../../services/catalog';
+import { ColitaTrazo } from '../../ui/brand';
 import { EmptyState, ErrorBox, Loading, PageHeader } from '../../ui/kit';
 import { CapaDot } from './list';
 
 const MAX = 4;
 
-function isPointed(vitola: string): number {
-  const v = vitola.toLowerCase();
-  if (/(torpedo|pir[aá]mide|figurado|salom)/.test(v)) return 0.95;
-  if (/belicoso/.test(v)) return 0.6;
-  return 0;
-}
-
-/** Un tabaco de pie: el pie abajo, la cabeza arriba. `pxPerIn` es la misma escala para todos. */
-function StandingCigar({ lengthIn, ringGauge, shade, vitola, pxPerIn }: { lengthIn: number; ringGauge: number; shade: string; vitola: string; pxPerIn: number }) {
+/**
+ * Un tabaco de pie: el pie abajo, la cabeza arriba. `pxPerIn` es la misma escala para todos. La
+ * colita (si la tiene) sale de la cabeza hacia arriba y se enrosca hacia un lado: el dibujo gana
+ * un poco de alto y de ancho, pero el tabaco no (la colita no cuenta en el largo).
+ */
+function StandingCigar({ lengthIn, ringGauge, shade, vitola, head, pxPerIn }: { lengthIn: number; ringGauge: number; shade: string; vitola: string; head: HeadShape; pxPerIn: number }) {
   const L = lengthIn * pxPerIn;
   const D = (ringGauge / 64) * pxPerIn;
-  const w = D + 8;
-  const h = L + 4;
-  const x0 = 4;
+  const r = D / 2;
+  const grosor = Math.max(3.4, D * 0.13);
+  const tramos = head === 'colita' ? colitaTramos(r / pxPerIn) : [];
+  const puntos = tramos.flat();
+  // De pie: lo que en la silueta acostada va hacia afuera (x) aquí va hacia arriba; lo que va hacia arriba (y), hacia un lado.
+  const sobra = puntos.length ? Math.max(...puntos.map(([x]) => x)) * pxPerIn + grosor : 0;
+  const lado = puntos.length ? Math.max(0, Math.max(...puntos.map(([, y]) => y)) * pxPerIn + grosor - r) : 0;
+  const w = D + 8 + lado * 2;
+  const h = L + 4 + sobra;
+  const x0 = 4 + lado;
   const x1 = x0 + D;
   const cx = x0 + D / 2;
-  const r = D / 2;
   const bottom = h;
   const top = bottom - L;
-  const taper = isPointed(vitola) * pxPerIn;
+  const taper = headTaper(head, vitola) * pxPerIn;
+  const colita = head === 'colita' ? colitaSvg(r / pxPerIn, (x, y) => [cx + y * pxPerIn, top - x * pxPerIn]) : '';
   const body = taper
     ? `M${x0} ${bottom} V${top + taper} C${x0} ${top + taper * 0.35}, ${cx - r * 0.32} ${top}, ${cx} ${top} C${cx + r * 0.32} ${top}, ${x1} ${top + taper * 0.35}, ${x1} ${top + taper} V${bottom} Z`
     : `M${x0} ${bottom} V${top + r} A${r} ${r} 0 0 1 ${x1} ${top + r} V${bottom} Z`;
   const bandY = top + (taper ? taper + 0.55 * pxPerIn : 1.15 * pxPerIn);
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden className="sombra-suave block">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden data-cabeza={head} className="sombra-suave block">
       <path d={body} style={{ fill: `var(--capa-${shade}, var(--capa-colorado))` }} />
       <path d={body} style={{ fill: 'var(--capa-brillo)' }} transform={`translate(${D * 0.12} 0) scale(0.45 1)`} opacity="0.5" />
       <rect x={x0 - 1} y={bandY} width={D + 2} height={0.48 * pxPerIn} style={{ fill: 'var(--anilla)' }} />
       <rect x={x0 - 1} y={bandY + 0.17 * pxPerIn} width={D + 2} height={0.14 * pxPerIn} style={{ fill: 'var(--anilla-tinta)' }} opacity="0.55" />
+      {colita ? <ColitaTrazo d={colita} shade={shade} grosor={grosor} /> : null}
     </svg>
   );
 }
@@ -92,7 +99,7 @@ export function ComparePage() {
               const ring = Number(a.ringGauge);
               return (
                 <figure key={v.product.id} className="m-0 flex w-24 flex-none snap-start flex-col items-center gap-2">
-                  <StandingCigar lengthIn={len} ringGauge={ring} shade={String(a.wrapperShade ?? capaShade(a.capa))} vitola={String(a.vitola ?? '')} pxPerIn={pxPerIn} />
+                  <StandingCigar lengthIn={len} ringGauge={ring} shade={String(a.wrapperShade ?? capaShade(a.capa))} vitola={String(a.vitola ?? '')} head={headShape(v.product)} pxPerIn={pxPerIn} />
                   <figcaption className="h-[4.5rem] text-center text-xs leading-tight">
                     <span className="block font-bold text-hero-tinta">{v.product.familyName ?? v.product.name}</span>
                     {v.product.variantLabel ? <span className="block text-hero-tenue">{v.product.variantLabel}</span> : null}

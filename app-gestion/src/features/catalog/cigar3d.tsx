@@ -2,6 +2,7 @@
 // dibujado en un canvas (sin three.js: pesa unos pocos KB y se baja solo al tocar el botón).
 // Se gira arrastrando, se acerca con dos dedos o con la rueda. Gira solo hasta que lo tocan.
 import { useEffect, useRef, useState } from 'react';
+import { type HeadShape, colitaPunto, colitaTramos, headTaper } from '../../domain/cabeza';
 
 type RGB = [number, number, number];
 
@@ -20,13 +21,6 @@ function cssColor(name: string, fallback: RGB): RGB {
 /** [r, g, b] → «#rrggbb» para el canvas (los colores salen de los tokens, no se escriben aquí). */
 function toHex(c: readonly number[]): string {
   return `#${c.map((ch) => Math.max(0, Math.min(255, Math.round(ch))).toString(16).padStart(2, '0')).join('')}`;
-}
-
-function isPointed(vitola: string): number {
-  const v = vitola.toLowerCase();
-  if (/(torpedo|pir[aá]mide|figurado|salom)/.test(v)) return 0.95;
-  if (/belicoso/.test(v)) return 0.6;
-  return 0;
 }
 
 interface Quad {
@@ -50,7 +44,40 @@ function radiusAt(x: number, L: number, R: number, taper: number): number {
   return R * Math.sqrt(Math.max(0, 1 - t * t));
 }
 
-export function Cigar3D({ lengthIn, ringGauge, shade, vitola, label }: { lengthIn: number; ringGauge: number; shade: string; vitola: string; label: string }) {
+type V3 = [number, number, number];
+
+const unit = (v: V3): V3 => {
+  const n = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / n, v[1] / n, v[2] / n];
+};
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+/**
+ * La colita en 3D: un tubito fino que sigue la misma curva que la silueta 2D (`colitaTramos`), sale
+ * de la punta de la cabeza (x = L) y se va afinando. Devuelve, para cada punto de la curva, el
+ * centro, el radio y dos direcciones perpendiculares para armar el anillo del tubo.
+ */
+function colitaTubo(L: number, R: number): { c: V3; rr: number; n: V3; b: V3; s: number }[] {
+  const tramos = colitaTramos(R);
+  const NS = 36;
+  const pts: V3[] = Array.from({ length: NS + 1 }, (_, i) => {
+    const s = i / NS;
+    const [x, y] = colitaPunto(tramos, s);
+    // Un poco hacia un lado y hacia el otro: torcida, no plana.
+    return [L + x, y, 0.05 * Math.sin(s * Math.PI * 1.5)];
+  });
+  const tubeR = Math.max(0.03, R * 0.1);
+  return pts.map((c, i) => {
+    const a = pts[Math.max(0, i - 1)]!;
+    const z = pts[Math.min(NS, i + 1)]!;
+    const t = unit([z[0] - a[0], z[1] - a[1], z[2] - a[2]]);
+    const n = unit(cross(t, [0, 0, 1]));
+    const b = cross(t, n);
+    return { c, rr: tubeR * (1 - 0.4 * (i / NS)), n, b, s: i / NS };
+  });
+}
+
+export function Cigar3D({ lengthIn, ringGauge, shade, vitola, head, label }: { lengthIn: number; ringGauge: number; shade: string; vitola: string; head: HeadShape; label: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const view = useRef({ yaw: -0.55, pitch: 0.32, zoom: 1, auto: true });
@@ -67,7 +94,8 @@ export function Cigar3D({ lengthIn, ringGauge, shade, vitola, label }: { lengthI
     const bandInk = cssColor('--anilla-tinta', [26, 18, 8]);
     const L = lengthIn;
     const R = ringGauge / 64 / 2;
-    const taper = isPointed(vitola);
+    const taper = headTaper(head, vitola);
+    const tubo = head === 'colita' ? colitaTubo(L, R) : [];
     const bandStart = L - (taper ? taper + 0.55 : 1.15);
     const bandEnd = bandStart + 0.48;
     const NX = 72;
@@ -145,6 +173,39 @@ export function Cigar3D({ lengthIn, ringGauge, shade, vitola, label }: { lengthI
           const shine = inBand ? spec * 1.6 : spec;
           const c = src.map((ch) => Math.round(Math.min(255, ch * k + 255 * shine)));
           quads.push({ pts: [p1, p2, p3, p4].map((pt) => [pt[0], pt[1]] as [number, number]), depth: (p1[2] + p2[2] + p3[2] + p4[2]) / 4, color: toHex(c) });
+        }
+      }
+      // La colita: anillos de 8 lados a lo largo de la curva, de la capa y un poco más oscura, con
+      // una raya en espiral que la hace ver torcida.
+      const NR = 8;
+      for (let i = 0; i + 1 < tubo.length; i++) {
+        const A = tubo[i]!;
+        const B = tubo[i + 1]!;
+        for (let j = 0; j < NR; j++) {
+          const ta = (j / NR) * Math.PI * 2;
+          const tb = ((j + 1) / NR) * Math.PI * 2;
+          const tm = (ta + tb) / 2;
+          const ring = (P: typeof A, t: number): V3 => [
+            P.c[0] + P.rr * (Math.cos(t) * P.n[0] + Math.sin(t) * P.b[0]),
+            P.c[1] + P.rr * (Math.cos(t) * P.n[1] + Math.sin(t) * P.b[1]),
+            P.c[2] + P.rr * (Math.cos(t) * P.n[2] + Math.sin(t) * P.b[2]),
+          ];
+          const nn = rotN(
+            Math.cos(tm) * A.n[0] + Math.sin(tm) * A.b[0],
+            Math.cos(tm) * A.n[1] + Math.sin(tm) * A.b[1],
+            Math.cos(tm) * A.n[2] + Math.sin(tm) * A.b[2],
+          );
+          if (nn[2] > 0.25) continue;
+          const corners = [ring(A, ta), ring(B, ta), ring(B, tb), ring(A, tb)].map((q) => project(q[0], q[1], q[2]));
+          const diffuse = Math.max(0, nn[0] * light[0]! + nn[1] * light[1]! - nn[2] * light[2]!);
+          const twist = 0.84 + 0.16 * (0.5 + 0.5 * Math.sin(tm * 2 + A.s * 18));
+          const k = (0.32 + 0.78 * diffuse) * twist * 0.8;
+          const c = base.map((ch) => Math.round(Math.min(255, ch * k + 255 * diffuse ** 18 * 0.25)));
+          quads.push({
+            pts: corners.map((pt) => [pt[0], pt[1]] as [number, number]),
+            depth: corners.reduce((sum, pt) => sum + pt[2], 0) / 4,
+            color: toHex(c),
+          });
         }
       }
       // El pie (la boca cortada): un disco más oscuro.
@@ -240,11 +301,17 @@ export function Cigar3D({ lengthIn, ringGauge, shade, vitola, label }: { lengthI
       canvas.removeEventListener('pointercancel', onUp);
       canvas.removeEventListener('wheel', onWheel);
     };
-  }, [lengthIn, ringGauge, shade, vitola]);
+  }, [lengthIn, ringGauge, shade, vitola, head]);
 
   return (
     <div ref={wrapRef} className="hero-producto touch-none select-none">
-      <canvas ref={canvasRef} role="img" aria-label={`${label} en 3D: ${lengthIn} pulgadas de largo, cepo ${ringGauge}. Arrastra para girarlo.`} className="block cursor-grab active:cursor-grabbing" />
+      <canvas
+        ref={canvasRef}
+        role="img"
+        aria-label={`${label} en 3D: ${lengthIn} pulgadas de largo, cepo ${ringGauge}${head === 'colita' ? ', con colita' : ''}. Arrastra para girarlo.`}
+        data-cabeza={head}
+        className="block cursor-grab active:cursor-grabbing"
+      />
       <p className={`px-4 pb-3 text-sm text-hero-tenue transition-opacity ${hint ? 'opacity-100' : 'opacity-60'}`}>Arrastra para girarlo. Con dos dedos (o la rueda) lo acercas o lo alejas.</p>
     </div>
   );

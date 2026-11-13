@@ -1,5 +1,6 @@
 // Fotos: miniatura de producto (foto subida, foto de la marca o silueta del tabaco)
 // y el botón para tomar o elegir una foto (se comprime a WebP antes de guardarla).
+import { headShape } from '../domain/cabeza';
 import { capaShade } from '../domain/products';
 import { Camera, ImageOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -11,6 +12,7 @@ import { errorText, useToast } from './toast';
 
 interface ThumbProduct {
   name: string;
+  familyName?: string;
   photoIds: string[];
   brandPhoto?: string;
   attrs: Record<string, string | number>;
@@ -62,6 +64,7 @@ export function ProductThumb({
         ringGauge={Number(a.ringGauge)}
         shade={String(a.wrapperShade ?? capaShade(a.capa))}
         vitola={String(a.vitola ?? '')}
+        head={headShape(product)}
         ruler={size === 'lg'}
         className={`h-full w-full ${className}`}
         title={`Silueta a escala de ${product.name}`}

@@ -147,3 +147,11 @@ una línea real y empezar de nuevo.
 | Comisión progresiva: «Vas en el N % · con X locales más pasas al M %» | Tabaco · Vendedor | Inicio; Ajustes → comisión progresiva y simulador |
 | Miami y Houston | Tabaco · Administración o Dirección | Mapa (cambiar de mercado), Rentabilidad, Dirección |
 | Repartos: ruta del camión, paradas, costos | Tabaco · Administración | Repartos; el costo aparece en Rentabilidad |
+
+## Ronda 5: colita del Behike y cuatro capas
+
+| Quiero ver | Cuenta | Dónde |
+|---|---|---|
+| Un Behike con su colita (lista, ficha, comparar y 3D) | Tabaco · Administración | Catálogo → «Nuevo producto» → De mazo, familia «Behike», vitola Toro 6 × 52 |
+| La capa entre cuatro: Habano, Maduro, Connecticut o Doble Capa; «Cabeza» para forzar la forma | Tabaco · Administración | Catálogo → «Nuevo producto» |
+| Un producto viejo con otra capa sigue igual («Natural (ya no se usa)» al editarlo) | Tabaco · Administración | Catálogo → Torpedo 6⅛ × 52 → Natural → «Editar» |

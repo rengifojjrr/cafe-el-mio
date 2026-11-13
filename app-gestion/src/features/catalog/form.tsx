@@ -5,6 +5,7 @@ import { BookOpen, Crown, Package, Save } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import type { CommissionRule, Product, ProductKind } from '../../data/types';
+import { headShape } from '../../domain/cabeza';
 import { capaShade, composeName, sizeText, variantLabelFor } from '../../domain/products';
 import type { FieldDef } from '../../lines/config';
 import { fmtMoney } from '../../lib/money';
@@ -202,6 +203,7 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
             ringGauge={Number(f.attrs.ringGauge)}
             shade={String(f.attrs.capa ? capaShade(f.attrs.capa) : 'colorado')}
             vitola={String(f.attrs.vitola ?? '')}
+            head={headShape({ name: familyName, familyName, attrs: f.attrs })}
             className="sombra-suave w-full"
           />
           <p className="mt-1 text-sm text-hero-tenue">Vista previa a escala mientras completas largo, cepo y capa.</p>
@@ -319,7 +321,20 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
 
 function AttrField({ field, value, onChange }: { field: FieldDef; value: string | number | undefined; onChange: (v: string | number) => void }) {
   if (field.kind === 'select') {
-    return <SelectInput label={field.label} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} options={field.options} placeholder="Elige una opción" />;
+    const v = String(value ?? '');
+    // Un valor que ya no se ofrece (una capa antigua) se queda y se puede guardar sin cambiarlo.
+    const old = v && !field.options.some((o) => o.value === v) ? [{ value: v, label: `${field.legacy?.find((o) => o.value === v)?.label ?? v} (ya no se usa)` }] : [];
+    const withEmpty = field.options.some((o) => o.value === '');
+    return (
+      <SelectInput
+        label={field.label}
+        hint={field.hint}
+        value={v}
+        onChange={(e) => onChange(e.target.value)}
+        options={[...field.options, ...old]}
+        placeholder={withEmpty ? undefined : 'Elige una opción'}
+      />
+    );
   }
   if (field.kind === 'number') {
     return (

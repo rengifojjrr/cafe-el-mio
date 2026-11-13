@@ -2,16 +2,10 @@
 // de su capa y su anilla) y las marcas de Tabaco y de Café El Mío.
 import { useId } from 'react';
 import type { LineId } from '../data/types';
+import { type HeadShape, colitaSvg, headShape, headTaper } from '../domain/cabeza';
 import { marca } from '../lib/assets';
 
 const PX_PER_IN = 40;
-
-function isPointed(vitola: string): number {
-  const v = vitola.toLowerCase();
-  if (/(torpedo|pir[aá]mide|figurado)/.test(v)) return 0.95;
-  if (/belicoso/.test(v)) return 0.6;
-  return 0;
-}
 
 /** Pulgadas con fracción (6.125 → 6⅛″) y milímetros. */
 export function fmtLength(inches: number): string {
@@ -25,11 +19,26 @@ export function fmtRing(ring: number): string {
   return `${ring} (${((ring / 64) * 25.4).toFixed(1)} mm)`;
 }
 
+/**
+ * La colita (el rabito de hoja torcida de la cabeza): un trazo de la misma capa, un poco más oscuro,
+ * con una raya fina que lo hace ver torcido. `d` es el camino que da `colitaSvg`.
+ */
+export function ColitaTrazo({ d, shade, grosor }: { d: string; shade: string; grosor: number }) {
+  return (
+    <g data-parte="colita" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} style={{ stroke: `var(--capa-${shade}, var(--capa-colorado))` }} strokeWidth={grosor} />
+      <path d={d} style={{ stroke: 'var(--capa-veta)' }} strokeWidth={grosor} />
+      <path d={d} style={{ stroke: 'var(--capa-veta)' }} strokeWidth={grosor * 0.38} strokeDasharray={`${grosor * 0.55} ${grosor * 0.75}`} />
+    </g>
+  );
+}
+
 export function CigarSilhouette({
   lengthIn,
   ringGauge,
   shade,
   vitola = '',
+  head,
   ruler = true,
   maxIn = 8,
   className = '',
@@ -39,6 +48,8 @@ export function CigarSilhouette({
   ringGauge: number;
   shade: string;
   vitola?: string;
+  /** Forma de la cabeza (`headShape` del producto). Si no se dice, la regla con la vitola sola. */
+  head?: HeadShape;
   ruler?: boolean;
   maxIn?: number;
   className?: string;
@@ -55,7 +66,10 @@ export function CigarSilhouette({
   const x0 = pad;
   const x1 = pad + L;
   const r = D / 2;
-  const taper = isPointed(vitola) * PX_PER_IN;
+  const cabeza = head ?? headShape({ attrs: { vitola } });
+  const taper = headTaper(cabeza, vitola) * PX_PER_IN;
+  // La colita sale del centro de la cabeza y se enrosca hacia arriba (no cuenta en el largo).
+  const colita = cabeza === 'colita' ? colitaSvg(r / PX_PER_IN, (x, y) => [x1 + x * PX_PER_IN, cy - y * PX_PER_IN]) : '';
   // Cuerpo: pie plano a la izquierda, cabeza redonda (o en punta) a la derecha.
   const body = taper
     ? `M${x0} ${top} H${x1 - taper} C${x1 - taper * 0.35} ${top}, ${x1} ${cy - r * 0.32}, ${x1} ${cy} C${x1} ${cy + r * 0.32}, ${x1 - taper * 0.35} ${top + D}, ${x1 - taper} ${top + D} H${x0} Z`
@@ -68,7 +82,8 @@ export function CigarSilhouette({
       viewBox={`0 0 ${width} ${height}`}
       className={className}
       role="img"
-      aria-label={title ?? `Silueta a escala: ${fmtLength(lengthIn)} de largo, cepo ${ringGauge}`}
+      aria-label={`${title ?? `Silueta a escala: ${fmtLength(lengthIn)} de largo, cepo ${ringGauge}`}${cabeza === 'colita' ? ', con colita' : ''}`}
+      data-cabeza={cabeza}
       preserveAspectRatio="xMinYMid meet"
     >
       <defs>
@@ -96,6 +111,7 @@ export function CigarSilhouette({
         <rect x={bandX + bandW * 0.36} y={top - 1} width={bandW * 0.28} height={D + 2} style={{ fill: 'var(--anilla-tinta)' }} opacity="0.55" />
       </g>
       <ellipse cx={x0} cy={cy} rx={3} ry={r} style={{ fill: 'var(--capa-veta)' }} />
+      {colita ? <ColitaTrazo d={colita} shade={shade} grosor={Math.max(3.4, D * 0.13)} /> : null}
       {ruler ? (
         <g style={{ color: 'var(--faint)' }}>
           <line x1={pad} x2={pad + maxIn * PX_PER_IN} y1={top + D + 12} y2={top + D + 12} stroke="currentColor" strokeWidth="1" />

@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowUpDown, Box, Camera, Printer, Eye, EyeOff, PackageP
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { describeRule, storeEarning } from '../../domain/money-rules';
+import { headShape } from '../../domain/cabeza';
 import { capaLabel, capaShade, cigarsPerBundle, familyKey, packText, sizeText, stockText, unitOf } from '../../domain/products';
 import { KIND_LABEL, STRENGTHS, arrivalStatusLabel } from '../../lines/config';
 import { fmtMoney } from '../../lib/money';
@@ -58,6 +59,7 @@ export function ProductDetailPage() {
   const familyName = pr.familyName ?? pr.name;
   const perBundle = cigarsPerBundle(pr);
   const shade = String(a.wrapperShade ?? capaShade(a.capa));
+  const head = headShape(pr);
   // El local que compra en firme ve su precio de lista y no la consignación.
   const firmStore = actor.role === 'store' && Boolean(v.storePrice);
   // Sin precio al local todavía (los cafés de El Mío al empezar): nada de «$0.00» ni márgenes.
@@ -157,7 +159,7 @@ export function ProductDetailPage() {
         </div>
         <HeroImage photoIds={pr.photoIds} fallback={
           isCigar ? (
-            <CigarSilhouette lengthIn={Number(a.lengthIn)} ringGauge={Number(a.ringGauge)} shade={shade} vitola={String(a.vitola ?? '')} ruler={false} className="sombra-suave mx-auto my-6 w-full max-w-3xl" />
+            <CigarSilhouette lengthIn={Number(a.lengthIn)} ringGauge={Number(a.ringGauge)} shade={shade} vitola={String(a.vitola ?? '')} head={head} ruler={false} className="sombra-suave mx-auto my-6 w-full max-w-3xl" />
           ) : (
             <div className="mx-auto my-4 grid h-64 max-w-md place-items-center sm:h-80">
               <ProductThumb product={pr} loadPhoto={(pid) => getPhoto(ctx, pid)} size="lg" />
@@ -367,12 +369,12 @@ export function ProductDetailPage() {
         {show3d && isCigar ? (
           reduced ? (
             <div className="hero-producto p-4">
-              <CigarSilhouette lengthIn={Number(a.lengthIn)} ringGauge={Number(a.ringGauge)} shade={shade} vitola={String(a.vitola ?? '')} className="w-full" />
+              <CigarSilhouette lengthIn={Number(a.lengthIn)} ringGauge={Number(a.ringGauge)} shade={shade} vitola={String(a.vitola ?? '')} head={head} className="w-full" />
               <p className="mt-2 text-sm text-hero-tenue">Tienes activado «reducir movimiento»: se muestra la silueta a escala.</p>
             </div>
           ) : (
             <Suspense fallback={<div className="skeleton h-80" aria-label="Preparando el 3D" />}>
-              <Cigar3D lengthIn={Number(a.lengthIn)} ringGauge={Number(a.ringGauge)} shade={shade} vitola={String(a.vitola ?? '')} label={pr.name} />
+              <Cigar3D lengthIn={Number(a.lengthIn)} ringGauge={Number(a.ringGauge)} shade={shade} vitola={String(a.vitola ?? '')} head={head} label={pr.name} />
             </Suspense>
           )
         ) : null}

@@ -11,7 +11,7 @@ import { cleanCode, isValidEan13 } from '../lib/barcode';
 import { fmtMoney, round2 } from '../lib/money';
 import { headerKey, parseNumber, type SheetTable } from '../lib/sheets';
 import { isCubanOrigin } from './compliance';
-import { capaLabel, capaShade, composeName, countText, familyIdFor, normalize, sizeText, slug, unitNames, variantLabelFor } from './products';
+import { capaLabel, capaShade, composeName, countText, dobleCapaEn, esCapaAntigua, familyIdFor, normalize, sizeText, slug, unitNames, variantLabelFor } from './products';
 
 // ---------- Columnas ----------
 
@@ -143,7 +143,11 @@ export function parseSize(text: string): ParsedSize | null {
   return { lengthIn, ringGauge, match: m[0] };
 }
 
-/** Palabras de la capa (en el nombre o la categoría). «Conneticut» (mal escrito) es Connecticut. */
+/**
+ * Palabras de la capa (en el nombre o la categoría). «Conneticut» (mal escrito) es Connecticut. «Doble
+ * capa», «doble», «double wrapper» y «double» son Doble Capa (salvo «Doble Corona» y las otras
+ * vitolas: ver `dobleCapaEn`). Las capas que ya no se ofrecen se siguen reconociendo.
+ */
 const CAPA_WORDS: Record<string, string> = {
   habano: 'habano',
   hab: 'habano',
@@ -163,11 +167,18 @@ const CAPA_WORDS: Record<string, string> = {
   broadleaf: 'oscuro',
 };
 
-/** La capa de un texto libre por palabras sueltas («Box Mad» → maduro). La última manda. */
+/** La capa de un texto libre por palabras sueltas («Box Mad» → maduro, «Doble Capa» → doble_capa). La última manda. */
 export function capaFromWords(text: string): string | null {
   let found: string | null = null;
-  for (const w of normalize(text).split(/[^a-z0-9]+/)) {
-    const c = CAPA_WORDS[w];
+  const words = normalize(text).split(/[^a-z0-9]+/);
+  for (let i = 0; i < words.length; i++) {
+    const doble = dobleCapaEn(words, i);
+    if (doble) {
+      found = 'doble_capa';
+      i += doble - 1;
+      continue;
+    }
+    const c = CAPA_WORDS[words[i]!];
     if (c) found = c;
   }
   return found;
@@ -256,6 +267,14 @@ export function parseTabacoName(text: string): TabacoName {
   const brand: string[] = [];
   for (let i = 0; i < raw.length; i++) {
     const n = norm[i]!;
+    // Doble Capa («doble capa», «double wrapper», «doble» o «double» sueltos; nunca «Doble Corona»).
+    const doble = dobleCapaEn(norm, i);
+    if (doble) {
+      capa = 'doble_capa';
+      brandDone = true;
+      i += doble - 1;
+      continue;
+    }
     // Capa (y «Shade» que la acompaña): no va en la familia.
     if (CAPA_WORDS[n]) {
       capa = CAPA_WORDS[n]!;
@@ -832,6 +851,12 @@ export function buildImportPlan(
   }
   if (map.cost === undefined) notices.push(`Falta el costo: el archivo no lo trae. Los nuevos quedan en ${fmtMoney(opts.defaultCost ?? 0)}, marcado como de ejemplo, hasta que lo pongas.`);
   if (map.origin === undefined && opts.origin) notices.push(`${line === 'tabaco' ? 'Procedencia' : 'Origen'}: ${opts.origin} para los nuevos.`);
+  // Ronda 5: los nuevos con una capa que ya no se ofrece entran con esa capa, pero se avisa.
+  const antiguas = rows.filter((r) => r.status === 'nuevo' && esCapaAntigua(r.attrs.capa));
+  if (line === 'tabaco' && antiguas.length) {
+    const nombres = [...new Set(antiguas.map((r) => capaLabel(r.attrs.capa)))].sort((a, b) => a.localeCompare(b, 'es'));
+    notices.push(`${antiguas.length} ${antiguas.length === 1 ? 'producto' : 'productos'} con una capa que ya no se ofrece: ${nombres.join(', ')}.`);
+  }
 
   return {
     rows,

@@ -72,11 +72,28 @@ export function packText(p: Pick<Product, 'unitName' | 'attrs' | 'packSize'>): s
 // ---------- Capa ----------
 export type WrapperShade = 'claro' | 'natural' | 'colorado' | 'rosado' | 'maduro' | 'oscuro' | 'candela';
 
-/** Capas como las nombra el negocio, con el color que se dibuja en la silueta. */
-export const CAPAS: { value: string; label: string; shade: WrapperShade }[] = [
+export interface Capa {
+  value: string;
+  label: string;
+  shade: WrapperShade;
+}
+
+/**
+ * Las capas que se ofrecen al crear o editar un tabaco (ronda 5, pedido del mayorista): Habano,
+ * Maduro, Connecticut y Doble Capa. Doble Capa se dibuja con el tono maduro (por confirmar).
+ */
+export const CAPAS_OFRECIDAS: readonly Capa[] = [
   { value: 'habano', label: 'Habano', shade: 'colorado' },
   { value: 'maduro', label: 'Maduro', shade: 'maduro' },
   { value: 'connecticut', label: 'Connecticut', shade: 'claro' },
+  { value: 'doble_capa', label: 'Doble Capa', shade: 'maduro' },
+];
+
+/**
+ * Las que ya no se ofrecen. Los productos que las tienen se quedan como están: se siguen viendo con
+ * su nombre y su color, y se pueden editar sin perderla.
+ */
+export const CAPAS_ANTIGUAS: readonly Capa[] = [
   { value: 'natural', label: 'Natural', shade: 'natural' },
   { value: 'corojo', label: 'Corojo', shade: 'colorado' },
   { value: 'criollo', label: 'Criollo', shade: 'colorado' },
@@ -86,21 +103,58 @@ export const CAPAS: { value: string; label: string; shade: WrapperShade }[] = [
   { value: 'candela', label: 'Candela', shade: 'candela' },
 ];
 
+/** Las que se reconocen al leer datos (las que se ofrecen y las antiguas). */
+export const CAPAS_RECONOCIDAS: readonly Capa[] = [...CAPAS_OFRECIDAS, ...CAPAS_ANTIGUAS];
+
 export function capaLabel(value: unknown): string {
   const v = String(value ?? '');
-  return CAPAS.find((c) => c.value === v)?.label ?? v;
+  return CAPAS_RECONOCIDAS.find((c) => c.value === v)?.label ?? v;
 }
 
 export function capaShade(value: unknown): WrapperShade {
-  return CAPAS.find((c) => c.value === String(value ?? ''))?.shade ?? 'colorado';
+  return CAPAS_RECONOCIDAS.find((c) => c.value === String(value ?? ''))?.shade ?? 'colorado';
 }
 
-/** Reconoce la capa en un texto libre («Maduro San Andrés», «HABANO», «connecticut shade»…). */
+/** ¿Una capa que ya no se ofrece (Corojo, Natural…)? */
+export function esCapaAntigua(value: unknown): boolean {
+  return CAPAS_ANTIGUAS.some((c) => c.value === String(value ?? ''));
+}
+
+/** Vitolas que pueden ir después de «doble»/«double» («Doble Corona», «Double Toro»): ahí no es la capa. */
+const VITOLA_TRAS_DOBLE = new Set([
+  'corona', 'coronas', 'toro', 'toros', 'robusto', 'robustos', 'churchill', 'perfecto', 'torpedo', 'piramide', 'pyramid',
+  'belicoso', 'lancero', 'panetela', 'gordo', 'figurado', 'lonsdale', 'rothschild', 'presidente', 'diadema', 'gigante',
+  'salomon', 'sublime', 'aleta', 'nub', 'coronita',
+]);
+
+/**
+ * ¿Dice «Doble Capa» en la palabra `i`? Devuelve cuántas palabras ocupa: 2 para «doble capa» o
+ * «double wrapper», 1 para «doble» o «double» solos, 0 si no. Las palabras ya van normalizadas y sin
+ * signos. «Doble Corona», «Double Toro»… son vitolas, no la capa.
+ */
+export function dobleCapaEn(words: readonly string[], i: number): number {
+  const w = words[i];
+  // «Doble-Capa» o «DoubleWrapper» escritos juntos (así llegan del nombre de un Excel).
+  if (w === 'doblecapa' || w === 'doublewrapper') return 1;
+  if (w !== 'doble' && w !== 'double') return 0;
+  const next = words[i + 1] ?? '';
+  if (VITOLA_TRAS_DOBLE.has(next)) return 0;
+  return next === 'capa' || next === 'wrapper' ? 2 : 1;
+}
+
+/** «Doble capa», «doble», «double wrapper» o «double» en un texto libre (no «Doble Corona»). */
+export function esDobleCapa(text: string): boolean {
+  const words = normalize(text).split(/[^a-z0-9]+/).filter(Boolean);
+  return words.some((_, i) => dobleCapaEn(words, i) > 0);
+}
+
+/** Reconoce la capa en un texto libre («Maduro San Andrés», «HABANO», «connecticut shade», «doble capa»…). */
 export function capaFromText(text: unknown): string | null {
   const t = normalize(String(text ?? ''));
   if (!t) return null;
+  if (esDobleCapa(t)) return 'doble_capa';
   if (/broadleaf|oscuro/.test(t)) return 'oscuro';
-  for (const c of CAPAS) if (t.includes(c.value)) return c.value;
+  for (const c of CAPAS_RECONOCIDAS) if (t.includes(c.value)) return c.value;
   if (/colorado/.test(t)) return 'habano';
   return null;
 }

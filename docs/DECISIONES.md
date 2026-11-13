@@ -160,9 +160,18 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
   el premium puede contarse en mazos o en tabacos sueltos; el café, en unidades. El libro de movimientos guarda la
   unidad del producto, así que las pantallas dicen «120 mazos · 3,000 tabacos» o «40 tabacos · 2 cajas». Los pedidos
   de mazo van de a un mazo (antes, de a una caja).
-- **Capa** es una lista (Habano, Maduro, Connecticut, Natural, Corojo, Criollo, Sumatra, Rosado, Oscuro, Candela)
-  y de ella sale el color de la silueta. El texto libre de antes («Connecticut Shade (Ecuador)») queda como «Detalle
-  de la capa» en premium.
+- **Capa** es una lista y de ella sale el color de la silueta. Desde la ronda 5 (pedido del mayorista) se ofrecen
+  cuatro: Habano, Maduro, Connecticut y Doble Capa (dibujada con el color de Maduro, por confirmar). Las de antes
+  (Natural, Corojo, Criollo, Sumatra, Rosado, Oscuro, Candela) se siguen reconociendo y mostrando con su nombre y su
+  color: no se convierten solas. En el código, las que se ofrecen y las que se reconocen están separadas
+  (`CAPAS_OFRECIDAS` y `CAPAS_RECONOCIDAS`); al editar un producto con una antigua, el desplegable la muestra «(ya no
+  se usa)» y se guarda sin cambiarla. El texto libre de antes («Connecticut Shade (Ecuador)») queda como «Detalle de
+  la capa» en premium.
+- **La cabeza** (ronda 5): una sola regla para la silueta, comparar y el 3D (`src/domain/cabeza.ts`). Con colita si
+  la familia, el nombre o la vitola dicen «behike», «colita», «rabito» o «pigtail»; en punta si la vitola es torpedo,
+  pirámide, figurado, salomón o belicoso (más corta); redonda en lo demás. El campo «Cabeza» la fuerza para cualquier
+  producto y se guarda en los atributos del producto, como la capa: el servidor no cambió. La colita no cuenta en el
+  largo.
 - **Filtros de un toque.** Una fila de chips con lo que más se usa (tipo, capa, fortaleza, con stock) y «Más filtros»
   (vitola, procedencia, marca). Dentro de un filtro se suman las opciones; entre filtros, se cruzan. Cada opción dice
   cuántos productos quedarían. Se guardan por persona en este navegador (`localStorage`); la búsqueda, por pestaña.
@@ -175,7 +184,7 @@ Cada punto dice qué se decidió y por qué. Lo que falta decidir con el negocio
 - **Comparar tamaños**: de 2 a 4 vitolas de pie, apoyadas en la misma base y a la misma escala (no a tamaño real:
   la pulgada de una pantalla no mide una pulgada).
 - **«Ver en 3D»** sin three.js: un canvas dibuja el tabaco como superficie de revolución (largo, cepo, cabeza
-  redonda o en punta, anilla, color de la capa) con luz simple. Pesa 2,5 KB comprimido y se baja al tocar el botón.
+  redonda, en punta o con colita, anilla, color de la capa) con luz simple. Pesa 2,5 KB comprimido y se baja al tocar el botón.
   Con «reducir movimiento» se ve la silueta.
 - **Códigos de ejemplo** con prefijo GS1 200 (uso interno): no chocan con códigos de productos reales.
 

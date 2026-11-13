@@ -2,7 +2,8 @@
 // los campos del producto, de dónde entra el inventario, la plantilla de contrato,
 // las reglas de comisión por defecto y el tema de color.
 import type { ArrivalStatus, CommissionRule, LineId, ProductKind } from '../data/types';
-import { CAPAS } from '../domain/products';
+import { CABEZAS } from '../domain/cabeza';
+import { CAPAS_ANTIGUAS, CAPAS_OFRECIDAS } from '../domain/products';
 import { CAFE_CONTRACT, TABACO_CONTRACT } from './contract-templates';
 
 /** `kinds`: el campo solo aparece en esos tipos de tabaco (capote y tripa, solo en premium). */
@@ -11,7 +12,13 @@ type FieldBase = { key: string; label: string; required?: boolean; kinds?: Produ
 export type FieldDef =
   | (FieldBase & { kind: 'text'; placeholder?: string; hint?: string; suggestions?: string[] })
   | (FieldBase & { kind: 'number'; unit?: string; step?: number; min?: number; hint?: string })
-  | (FieldBase & { kind: 'select'; options: { value: string; label: string }[] });
+  | (FieldBase & {
+      kind: 'select';
+      options: { value: string; label: string }[];
+      hint?: string;
+      /** Valores que ya no se ofrecen pero se reconocen: al editar un producto que tiene uno, sale «(ya no se usa)». */
+      legacy?: { value: string; label: string }[];
+    });
 
 export interface LineConfig {
   id: LineId;
@@ -82,7 +89,22 @@ export const TABACO: LineConfig = {
     { key: 'vitola', label: 'Vitola', kind: 'text', placeholder: 'Toro, Robusto, Torpedo…', suggestions: VITOLAS, required: true },
     { key: 'lengthIn', label: 'Largo', kind: 'number', unit: 'pulgadas', step: 0.125, min: 3, hint: 'En pulgadas: 6.125 es 6⅛″. Los mm se calculan solos.', required: true },
     { key: 'ringGauge', label: 'Cepo', kind: 'number', unit: '/64″', step: 1, min: 20, hint: 'Grosor en 64avos de pulgada (52 = 52/64″).', required: true },
-    { key: 'capa', label: 'Capa', kind: 'select', options: CAPAS.map((c) => ({ value: c.value, label: c.label })), required: true },
+    {
+      key: 'cabeza',
+      label: 'Cabeza',
+      kind: 'select',
+      options: CABEZAS.map((c) => ({ value: c.value, label: c.label })),
+      hint: 'Automática: con colita si es Behike; en punta si es torpedo, pirámide, figurado, salomón o belicoso.',
+    },
+    // Ronda 5: se ofrecen solo cuatro capas. Las antiguas se siguen leyendo y mostrando.
+    {
+      key: 'capa',
+      label: 'Capa',
+      kind: 'select',
+      options: CAPAS_OFRECIDAS.map((c) => ({ value: c.value, label: c.label })),
+      legacy: CAPAS_ANTIGUAS.map((c) => ({ value: c.value, label: c.label })),
+      required: true,
+    },
     { key: 'strength', label: 'Fortaleza', kind: 'select', options: STRENGTHS, required: true },
     // Opcional (ronda 4): se puede guardar sin procedencia. Si se escribe, nunca Cuba (OFAC).
     { key: 'originCountry', label: 'Procedencia', kind: 'text', placeholder: 'Nicaragua', hint: 'Opcional. Nunca Cuba (embargo de EE. UU.).' },
