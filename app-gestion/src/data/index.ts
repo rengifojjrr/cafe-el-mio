@@ -4,6 +4,8 @@ import type { LineId } from './types';
 import type { CoreRepo, LineRepo } from './repo';
 import { openCoreRepo, openLineRepo } from './local/dexie';
 
+export { sinAnotar } from './local/dexie';
+
 type Backend = 'local' | 'supabase';
 
 function backend(): Backend {

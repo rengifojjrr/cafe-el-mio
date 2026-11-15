@@ -300,6 +300,46 @@ describe('servidor', () => {
     expect(servidor.llamadas.filter((l) => l.includes('tabaco_traer')).length - antes).toBe(4);
   });
 
+  it('si el navegador borra la base de un teléfono conectado, no sube su arranque en blanco y vuelve a bajar todo', async () => {
+    // Lo que hay en el servidor, con un ajuste propio que el teléfono vaciado no puede pisar.
+    await usar(A);
+    const ajustes = (await repo().settings.get('settings'))!;
+    await repo().settings.put({ ...ajustes, companyName: 'Empresa de verdad' });
+    await sincronizar();
+    expect(servidor.vivos().get('settings/settings')).toMatchObject({ companyName: 'Empresa de verdad' });
+    const enServidor = [...servidor.vivos().keys()].filter((k) => k.startsWith('products/')).sort();
+    expect(enServidor.length).toBeGreaterThan(1000);
+
+    // B estaba conectado y al día. El navegador le borra la base (falta de espacio, o borraron los
+    // datos del sitio a medias), pero la conexión y la sesión, que se guardan aparte, quedan.
+    await usar(B);
+    await sincronizar();
+    const vaciado: Telefono = { prefijo: `${B.prefijo}vaciado-`, almacen: B.almacen };
+    await usar(vaciado);
+    expect(vinculo()).not.toBeNull();
+    expect(await repo().products.count()).toBe(0);
+    // Al abrir, la app arranca en blanco: eso no es un cambio de nadie y no se anota para subir.
+    await seedIfNeeded(NOW, { demo: false });
+    expect(await pendientes()).toBe(0);
+    const subidasAntes = servidor.llamadas.filter((l) => l.includes('tabaco_aplicar')).length;
+    await sincronizar();
+    await enCalma();
+    // No subió nada (el servidor no se pisó) y bajó todo otra vez, aunque su cursor ya estaba al día.
+    expect(servidor.llamadas.filter((l) => l.includes('tabaco_aplicar')).length).toBe(subidasAntes);
+    expect(servidor.vivos().get('settings/settings')).toMatchObject({ companyName: 'Empresa de verdad' });
+    expect((await repo().products.all()).map((p) => `products/${p.id}`).sort()).toEqual(enServidor);
+    expect((await repo().settings.get('settings'))?.companyName).toBe('Empresa de verdad');
+    expect(estadoSync().fase).toBe('al-dia');
+    expect(await pendientes()).toBe(0);
+    // Y sigue sincronizando normal: un cambio en A le llega.
+    await usar(A);
+    await repo().products.put(producto('t-prd_1', 'Después del vaciado'));
+    await sincronizar();
+    await usar(vaciado);
+    await sincronizar();
+    expect(await repo().products.get('t-prd_1')).toMatchObject({ name: 'Después del vaciado' });
+  });
+
   it('vaciar la línea en un teléfono conectado borra en el servidor, salvo la auditoría', async () => {
     await usar(B);
     const auditoria = [...servidor.vivos().keys()].filter((k) => k.startsWith('audit/')).length;

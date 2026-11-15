@@ -4,7 +4,7 @@
 // como…». Solo las pruebas automáticas (re)cargan datos de ejemplo.
 import type { DirectoryAccount, LineId, User } from '../data/types';
 import { programLines } from '../lines/programa';
-import { getCoreRepo, getLineRepo } from '../data';
+import { getCoreRepo, getLineRepo, sinAnotar } from '../data';
 import { DEFAULT_ECOSYSTEM_NAME, SEED_VERSION } from '../seed/version';
 import { emitAll } from './bus';
 import { findAccount, seedInWorker } from './session';
@@ -41,8 +41,10 @@ async function blankLines(lines: readonly LineId[], now: Date, name?: string): P
   const admins = new Map<LineId, User>();
   for (const line of lines) {
     const tables = buildBlankLine(line, now);
-    // `load` vacía cada tabla de la línea y deja solo esto (todo o nada).
-    await getLineRepo(line).load(tables);
+    // `load` vacía cada tabla de la línea y deja solo esto (todo o nada). No se anota para subir:
+    // si el teléfono estaba conectado y el navegador le borró la base, lo que vale es lo del
+    // servidor, y la sincronización lo vuelve a bajar entero (ver `bajar` en servidor/sincronizar).
+    await sinAnotar(() => getLineRepo(line).load(tables));
     admins.set(line, (tables.users as User[])[0]!);
   }
   const core = getCoreRepo();

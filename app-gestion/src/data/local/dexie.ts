@@ -70,6 +70,21 @@ export function anotandoCambios(): boolean {
   return anotar;
 }
 
+/**
+ * Corre `fn` sin anotar nada para subir. Para el arranque en blanco que hace la app sola cuando el
+ * teléfono no tiene datos: no es un cambio de nadie y, subido, pisaría lo del servidor (o, si el
+ * teléfono tenía algo, lo borraría allá).
+ */
+export async function sinAnotar<R>(fn: () => Promise<R>): Promise<R> {
+  const antes = anotar;
+  anotar = false;
+  try {
+    return await fn();
+  } finally {
+    anotar = antes;
+  }
+}
+
 /** Avisa cada vez que se anota algo (la sincronización espera un momento y sube). */
 export function alAnotarCambios(fn: () => void): () => void {
   oyentes.add(fn);

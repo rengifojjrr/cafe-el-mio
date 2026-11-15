@@ -342,9 +342,30 @@ async function bajarTodo(): Promise<{ servidor: Map<string, RegistroServidor>; c
   return { servidor, cursor };
 }
 
+/** Las bases de este teléfono que ya se revisaron en esta apertura (ver `bajar`). */
+const revisadas = new WeakSet<Dexie>();
+
 async function bajar(db: Dexie): Promise<void> {
   const inicio = vinculo();
   if (!inicio) return;
+  // Conectado, pero con nada más que el arranque en blanco: el navegador le borró la base (falta
+  // de espacio, o borraron los datos del sitio) y la conexión, que se guarda aparte, quedó. Con
+  // el cursor de antes nunca volvería a bajar lo que ya tenía: se baja todo otra vez. Lo que este
+  // teléfono tiene pendiente de subir no se pisa (`aplicar`). Una vez por apertura, y solo cuando
+  // la app ya terminó de arrancar en blanco (si no, ese arranque borraría lo que baja).
+  if (!revisadas.has(db)) {
+    const ajustes = (await db.table('settings').get('settings')) as { dataMode?: string } | undefined;
+    if (!ajustes) return;
+    if (await soloArranque(db)) {
+      const { servidor, cursor } = await bajarTodo();
+      const cambiados = await aplicar(db, [...servidor.values()]);
+      guardarVinculo({ ...inicio, cursor });
+      revisadas.add(db);
+      if (cambiados) emitChange(PROGRAM_LINE);
+      return;
+    }
+    revisadas.add(db);
+  }
   let v: Vinculo = inicio;
   let cambiados = 0;
   for (;;) {
