@@ -49,6 +49,7 @@ prohibido y comprueban que falla.
 | Mensajes (`message.read/send`) | todos los hilos (escribe donde participa) | sus hilos | sus hilos | — |
 | Comunicados (`announcement.create`) | ✔ | — | — | — |
 | Usuarios, ajustes y auditoría | ✔ | — | — | — |
+| Equipo: zonas con responsable, por vendedor, zona y ciudad (`user.read`; cambiar responsable: `user.manage`) | ✔ | — | — | — |
 | Vista de las dos líneas (`direccion.read`) | — | — | — | ✔ (solo lectura) |
 
 ## Notas

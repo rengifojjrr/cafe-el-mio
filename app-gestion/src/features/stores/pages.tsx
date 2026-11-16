@@ -287,7 +287,8 @@ function StoreForm({ initial }: { initial?: Store }) {
     email: initial?.email ?? '',
     hours: initial?.hours ?? '',
     notes: initial?.notes ?? '',
-    sellerId: initial?.sellerId ?? '',
+    // Vacío: el responsable de la zona. Un vendedor elegido a mano (excepción) se ve elegido.
+    sellerId: initial?.sellerFijo ? initial.sellerId : '',
     permitNumber: initial?.tobaccoPermit?.number ?? '',
     permitExpires: initial?.tobaccoPermit?.expiresOn ?? addDaysToDate(toIsoDate(ctx.now()), 365),
     permitIssuer: initial?.tobaccoPermit?.issuer ?? '',
@@ -315,6 +316,10 @@ function StoreForm({ initial }: { initial?: Store }) {
   const market = marketList.find((m) => m.id === marketId);
   const marketZones = (zones.data ?? []).filter((z) => !marketId || (z.marketId ?? marketList[0]?.id) === marketId);
   const permitIssuer = f.permitIssuer || (marketId === 'houston' ? 'Texas Comptroller' : DEFAULT_PERMIT_ISSUER);
+  // El responsable de la zona elegida (los locales de la zona son suyos, salvo excepciones).
+  const zonaElegida = (zones.data ?? []).find((z) => z.id === f.zoneId);
+  const responsableZona = (sellers.data ?? []).find((x) => x.id === zonaElegida?.sellerId);
+  const sellerNameOf = (id: string) => (sellers.data ?? []).find((x) => x.id === id)?.name ?? 'el de ahora';
 
   const nearestZone = (pt: { lat: number; lng: number }) => {
     let best = '';
@@ -528,7 +533,22 @@ function StoreForm({ initial }: { initial?: Store }) {
               />
             </div>
             {actor.role === 'admin' ? (
-              <SelectInput label="Vendedor responsable" value={f.sellerId} onChange={(e) => set('sellerId', e.target.value)} options={(sellers.data ?? []).map((s) => ({ value: s.id, label: s.name }))} placeholder="Elige el vendedor" />
+              <SelectInput
+                label="Vendedor responsable"
+                value={f.sellerId}
+                onChange={(e) => set('sellerId', e.target.value)}
+                hint={
+                  responsableZona
+                    ? 'Lo normal es el de la zona. Otro vendedor queda como excepción: no cambia si la zona cambia de responsable.'
+                    : f.zoneId
+                      ? 'Esta zona no tiene responsable: elige el vendedor (o dale uno en Usuarios → Zonas).'
+                      : undefined
+                }
+                options={[
+                  { value: '', label: responsableZona ? `El de la zona: ${responsableZona.name}` : f.zoneId ? (initial ? `Como está: ${sellerNameOf(initial.sellerId)}` : 'Elige el vendedor') : 'El de la zona' },
+                  ...(sellers.data ?? []).filter((x) => x.id !== responsableZona?.id).map((x) => ({ value: x.id, label: x.name })),
+                ]}
+              />
             ) : null}
             <TextArea label="Notas" value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Lo que conviene saber de la tienda" />
           </Card>

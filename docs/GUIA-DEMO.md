@@ -155,3 +155,14 @@ una línea real y empezar de nuevo.
 | Un Behike con su colita (lista, ficha, comparar y 3D) | Tabaco · Administración | Catálogo → «Nuevo producto» → De mazo, familia «Behike», vitola Toro 6 × 52 |
 | La capa entre cuatro: Habano, Maduro, Connecticut o Doble Capa; «Cabeza» para forzar la forma | Tabaco · Administración | Catálogo → «Nuevo producto» |
 | Un producto viejo con otra capa sigue igual («Natural (ya no se usa)» al editarlo) | Tabaco · Administración | Catálogo → Torpedo 6⅛ × 52 → Natural → «Editar» |
+
+## Equipo: vendedores, zonas y ciudades
+
+| Quiero ver | Cuenta | Dónde |
+|---|---|---|
+| Por vendedor: sus zonas, sus locales, visitas, ventas y lo que le deben | Tabaco · Administración | Más → Equipo |
+| Cambiar el responsable de una zona (sus locales pasan con él) | Tabaco · Administración | Equipo → Zonas → «Responsable» |
+| Por ciudad: locales, zonas y vendedores | Tabaco · Administración | Equipo → Ciudades |
+| Dar de alta un vendedor con varias zonas (avisa qué pasa antes de guardar) | Tabaco · Administración | Usuarios → «Alta de vendedor» |
+| Un local nuevo es del responsable de su zona | Tabaco · Administración | Locales → «Registrar tienda» → «Vendedor responsable» |
+

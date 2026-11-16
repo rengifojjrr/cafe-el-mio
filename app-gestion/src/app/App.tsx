@@ -21,6 +21,7 @@ const batchPhotos = () => import('../features/catalog/batch-photos');
 const warehouse = () => import('../features/warehouse/WarehousePage');
 const stores = () => import('../features/stores/pages');
 const recorridosPage = () => import('../features/stores/recorridos');
+const equipoPage = () => import('../features/equipo/EquipoPage');
 const contracts = () => import('../features/contracts/pages');
 const contractsHub = () => import('../features/contracts/hub');
 const consignment = () => import('../features/consignment/pages');
@@ -94,6 +95,7 @@ const router = createHashRouter([
           { path: 'locales/:id/visita', element: page(consignment, 'VisitPage') },
           // Recorridos de prospectos: visitar, dejar la información y anotar la del local.
           { path: 'recorridos', element: page(recorridosPage, 'RecorridosPage') },
+          { path: 'equipo', element: page(equipoPage, 'EquipoPage') },
           { path: 'contratos', element: page(contractsHub, 'ContractsHubPage') },
           { path: 'contratos/:id', element: page(contracts, 'ContractPage') },
           { path: 'contratos/:id/imprimir', element: page(contracts, 'ContractPrintPage') },

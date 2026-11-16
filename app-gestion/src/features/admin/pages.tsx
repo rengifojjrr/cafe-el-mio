@@ -5,10 +5,11 @@ import { useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { ROLE_LABEL } from '../../app/nav';
-import type { AuditEntry, CommissionRule, LineSettings, User, Zone } from '../../data/types';
+import type { AuditEntry, CommissionRule, LineSettings, Store as StoreRecord, User, Zone } from '../../data/types';
+import { cambiosAlAsignar } from '../../domain/equipo';
 import { CONTRACT_DISCLAIMER, CONTRACT_VARIABLES, annexText, parseContract, renderTemplate, type ContractBlock } from '../../domain/contract';
 import { addDaysToDate, fmtDate, fmtDateTime, toIsoDate } from '../../lib/time';
-import { listAudit, listUsers, readSettings, saveSettings, saveUser, saveZone, setUserActive } from '../../services/admin';
+import { asignarResponsable, listAudit, listUsers, readSettings, saveSettings, saveUser, saveZone, setUserActive } from '../../services/admin';
 import { listProducts, type ProductView } from '../../services/catalog';
 import { renameWarehouse } from '../../services/inventory';
 import { listStores, listZones } from '../../services/stores';
@@ -70,7 +71,11 @@ function UsersInner() {
   if (users.error) return <ErrorBox error={users.error} />;
 
   const list = users.data ?? [];
-  const zoneName = (id?: string) => zones.data?.find((z) => z.id === id)?.name ?? 'Sin zona';
+  // Las zonas que cubre: las que lo tienen de responsable.
+  const zonasDe = (u: User) => {
+    const nombres = (zones.data ?? []).filter((z) => z.sellerId === u.id).map((z) => z.name);
+    return nombres.length ? nombres.join(', ') : 'Sin zonas';
+  };
   const marketList = markets.data ?? [];
   const sellerMarket = (u: User) => (marketList.length > 1 ? ` · ${marketName(marketList, u.marketId ?? zones.data?.find((z) => z.id === u.zoneId)?.marketId)}` : '');
   const storeName = (id?: string) => stores.data?.find((s) => s.store.id === id)?.store.name ?? 'Local';
@@ -121,7 +126,7 @@ function UsersInner() {
                     </div>
                     <p className="text-sm text-muted">
                       <MapPin className="mr-1 inline h-3.5 w-3.5" aria-hidden />
-                      {zoneName(u.zoneId)}
+                      {zonasDe(u)}
                       {sellerMarket(u)}
                     </p>
                     <SellerCommissionText user={u} lineScheme={lineSettings.data?.commissionScheme} />
@@ -210,8 +215,8 @@ function UsersInner() {
         }
       >
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {(zones.data ?? []).map((z) => {
-            const count = sellers.filter((s) => s.zoneId === z.id).length;
+          {[...(zones.data ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'es')).map((z) => {
+            const responsable = sellers.find((s) => s.id === z.sellerId);
             return (
               <li key={z.id}>
                 <button
@@ -223,9 +228,7 @@ function UsersInner() {
                   <MapPin className="h-5 w-5 flex-none text-accent" aria-hidden />
                   <span className="min-w-0">
                     <span className="block truncate font-semibold text-ink">{z.name}</span>
-                    <span className="block text-sm text-muted">
-                      {count === 0 ? 'Sin vendedor' : count === 1 ? '1 vendedor' : `${count} vendedores`}
-                    </span>
+                    <span className={`block text-sm ${responsable ? 'text-muted' : 'text-warn'}`}>{responsable ? responsable.name : 'Sin responsable'}</span>
                   </span>
                 </button>
               </li>
@@ -234,13 +237,42 @@ function UsersInner() {
         </ul>
       </Section>
 
-      <UserSheet key={editing === 'new' ? 'new' : (editing?.id ?? 'none')} editing={editing} zones={zones.data ?? []} markets={marketList} onClose={() => setEditing(null)} />
-      <ZoneSheet key={zoneEditing === 'new' ? 'new-zone' : (zoneEditing?.id ?? 'no-zone')} editing={zoneEditing} zones={zones.data ?? []} markets={marketList} onClose={() => setZoneEditing(null)} />
+      <UserSheet
+        key={editing === 'new' ? 'new' : (editing?.id ?? 'none')}
+        editing={editing}
+        zones={zones.data ?? []}
+        markets={marketList}
+        stores={(stores.data ?? []).map((v) => v.store)}
+        users={list}
+        onClose={() => setEditing(null)}
+      />
+      <ZoneSheet
+        key={zoneEditing === 'new' ? 'new-zone' : (zoneEditing?.id ?? 'no-zone')}
+        editing={zoneEditing}
+        zones={zones.data ?? []}
+        markets={marketList}
+        sellers={sellers}
+        onClose={() => setZoneEditing(null)}
+      />
     </>
   );
 }
 
-function UserSheet({ editing, zones, markets, onClose }: { editing: User | 'new' | null; zones: Zone[]; markets: Market[]; onClose: () => void }) {
+function UserSheet({
+  editing,
+  zones,
+  markets,
+  stores,
+  users,
+  onClose,
+}: {
+  editing: User | 'new' | null;
+  zones: Zone[];
+  markets: Market[];
+  stores: StoreRecord[];
+  users: User[];
+  onClose: () => void;
+}) {
   const { ctx } = useLine();
   const { run, busy } = useAction();
   const user = editing && editing !== 'new' ? editing : null;
@@ -248,11 +280,16 @@ function UserSheet({ editing, zones, markets, onClose }: { editing: User | 'new'
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
-  const [zoneId, setZoneId] = useState(user?.zoneId ?? '');
   const firstMarket = markets[0]?.id ?? '';
   const zoneMarket = (id: string) => zones.find((z) => z.id === id)?.marketId ?? firstMarket;
-  const [marketId, setMarketId] = useState(user?.marketId ?? (user?.zoneId ? zoneMarket(user.zoneId) : firstMarket));
-  const marketZones = markets.length > 1 ? zones.filter((z) => (z.marketId ?? firstMarket) === marketId) : zones;
+  // Las zonas de las que es responsable (antes había una sola: `zoneId`).
+  const suyas = user ? zones.filter((z) => z.sellerId === user.id).map((z) => z.id) : [];
+  const [zoneIds, setZoneIds] = useState<string[]>(suyas.length ? suyas : user?.zoneId ? [user.zoneId] : []);
+  const [marketId, setMarketId] = useState(user?.marketId ?? (zoneIds[0] ? zoneMarket(zoneIds[0]) : firstMarket));
+  const marketZones = (markets.length > 1 ? zones.filter((z) => (z.marketId ?? firstMarket) === marketId) : [...zones]).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const nombre = (id?: string) => users.find((u) => u.id === id)?.name ?? 'otro vendedor';
+  const cambios = role === 'seller' ? cambiosAlAsignar(zones, stores, user?.id ?? '', zoneIds) : { gana: [], deja: [] };
+  const toggleZona = (id: string) => setZoneIds((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
   const [override, setOverride] = useState<'none' | CommissionRule['type']>(user?.commissionOverride?.type ?? 'none');
   const [value, setValue] = useState<number | ''>(user?.commissionOverride?.value ?? '');
 
@@ -266,7 +303,7 @@ function UserSheet({ editing, zones, markets, onClose }: { editing: User | 'new'
           name,
           email,
           phone,
-          zoneId: zoneId || undefined,
+          zoneIds: role === 'seller' ? zoneIds : undefined,
           marketId: role === 'seller' && markets.length > 1 ? marketId || undefined : undefined,
           commissionOverride: role === 'seller' && override !== 'none' ? { type: override, value: num(value) } : undefined,
           active: user?.active ?? true,
@@ -292,16 +329,43 @@ function UserSheet({ editing, zones, markets, onClose }: { editing: User | 'new'
               value={marketId}
               onChange={(id) => {
                 setMarketId(id);
-                if (zoneId && zoneMarket(zoneId) !== id) setZoneId('');
+                setZoneIds((xs) => xs.filter((x) => zoneMarket(x) === id));
               }}
             />
-            <SelectInput
-              label="Zona"
-              value={zoneId}
-              onChange={(e) => setZoneId(e.target.value)}
-              placeholder="Elige la zona"
-              options={marketZones.map((z) => ({ value: z.id, label: z.name }))}
-            />
+            <fieldset className="grid gap-1">
+              <legend className="field-label mb-1.5">Zonas de las que es responsable</legend>
+              <p className="mb-1 text-sm text-muted">Los locales de esas zonas son suyos (salvo los que asignes a mano a otro).</p>
+              {marketZones.length === 0 ? <p className="text-sm text-warn">No hay zonas en este mercado: agrégalas abajo, en «Zonas».</p> : null}
+              {marketZones.map((z) => {
+                const deOtro = z.sellerId && z.sellerId !== user?.id;
+                return (
+                  <label key={z.id} className="flex min-h-12 items-center gap-3 rounded-xl px-1">
+                    <input type="checkbox" className="h-5 w-5 flex-none accent-[var(--accent)]" checked={zoneIds.includes(z.id)} onChange={() => toggleZona(z.id)} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold text-ink">{z.name}</span>
+                      <span className="block text-sm text-muted">{deOtro ? `Hoy de ${nombre(z.sellerId)}` : z.sellerId ? 'Suya' : 'Sin responsable'}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </fieldset>
+            {cambios.gana.length || cambios.deja.length ? (
+              <div className="rounded-xl bg-surface-2 px-3 py-2 text-sm" aria-live="polite" data-testid="cambios-zonas">
+                <p className="font-semibold text-ink">Al guardar:</p>
+                <ul className="mt-1 grid gap-0.5">
+                  {cambios.gana.map((c) => (
+                    <li key={c.zone.id}>
+                      {c.zone.name}
+                      {c.de ? ` deja de ser de ${nombre(c.de)}` : ''}
+                      {c.locales ? ` · ${c.locales === 1 ? 'pasa 1 local' : `pasan ${c.locales} locales`}` : ' · sin locales que pasar'}
+                    </li>
+                  ))}
+                  {cambios.deja.map((z) => (
+                    <li key={z.id}>{z.name} queda sin responsable (sus locales siguen como están)</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <SelectInput
               label="Comisión"
               value={override}
@@ -333,11 +397,14 @@ function UserSheet({ editing, zones, markets, onClose }: { editing: User | 'new'
   );
 }
 
-function ZoneSheet({ editing, zones, markets, onClose }: { editing: Zone | 'new' | null; zones: Zone[]; markets: Market[]; onClose: () => void }) {
+function ZoneSheet({ editing, zones, markets, sellers, onClose }: { editing: Zone | 'new' | null; zones: Zone[]; markets: Market[]; sellers: User[]; onClose: () => void }) {
   const { ctx } = useLine();
   const { run, busy } = useAction();
   const zone = editing && editing !== 'new' ? editing : null;
   const [marketId, setMarketId] = useState(zone?.marketId ?? markets[0]?.id ?? '');
+  const [responsable, setResponsable] = useState(zone?.sellerId ?? '');
+  const sellerMarket = (u: User) => u.marketId ?? zones.find((z) => z.id === u.zoneId)?.marketId ?? markets[0]?.id;
+  const candidatos = sellers.filter((u) => u.active && (markets.length < 2 || !sellerMarket(u) || sellerMarket(u) === marketId));
   const market = markets.find((m) => m.id === marketId);
   const [name, setName] = useState(zone?.name ?? '');
   const [lat, setLat] = useState<number | ''>(zone?.lat ?? '');
@@ -364,7 +431,11 @@ function ZoneSheet({ editing, zones, markets, onClose }: { editing: Zone | 'new'
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const saved = await run(() => saveZone(ctx, { id: zone?.id, name, lat: num(lat), lng: num(lng), marketId: marketId || undefined }), zone ? 'Zona guardada.' : 'Zona agregada.');
+    const saved = await run(async () => {
+      const z = await saveZone(ctx, { id: zone?.id, name, lat: num(lat), lng: num(lng), marketId: marketId || undefined });
+      if ((zone?.sellerId ?? '') !== responsable) await asignarResponsable(ctx, z.id, responsable || null);
+      return z;
+    }, zone ? 'Zona guardada.' : 'Zona agregada.');
     if (saved) onClose();
   };
 
@@ -373,6 +444,13 @@ function ZoneSheet({ editing, zones, markets, onClose }: { editing: Zone | 'new'
       <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
         <TextInput label="Nombre de la zona" value={name} onChange={(e) => setName(e.target.value)} placeholder="Little River" required />
         <MarketSelect markets={markets} all={false} value={marketId} onChange={setMarketId} />
+        <SelectInput
+          label="Vendedor responsable"
+          value={responsable}
+          onChange={(e) => setResponsable(e.target.value)}
+          hint="Los locales de la zona pasan a él (salvo los asignados a mano a otro)."
+          options={[{ value: '', label: 'Sin responsable' }, ...candidatos.map((u) => ({ value: u.id, label: u.name }))]}
+        />
         <div>
           <p className="field-label mb-1.5">Centro de la zona</p>
           <p className="mb-2 text-sm text-muted">Toca el mapa para poner el punto. Las otras zonas aparecen con sus iniciales.</p>

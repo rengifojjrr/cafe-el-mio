@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import type { Contract, Invoice, Photo, SaleMode, Store, StoreStatus, User } from '../data/types';
 import { permitState, type PermitState } from '../domain/compliance';
+import { vendedorDelLocal } from '../domain/equipo';
 import { DEFAULT_PERMIT_ISSUER, normalizeEin } from '../domain/fiscal';
 import { pointInMarket } from '../domain/markets';
 import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
@@ -353,9 +354,13 @@ export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store>
   const data = storeSchema.parse(input);
   validateRequired(ctx, data, 'prospecto');
   parseTaxId(data.taxId);
-  const sellerId = ctx.actor.role === 'seller' ? ctx.actor.userId : data.sellerId;
-  if (!sellerId) throw new ValidationError('Elige el vendedor responsable de la tienda.');
   return mutate(ctx, async () => {
+    // El vendedor: el responsable de la zona; quien registra (si es vendedor) o el que eligió
+    // Administración, como excepción si no es el responsable.
+    const zone = await ctx.repo.zones.get(data.zoneId);
+    const elegido = ctx.actor.role === 'seller' ? ctx.actor.userId : data.sellerId || undefined;
+    const { sellerId, fijo } = vendedorDelLocal(zone, elegido);
+    if (!sellerId) throw new ValidationError(`${zone ? `La zona ${zone.name}` : 'Esa zona'} no tiene vendedor responsable: elige el vendedor.`);
     const seller = await ctx.repo.users.get(sellerId);
     if (!seller || seller.role !== 'seller') throw new ValidationError('El vendedor no existe en esta línea.');
     const marketId = await resolveLocation(ctx, data);
@@ -374,6 +379,7 @@ export async function registerStore(ctx: Ctx, input: StoreInput): Promise<Store>
       email: data.email,
       hours: data.hours,
       sellerId,
+      ...(fijo ? { sellerFijo: true } : {}),
       status: 'prospecto',
       tobaccoPermit: permitFrom(ctx, data),
       marketId,
@@ -400,6 +406,15 @@ export async function updateStore(ctx: Ctx, storeId: string, input: StoreInput):
     guard(ctx, 'store.update', { type: 'store', store: s });
     validateRequired(ctx, data, s.status);
     const marketId = await resolveLocation(ctx, data);
+    // Administración elige el vendedor («el de la zona» o uno a mano). Quien no es Administración
+    // no lo cambia; si mueve el local a una zona de otro responsable, el local queda como excepción.
+    const zone = await ctx.repo.zones.get(data.zoneId);
+    const asignado = ctx.actor.role === 'admin' ? vendedorDelLocal(zone, data.sellerId || undefined, s) : { sellerId: s.sellerId, fijo: Boolean(zone?.sellerId && zone.sellerId !== s.sellerId) };
+    const sellerId = asignado.sellerId ?? s.sellerId;
+    if (sellerId !== s.sellerId) {
+      const seller = await ctx.repo.users.get(sellerId);
+      if (!seller || seller.role !== 'seller') throw new ValidationError('El vendedor no existe en esta línea.');
+    }
     const next: Store = withFiscal({
       ...s,
       name: data.name,
@@ -416,8 +431,10 @@ export async function updateStore(ctx: Ctx, storeId: string, input: StoreInput):
       notes: data.notes,
       tobaccoPermit: permitFrom(ctx, data, s),
       marketId,
-      sellerId: ctx.actor.role === 'admin' && data.sellerId ? data.sellerId : s.sellerId,
+      sellerId,
+      sellerFijo: asignado.fijo || undefined,
     }, data);
+    if (!next.sellerFijo) delete next.sellerFijo;
     const termsChanged = ctx.actor.role === 'admin' ? await applyTerms(ctx, next, data.terms) : false;
     await ctx.repo.stores.put(next);
     await audit(ctx, 'local.editar', 'store', s.id, `Datos de ${next.name} actualizados`);

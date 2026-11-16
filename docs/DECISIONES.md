@@ -378,3 +378,27 @@ Pedido: «mete el tabaco también, y que quede como separado, que cuando paguemo
   todas las pestañas de la app, y quien la tenía abierta seguía en la vieja aunque recargara (así se vio «Entrar
   como…» después de publicar el servidor). Ahora el service worker se activa apenas se descarga y la página se
   recarga sola; si una pantalla abierta pide un trozo de la versión anterior, también se recarga (una vez).
+
+## Equipo: vendedores, zonas y ciudades (16 de noviembre de 2026)
+
+- **Mercado → Zona, sin más niveles.** Una zona puede ser una ciudad (Sugar Land) o un área (Galleria y Westheimer).
+  La ciudad no se asigna: sale de la dirección de cada local («Sugar Land, TX» y «sugar land» son la misma) y sirve
+  para ver totales. Agregar «área» y «ciudad» como niveles propios daría más cosas que mantener al día y más formas de
+  que no cuadren.
+- **Cada zona tiene un vendedor responsable (`zones.sellerId`) y un vendedor puede tener varias.** La zona decide de
+  quién es cada local: el local nuevo es del responsable de su zona, y si la zona cambia de responsable sus locales
+  pasan al nuevo. Un local asignado a mano a otro vendedor es una excepción (`stores.sellerFijo`): no se mueve con la
+  zona y «Equipo» lo muestra. Una zona que se queda sin responsable no mueve nada: sus locales siguen con quien los
+  tenía hasta que la zona tenga otro.
+- **Las comisiones siguen al local en el momento de la venta**: lo ya ganado no se mueve; lo que se venda después de
+  un cambio de responsable es del nuevo.
+- **Antes de guardar, se dice qué pasa**: al dar zonas a un vendedor, la app avisa qué zonas deja de tener otro y
+  cuántos locales pasan.
+- **«Equipo»** (Administración): por vendedor (sus zonas, locales por estado, prospectos por visitar, visitas de 7
+  días, ventas de 30 días, lo que le deben y los vencidos, los activos sin visita en 30 días), por zona (con su
+  responsable, que se cambia ahí mismo) y por ciudad, en cada mercado. Avisa de las zonas con locales y sin
+  responsable, y de los locales con un vendedor inactivo.
+- **El campo viejo `users.zoneId`** (una sola zona) queda como la zona principal del vendedor, para el mapa.
+- **Los vendedores todavía no entran al servidor** (fase 1: solo Administración y Dirección). Es la parte 2: cada
+  vendedor con su cuenta, viendo solo sus locales y nunca costos, con pruebas de seguridad antes de publicar.
+

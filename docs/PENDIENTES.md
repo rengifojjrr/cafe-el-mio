@@ -162,3 +162,13 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
   equivalencia y se aplica de una vez.
 - **Salomón ahora se dibuja en punta también en la silueta** (antes solo en comparar y en el 3D): es la misma regla para
   todos los dibujos.
+
+## Equipo: vendedores y zonas (16 de noviembre de 2026)
+
+- **Los vendedores todavía no entran con su cuenta** (parte 2): hoy el servidor solo deja entrar a Administración y
+  Dirección. Hasta entonces, «Equipo» muestra lo que se anota desde las cuentas de Administración.
+- **Las zonas cargadas de Houston no tienen responsable todavía**: sus locales están con el vendedor de relleno que se
+  creó para cargarlos. Al dar cada zona a un vendedor de verdad, sus locales pasan a él.
+- **Zona sin responsable:** sus locales se quedan con quien los tenía. Si conviene que pasen a «sin vendedor», hay que
+  decidirlo (hoy todo local tiene un vendedor, porque de eso dependen comisiones y avisos).
+

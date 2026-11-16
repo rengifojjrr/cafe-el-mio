@@ -225,6 +225,11 @@ export interface Store extends Entity {
   hours: string;
   facadePhotoId?: string;
   sellerId: string;
+  /**
+   * El vendedor se eligió a mano y no es el responsable de la zona (una excepción). Sin esto, el
+   * local sigue a su zona: si la zona cambia de responsable, el local pasa al nuevo.
+   */
+  sellerFijo?: boolean;
   status: StoreStatus;
   tobaccoPermit?: TobaccoPermit;
   /** Si falta, consignación. */
@@ -585,6 +590,7 @@ export interface User extends Entity {
   name: string;
   email: string;
   phone: string;
+  /** Vendedor: su zona principal (para el mapa). Las zonas que cubre son las que tienen su `sellerId`. */
   zoneId?: string;
   storeId?: string;
   /** Vendedor: comisión especial que reemplaza la de cada producto (si se pone). */
@@ -602,6 +608,8 @@ export interface Zone extends Entity {
   lat: number;
   lng: number;
   marketId?: string;
+  /** Vendedor responsable de la zona: los locales de la zona son suyos (salvo los `sellerFijo`). */
+  sellerId?: string;
 }
 
 /** Mercado (Miami, Houston…): agrupa zonas, locales y vendedores. */

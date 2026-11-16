@@ -1,6 +1,7 @@
 // Usuarios y zonas, ajustes de la línea y auditoría (solo administración).
 import { z } from 'zod';
-import type { AuditEntry, LineSettings, User, Zone } from '../data/types';
+import type { AuditEntry, LineSettings, Store, User, Zone } from '../data/types';
+import { cambiosAlAsignar } from '../domain/equipo';
 import { templateVariables } from '../domain/contract';
 import { marketsOf, pointInMarket } from '../domain/markets';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
@@ -29,8 +30,11 @@ const userSchema = z.object({
   name: z.string().trim().min(3, 'Escribe el nombre completo.'),
   email: z.union([z.literal(''), z.string().trim().email('Escribe un correo válido.')]),
   phone: z.string().trim().max(20, 'El teléfono es demasiado largo.').default(''),
+  /** Forma vieja (una sola zona): equivale a `zoneIds: [zoneId]`. */
   zoneId: z.string().optional(),
-  /** Vendedor: su mercado (si falta, el de su zona). */
+  /** Vendedor: las zonas de las que queda responsable (todas de su mercado). Reemplaza las que tenía. */
+  zoneIds: z.array(z.string()).optional(),
+  /** Vendedor: su mercado (si falta, el de sus zonas). */
   marketId: z.string().optional(),
   commissionOverride: ruleSchema.optional(),
   active: z.boolean().default(true),
@@ -40,24 +44,35 @@ const userSchema = z.object({
 export async function saveUser(ctx: Ctx, input: z.input<typeof userSchema>): Promise<User> {
   guard(ctx, 'user.manage');
   const data = userSchema.parse(input);
-  if (data.role === 'seller' && !data.zoneId) throw new ValidationError('Elige la zona del vendedor.');
+  const zoneIds = data.role === 'seller' ? [...new Set(data.zoneIds ?? (data.zoneId ? [data.zoneId] : []))] : [];
+  if (data.role === 'seller' && zoneIds.length === 0) throw new ValidationError('Elige al menos una zona del vendedor.');
   return mutate(ctx, async () => {
     const prev = data.id ? await ctx.repo.users.get(data.id) : undefined;
     if (data.id && !prev) throw new NotFoundError('el usuario');
+    const markets = marketsOf(await getSettings(ctx));
+    const zones = await ctx.repo.zones.all();
+    const elegidas = zoneIds.map((id) => {
+      const zone = zones.find((z) => z.id === id);
+      if (!zone) throw new NotFoundError('la zona');
+      return zone;
+    });
+    const mercadoDe = (z: Zone) => z.marketId ?? markets[0]!.id;
     let marketId = data.role === 'seller' ? (data.marketId ?? prev?.marketId) : undefined;
     if (marketId) {
-      const markets = marketsOf(await getSettings(ctx));
       if (!markets.some((m) => m.id === marketId)) throw new ValidationError('Ese mercado no existe en la línea.');
-      const zone = data.zoneId ? await ctx.repo.zones.get(data.zoneId) : undefined;
-      if (zone && (zone.marketId ?? markets[0]!.id) !== marketId) throw new ValidationError('La zona elegida es de otro mercado.');
-    } else marketId = undefined;
+      if (elegidas.some((z) => mercadoDe(z) !== marketId)) throw new ValidationError('La zona elegida es de otro mercado.');
+    } else {
+      marketId = undefined;
+      if (new Set(elegidas.map(mercadoDe)).size > 1) throw new ValidationError('Las zonas de un vendedor tienen que ser del mismo mercado.');
+    }
     const user: User = {
       id: prev?.id ?? ctx.newId('usr'),
       role: data.role,
       name: data.name,
       email: data.email,
       phone: data.phone,
-      zoneId: data.zoneId,
+      // La zona principal (para el mapa): la primera que se eligió.
+      zoneId: data.role === 'seller' ? zoneIds[0] : undefined,
       commissionOverride: data.role === 'seller' ? data.commissionOverride : undefined,
       // Lo de la ronda 3 que se edita en otras pantallas se conserva al guardar.
       commissionScheme: data.role === 'seller' ? prev?.commissionScheme : undefined,
@@ -67,9 +82,92 @@ export async function saveUser(ctx: Ctx, input: z.input<typeof userSchema>): Pro
     };
     if (!user.commissionScheme) delete user.commissionScheme;
     if (!user.marketId) delete user.marketId;
+    if (!user.zoneId) delete user.zoneId;
     await ctx.repo.users.put(user);
     await audit(ctx, prev ? 'usuario.editar' : 'usuario.crear', 'user', user.id, `${prev ? 'Editado' : 'Alta de'} ${user.role === 'seller' ? 'vendedor' : 'administración'}: ${user.name}`);
+    if (user.role === 'seller') await asignarZonas(ctx, user, zoneIds, zones);
     return user;
+  });
+}
+
+/**
+ * Deja a `seller` responsable exactamente de `zoneIds`. Las zonas que gana se le quitan a quien las
+ * tenía y sus locales pasan a él (salvo los asignados a mano a otro). Las que deja quedan sin
+ * responsable: sus locales siguen con quien los tiene hasta que la zona tenga otro. Va dentro de un
+ * `mutate`.
+ */
+async function asignarZonas(ctx: Ctx, seller: User, zoneIds: readonly string[], zones: readonly Zone[]): Promise<void> {
+  const stores = await ctx.repo.stores.all();
+  const { gana, deja } = cambiosAlAsignar(zones, stores, seller.id, zoneIds);
+  let movidos = 0;
+  for (const c of gana) {
+    await ctx.repo.zones.put({ ...c.zone, sellerId: seller.id });
+    movidos += await moverLocales(ctx, stores, c.zone.id, seller.id);
+  }
+  for (const z of deja) {
+    const { sellerId: _antes, ...sinResponsable } = z;
+    await ctx.repo.zones.put(sinResponsable);
+  }
+  if (gana.length || deja.length) {
+    const partes = [
+      gana.length ? `responsable de ${gana.map((c) => c.zone.name).join(', ')}` : '',
+      movidos ? `${movidos === 1 ? 'pasa 1 local' : `pasan ${movidos} locales`}` : '',
+      deja.length ? `deja ${deja.map((z) => z.name).join(', ')} (sin responsable)` : '',
+    ].filter(Boolean);
+    await audit(ctx, 'zona.responsable', 'user', seller.id, `${seller.name}: ${partes.join('; ')}`);
+  }
+}
+
+/** Los locales de la zona que siguen a la zona (no asignados a mano) pasan a `sellerId`. Devuelve cuántos. */
+async function moverLocales(ctx: Ctx, stores: readonly Store[], zoneId: string, sellerId: string): Promise<number> {
+  let n = 0;
+  for (const s of stores) {
+    if (s.zoneId !== zoneId) continue;
+    if (s.sellerFijo) {
+      // Asignado a mano a este mismo vendedor: ya no es una excepción.
+      if (s.sellerId === sellerId) {
+        const { sellerFijo: _f, ...normal } = s;
+        await ctx.repo.stores.put(normal);
+      }
+      continue;
+    }
+    if (s.sellerId === sellerId) continue;
+    await ctx.repo.stores.put({ ...s, sellerId });
+    n += 1;
+  }
+  return n;
+}
+
+/**
+ * Cambia el responsable de una zona (o la deja sin responsable con `null`). Sus locales pasan al
+ * nuevo responsable, salvo los asignados a mano a otro. Devuelve cuántos locales pasaron.
+ */
+export async function asignarResponsable(ctx: Ctx, zoneId: string, sellerId: string | null): Promise<{ zone: Zone; movidos: number }> {
+  guard(ctx, 'user.manage');
+  return mutate(ctx, async () => {
+    const zone = await ctx.repo.zones.get(zoneId);
+    if (!zone) throw new NotFoundError('la zona');
+    const markets = marketsOf(await getSettings(ctx));
+    const mercadoZona = zone.marketId ?? markets[0]!.id;
+    if (!sellerId) {
+      if (!zone.sellerId) return { zone, movidos: 0 };
+      const { sellerId: _antes, ...sinResponsable } = zone;
+      await ctx.repo.zones.put(sinResponsable);
+      await audit(ctx, 'zona.responsable', 'zone', zone.id, `${zone.name} queda sin responsable`);
+      return { zone: sinResponsable, movidos: 0 };
+    }
+    const seller = await ctx.repo.users.get(sellerId);
+    if (!seller || seller.role !== 'seller') throw new ValidationError('El vendedor no existe en esta línea.');
+    if (!seller.active) throw new ValidationError(`${seller.name} está inactivo: actívalo antes de darle una zona.`);
+    const zones = await ctx.repo.zones.all();
+    const mercadoVendedor = seller.marketId ?? zones.find((z) => z.id === seller.zoneId)?.marketId ?? (seller.zoneId ? markets[0]!.id : undefined);
+    if (mercadoVendedor && mercadoVendedor !== mercadoZona) throw new ValidationError(`${seller.name} trabaja en otro mercado.`);
+    const next: Zone = { ...zone, sellerId };
+    await ctx.repo.zones.put(next);
+    const movidos = zone.sellerId === sellerId ? 0 : await moverLocales(ctx, await ctx.repo.stores.all(), zone.id, sellerId);
+    if (!seller.zoneId) await ctx.repo.users.put({ ...seller, zoneId: zone.id });
+    await audit(ctx, 'zona.responsable', 'zone', zone.id, `${zone.name}: responsable ${seller.name}${movidos ? ` (${movidos === 1 ? 'pasa 1 local' : `pasan ${movidos} locales`})` : ''}`);
+    return { zone: next, movidos };
   });
 }
 

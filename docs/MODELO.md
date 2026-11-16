@@ -20,7 +20,7 @@ Tipos en `app-gestion/src/data/types.ts`; esquema Dexie en `src/data/local/dexie
 | `lots` | Lotes: producto, costo por unidad, llegada de origen; en café, tostado, «consumir antes de» y línea de producción. | `productId`, `arrivalId` |
 | `arrivals` | Llegadas con sus ítems. Tabaco: producción → tránsito → aduana → recibida. Café: programado → tostado → en almacén. | `status` |
 | `movements` | **El libro.** Entrada, salida a consignación, venta reportada, devolución, merma y ajuste; cada uno con lote, cantidad, de dónde y a dónde. | `productId`, `storeId`, `at`, `type` |
-| `stores` | Locales: datos, punto en el mapa, vendedor, zona, estado (prospecto → contrato enviado → firmado → activo → pausado/cerrado) e historial; en tabaco, permiso de venta; las visitas de recorrido mientras es prospecto (`prospectVisits`: qué pasó y una nota). Un prospecto puede no tener encargado, teléfono ni permiso: se piden antes del contrato. | `sellerId`, `status`, `zoneId` |
+| `stores` | Locales: datos, punto en el mapa, vendedor (el responsable de su zona; `sellerFijo` si se asignó a mano a otro), zona, estado (prospecto → contrato enviado → firmado → activo → pausado/cerrado) e historial; en tabaco, permiso de venta; las visitas de recorrido mientras es prospecto (`prospectVisits`: qué pasó y una nota). Un prospecto puede no tener encargado, teléfono ni permiso: se piden antes del contrato. | `sellerId`, `status`, `zoneId` |
 | `contracts` | Contrato por local y versión: texto resuelto, anexo de productos, firmas (trazo, nombre, fecha y hora, ubicación). | `storeId` |
 | `deliveries` | Notas de entrega en consignación: solicitada → preparada → entregada (o rechazada), con lo preparado y la firma de quien recibe. | `storeId`, `sellerId`, `status` |
 | `visits` | Visitas con conteo (esperado y contado por producto) y ubicación si la dan. | `storeId`, `sellerId`, `at` |
@@ -36,7 +36,7 @@ Tipos en `app-gestion/src/data/types.ts`; esquema Dexie en `src/data/local/dexie
 | `announcements` | Comunicados de administración (a vendedores, a locales o a todos). | `at` |
 | `notifications` | La campana de cada usuario. | `userId`, `at` |
 | `users` | Administración, vendedores (zona y comisión especial) y cuentas de los locales. | `role`, `storeId` |
-| `zones` | Zonas con su centro. | — |
+| `zones` | Zonas con su centro, su mercado y su vendedor responsable (`sellerId`): los locales de la zona son suyos. | `sellerId` |
 | `settings` | Ajustes de la línea: empresa, frecuencia de liquidación, plazo de pago, regla de comisiones, umbrales, plantilla de contrato y su versión. | — |
 | `audit` | **Solo se agrega**: quién hizo qué y cuándo. El repositorio no tiene ni actualizar ni borrar. | `seq`, `at`, `actorId` |
 

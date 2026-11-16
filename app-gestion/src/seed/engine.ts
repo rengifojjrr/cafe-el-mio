@@ -1002,6 +1002,20 @@ export function simulateLine(def: LineSeedDef, now: Date): SeedTables {
     }
   }
 
+  // ---------- Responsable de cada zona ----------
+  // El vendedor que tiene los locales de la zona (o, si no tiene locales, el que vive en ella).
+  for (const zone of zones) {
+    const porVendedor = new Map<string, number>();
+    for (const st of stores) if (st.zoneId === zone.id) porVendedor.set(st.sellerId, (porVendedor.get(st.sellerId) ?? 0) + 1);
+    const masLocales = [...porVendedor.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const responsable = masLocales ?? users.find((u) => u.role === 'seller' && u.zoneId === zone.id)?.id;
+    if (responsable) zone.sellerId = responsable;
+  }
+  for (const st of stores) {
+    const responsable = zones.find((z) => z.id === st.zoneId)?.sellerId;
+    if (responsable && responsable !== st.sellerId) st.sellerFijo = true;
+  }
+
   return {
     products,
     photos: [],
