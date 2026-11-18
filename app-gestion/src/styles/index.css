@@ -88,6 +88,16 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: clip;
+    /* Un correo o un nombre sin espacios baja de línea antes que ensanchar la pantalla. */
+    overflow-wrap: break-word;
+  }
+  /*
+   * Una celda de grid nunca agranda la pantalla. Sin esto, un texto largo que no se parte (un correo
+   * con «truncate», el nombre largo de un local) hace la columna tan ancha como el texto y, en el
+   * teléfono, Chrome aleja toda la página (pasó en Usuarios y en Mapa con los datos de verdad).
+   */
+  :where(.grid) > * {
+    min-width: 0;
   }
   h1,
   h2,

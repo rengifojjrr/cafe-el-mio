@@ -19,6 +19,8 @@ interface UsuarioFalso {
   /** Cuenta creada por una invitación del programa (se le puede poner contraseña nueva). */
   programa: boolean;
   cuenta: CuentaFalsa | null;
+  /** La última vez que entró con su contraseña (como lo anota el servidor de verdad). */
+  ultimaEntrada?: string;
 }
 
 interface Fila {
@@ -117,6 +119,12 @@ export class ServidorFalso {
     return [...this.usuarios.values()].find((u) => u.id === id);
   }
 
+  /** Carga registros directo en el servidor (como si otro teléfono los hubiera subido). */
+  sembrar(filas: { tabla: string; id: string; datos: Record<string, unknown> }[]): void {
+    const tx = ++this.tx;
+    for (const f of filas) this.registros.set(`${f.tabla}/${f.id}`, { tabla: f.tabla, id: f.id, datos: f.datos, borrado: false, tx });
+  }
+
   /** Lo vivo del servidor: «tabla/id» → datos. */
   vivos(): Map<string, Record<string, unknown>> {
     const out = new Map<string, Record<string, unknown>>();
@@ -170,6 +178,7 @@ export class ServidorFalso {
     if (grant === 'password') {
       usuario = this.usuarios.get((body.email ?? '').toLowerCase());
       if (!usuario || usuario.clave !== body.password) return json(400, { code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' });
+      usuario.ultimaEntrada = new Date().toISOString();
     } else if (grant === 'refresh_token') {
       const id = this.renovaciones.get(body.refresh_token ?? '');
       if (!id) return json(400, { code: 400, error_code: 'refresh_token_not_found', msg: 'Invalid Refresh Token: Refresh Token Not Found' });
@@ -374,7 +383,7 @@ export class ServidorFalso {
     return {
       cuentas: [...this.usuarios.values()]
         .filter((u) => u.cuenta)
-        .map((u) => ({ usuario: u.id, nombre: u.cuenta!.nombre, rol: u.cuenta!.rol, correo: u.correo, activa: u.cuenta!.activa, usuario_app: u.cuenta!.usuario_app, yo: u.id === yo!.id, ultima_entrada: null })),
+        .map((u) => ({ usuario: u.id, nombre: u.cuenta!.nombre, rol: u.cuenta!.rol, correo: u.correo, activa: u.cuenta!.activa, usuario_app: u.cuenta!.usuario_app, yo: u.id === yo!.id, ultima_entrada: u.ultimaEntrada ?? null })),
       invitaciones: this.invitaciones
         .filter((i) => !i.usada && !i.anulada)
         .map((i) => ({ id: i.id, nombre: i.nombre, correo: i.correo, rol: i.rol, creada_en: new Date().toISOString(), vence_en: new Date(i.vence).toISOString(), estado: this.estado(i) })),

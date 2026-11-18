@@ -55,7 +55,7 @@ export function AccesosCard() {
         <ul className="grid gap-2" aria-label="Cuentas con acceso">
           {d.cuentas.map((c) => (
             <li key={c.usuario} className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface-2 px-4 py-3">
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0 flex-1 basis-56">
                 <span className="block font-bold text-ink">
                   {c.nombre || c.correo} {c.yo ? <span className="text-sm font-normal text-muted">(tú)</span> : null}
                 </span>
@@ -74,7 +74,7 @@ export function AccesosCard() {
           ))}
           {d.invitaciones.map((i) => (
             <li key={i.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-line px-4 py-3">
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0 flex-1 basis-56">
                 <span className="block font-bold text-ink">{i.nombre}</span>
                 <span className="block truncate text-sm text-muted">
                   {ROL[i.rol]} · {i.correo} · {i.estado === 'vigente' ? `invitación hasta el ${fmtDate(i.vence_en)}` : 'la invitación venció'}

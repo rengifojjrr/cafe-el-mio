@@ -402,3 +402,12 @@ Pedido: «mete el tabaco también, y que quede como separado, que cuando paguemo
 - **Los vendedores todavía no entran al servidor** (fase 1: solo Administración y Dirección). Es la parte 2: cada
   vendedor con su cuenta, viendo solo sus locales y nunca costos, con pruebas de seguridad antes de publicar.
 
+## Pantallas en el teléfono con datos de verdad (18 de noviembre de 2026)
+
+- **Una celda de grid nunca agranda la pantalla** (`:where(.grid) > * { min-width: 0 }` en los estilos de base) y las
+  palabras muy largas bajan de línea (`overflow-wrap: break-word` en el cuerpo). Sin eso, un texto que no se parte (un
+  correo con «truncate», el nombre largo de un local) hacía la columna tan ancha como el texto y Chrome alejaba toda
+  la página: pasó en Usuarios y en Mapa con los datos del dueño, no con los de ejemplo.
+- **La prueba de ancho corre también con el servidor y con datos largos** (`telefono-servidor.spec.ts`): las cosas que
+  solo existen con el servidor (la lista de accesos con el correo y la última entrada) no salen en la demo.
+
