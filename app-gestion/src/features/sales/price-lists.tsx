@@ -1,6 +1,6 @@
 // Ajustes → «Listas de precios»: «Público (PVP)», «Local», «Mayorista» y las que se creen. Por producto,
 // precio escrito o % sobre el costo, por unidad y por caja, y precio «desde N cajas». Lo que no está en
-// la lista sale del % de toda la lista o, si no hay, del precio al local del producto.
+// la lista sale del % de toda la lista o, si no hay, del precio base del producto.
 import { Pencil, Plus, Save, Tags, Trash2 } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import type { PriceEntry, PriceList, Product } from '../../data/types';
@@ -60,7 +60,7 @@ function PriceLists() {
                 {PRICE_LIST_KIND_LABEL[l.kind]} · {l.entriesCount} precio{l.entriesCount === 1 ? '' : 's'} propios · {l.stores} local{l.stores === 1 ? '' : 'es'}
               </p>
               <p className="text-sm text-muted">
-                Lo demás: {l.defaultMarkupPercent !== undefined ? `${l.defaultMarkupPercent} % sobre el costo` : l.kind === 'pvp' ? 'el PVP del producto' : 'el precio al local del producto'}
+                Lo demás: {l.defaultMarkupPercent !== undefined ? `${l.defaultMarkupPercent} % sobre el costo` : l.kind === 'pvp' ? 'el PVP del producto' : 'el precio base del producto'}
               </p>
               <div className="mt-1 flex flex-wrap gap-2">
                 <Button variant={current?.id === l.id ? 'primary' : 'secondary'} icon={Tags} onClick={() => setPicked(l.id)} aria-pressed={current?.id === l.id}>
@@ -121,7 +121,7 @@ function ListSheet({ editing, onClose, onSaved }: { editing: PriceListView | 'ne
           onValue={setMarkup}
           min={0}
           step={0.5}
-          hint="Vacío: lo que no está en la lista va al precio al local del producto (o al PVP, en la lista de PVP)."
+          hint="Vacío: lo que no está en la lista va al precio base del producto (o al PVP, en la lista de PVP). El precio que el vendedor le pone a un local manda sobre su lista."
         />
         <label className="flex min-h-11 items-center gap-3">
           <input type="checkbox" className="h-5 w-5" checked={active} onChange={(e) => setActive(e.target.checked)} />

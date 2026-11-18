@@ -4,7 +4,7 @@
 import { BookOpen, Crown, Package, Save } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import type { CommissionRule, Product, ProductKind } from '../../data/types';
+import type { Product, ProductCommissionRule, ProductKind } from '../../data/types';
 import { headShape } from '../../domain/cabeza';
 import { capaShade, composeName, sizeText, variantLabelFor } from '../../domain/products';
 import type { FieldDef } from '../../lines/config';
@@ -34,7 +34,7 @@ interface FormState {
   priceToStore: Num;
   boxPrice: Num;
   suggestedRetail: Num;
-  ruleType: CommissionRule['type'];
+  ruleType: ProductCommissionRule['type'];
   ruleValue: Num;
   /** Comisión propia: manda aunque el vendedor tenga comisión progresiva. */
   commissionCustom: boolean;
@@ -44,7 +44,7 @@ interface FormState {
   attrs: Record<string, string | number>;
 }
 
-function initialState(pr: Product | undefined, opts: { line: 'tabaco' | 'cafe'; prefix: string; rule: CommissionRule; low: number; copy: boolean }): FormState {
+function initialState(pr: Product | undefined, opts: { line: 'tabaco' | 'cafe'; prefix: string; rule: ProductCommissionRule; low: number; copy: boolean }): FormState {
   const isCopy = opts.copy && pr;
   const attrs = { ...(pr?.attrs ?? {}) };
   if (isCopy) delete attrs.capa;
@@ -267,7 +267,14 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
           <Card className="grid gap-4 p-4 sm:p-5">
             <h2 className="font-bold">Precios y comisiones</h2>
             <div className="grid grid-cols-2 gap-3">
-              <NumberInput label={`Precio al local por ${unitWord}`} step={0.01} min={0} value={f.priceToStore} onValue={(v) => set('priceToStore', v)} />
+              <NumberInput
+                label={`Precio base por ${unitWord}`}
+                hint="Lo mínimo que paga un local. Su vendedor le pone su precio (en la ficha del local); con la comisión por diferencia, gana lo que cobre por encima."
+                step={0.01}
+                min={0}
+                value={f.priceToStore}
+                onValue={(v) => set('priceToStore', v)}
+              />
               <NumberInput label="Precio por caja" step={0.01} min={0} value={f.boxPrice} onValue={(v) => set('boxPrice', v)} hint={boxDefault !== null ? `Vacío: ${fmtMoney(boxDefault)}` : 'Si la caja tiene otro precio'} />
               <NumberInput label={`PVP sugerido por ${unitWord}`} step={0.01} min={0} value={f.suggestedRetail} onValue={(v) => set('suggestedRetail', v)} />
               <div className="field">
@@ -280,9 +287,9 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
               <SelectInput
                 label="Comisión del vendedor"
                 value={f.ruleType}
-                onChange={(e) => set('ruleType', e.target.value as CommissionRule['type'])}
+                onChange={(e) => set('ruleType', e.target.value as ProductCommissionRule['type'])}
                 options={[
-                  { value: 'percent', label: '% del precio al local' },
+                  { value: 'percent', label: '% de lo que paga el local' },
                   { value: 'fixed', label: `Fija por ${unitWord} (USD)` },
                 ]}
               />

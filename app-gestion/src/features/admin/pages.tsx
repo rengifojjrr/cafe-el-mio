@@ -5,7 +5,7 @@ import { useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { ROLE_LABEL } from '../../app/nav';
-import type { AuditEntry, CommissionRule, LineSettings, Store as StoreRecord, User, Zone } from '../../data/types';
+import type { AuditEntry, CommissionRule, LineSettings, ProductCommissionRule, Store as StoreRecord, User, Zone } from '../../data/types';
 import { cambiosAlAsignar } from '../../domain/equipo';
 import { CONTRACT_DISCLAIMER, CONTRACT_VARIABLES, annexText, parseContract, renderTemplate, type ContractBlock } from '../../domain/contract';
 import { addDaysToDate, fmtDate, fmtDateTime, toIsoDate } from '../../lib/time';
@@ -290,7 +290,8 @@ function UserSheet({
   const nombre = (id?: string) => users.find((u) => u.id === id)?.name ?? 'otro vendedor';
   const cambios = role === 'seller' ? cambiosAlAsignar(zones, stores, user?.id ?? '', zoneIds) : { gana: [], deja: [] };
   const toggleZona = (id: string) => setZoneIds((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
-  const [override, setOverride] = useState<'none' | CommissionRule['type']>(user?.commissionOverride?.type ?? 'none');
+  // Los vendedores nuevos ganan la diferencia sobre el precio base (lo que cobran por encima).
+  const [override, setOverride] = useState<'none' | CommissionRule['type']>(user ? (user.commissionOverride?.type ?? 'none') : 'diferencia');
   const [value, setValue] = useState<number | ''>(user?.commissionOverride?.value ?? '');
 
   const submit = async (e: FormEvent) => {
@@ -305,7 +306,8 @@ function UserSheet({
           phone,
           zoneIds: role === 'seller' ? zoneIds : undefined,
           marketId: role === 'seller' && markets.length > 1 ? marketId || undefined : undefined,
-          commissionOverride: role === 'seller' && override !== 'none' ? { type: override, value: num(value) } : undefined,
+          commissionOverride:
+            role !== 'seller' || override === 'none' ? undefined : override === 'diferencia' ? { type: 'diferencia', value: 0 } : { type: override, value: num(value) },
           active: user?.active ?? true,
         }),
       user ? 'Cambios guardados.' : 'Vendedor dado de alta.',
@@ -370,14 +372,19 @@ function UserSheet({
               label="Comisión"
               value={override}
               onChange={(e) => setOverride(e.target.value as typeof override)}
-              hint="Lo normal es «según cada producto». Una comisión especial reemplaza la de todos los productos para este vendedor."
+              hint={
+                override === 'diferencia'
+                  ? 'Le pone el precio a cada local y gana lo que cobre por encima del precio base de cada producto. Nunca menos que el base.'
+                  : 'Una comisión especial reemplaza la de todos los productos para este vendedor.'
+              }
               options={[
+                { value: 'diferencia', label: 'La diferencia sobre el precio base' },
                 { value: 'none', label: 'Según cada producto' },
-                { value: 'percent', label: 'Especial: % del precio al local' },
+                { value: 'percent', label: 'Especial: % de lo que paga el local' },
                 { value: 'fixed', label: 'Especial: monto fijo por unidad' },
               ]}
             />
-            {override !== 'none' ? (
+            {override === 'percent' || override === 'fixed' ? (
               <NumberInput
                 label={override === 'percent' ? 'Porcentaje' : 'Monto por unidad (USD)'}
                 value={value}
@@ -527,7 +534,7 @@ function SettingsForm({ settings, products }: { settings: LineSettings; products
   const [settlementEveryDays, setSettlementEveryDays] = useState<number | ''>(settings.settlementEveryDays);
   const [paymentTermsDays, setPaymentTermsDays] = useState<number | ''>(settings.paymentTermsDays);
   const [payableOn, setPayableOn] = useState<LineSettings['commissionPayableOn']>(settings.commissionPayableOn);
-  const [ruleType, setRuleType] = useState<CommissionRule['type']>(settings.defaultSellerCommission.type);
+  const [ruleType, setRuleType] = useState<ProductCommissionRule['type']>(settings.defaultSellerCommission.type);
   const [ruleValue, setRuleValue] = useState<number | ''>(settings.defaultSellerCommission.value);
   const [defaultLowStock, setDefaultLowStock] = useState<number | ''>(settings.defaultLowStock);
   const [expiryWarningDays, setExpiryWarningDays] = useState<number | ''>(settings.expiryWarningDays);
@@ -651,10 +658,10 @@ function SettingsForm({ settings, products }: { settings: LineSettings; products
               <SelectInput
                 label="Comisión por defecto"
                 value={ruleType}
-                onChange={(e) => setRuleType(e.target.value as CommissionRule['type'])}
+                onChange={(e) => setRuleType(e.target.value as ProductCommissionRule['type'])}
                 hint="Se propone al crear productos nuevos."
                 options={[
-                  { value: 'percent', label: '% del precio al local' },
+                  { value: 'percent', label: '% de lo que paga el local' },
                   { value: 'fixed', label: 'Monto fijo por unidad' },
                 ]}
               />

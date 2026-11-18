@@ -1,17 +1,18 @@
 // Listas de precios: cuánto paga un local por un producto, por unidad (mazo, tabaco o unidad)
 // o por caja. Funciones puras: las usan la factura en firme, la venta rápida, el catálogo y la semilla.
-import type { PriceEntry, PriceList, Product, SalePack } from '../data/types';
+import type { PriceEntry, PriceList, Product, SalePack, Store } from '../data/types';
 import { round2 } from '../lib/money';
 
 /** De dónde salió el precio. */
-export type PriceSource = 'lista' | 'margen' | 'margen_lista' | 'pvp' | 'producto';
+export type PriceSource = 'lista' | 'margen' | 'margen_lista' | 'pvp' | 'producto' | 'local';
 
 export const PRICE_SOURCE_LABEL: Record<PriceSource, string> = {
   lista: 'Precio escrito en la lista',
   margen: '% sobre el costo',
   margen_lista: '% sobre el costo de toda la lista',
   pvp: 'PVP del producto',
-  producto: 'Precio al local del producto',
+  producto: 'Precio base del producto',
+  local: 'Precio de su vendedor para este local',
 };
 
 export const PRICE_LIST_KIND_LABEL: Record<PriceList['kind'], string> = {
@@ -95,6 +96,27 @@ export function priceFor(product: PricedProduct, list: PricingList | null | unde
     volume = true;
   }
   return { unit, box, price: pack === 'caja' ? box : unit, pack, source, volume };
+}
+
+/**
+ * Precio para un local: el que le puso su vendedor (por unidad; la caja es unidad × unidades por
+ * caja) si lo tiene y no es menor que el precio base; si no, el de su lista. Lo usan la factura en
+ * firme y las pantallas que muestran lo que paga un local, para que digan lo mismo.
+ */
+export function priceForStore(
+  product: PricedProduct,
+  store: Pick<Store, 'precios'> | undefined,
+  list: PricingList | null | undefined,
+  opts: { pack?: SalePack; qty?: number } = {},
+): PriceQuote {
+  const propio = store?.precios?.[product.id];
+  if (propio !== undefined && Number.isFinite(propio) && propio >= product.priceToStore) {
+    const unit = round2(propio);
+    const box = round2(unit * Math.max(1, product.packSize));
+    const pack = opts.pack ?? 'unidad';
+    return { unit, box, price: pack === 'caja' ? box : unit, pack, source: 'local', volume: false };
+  }
+  return priceFor(product, list, opts);
 }
 
 /** Importe de una línea: cantidad (en su presentación) × precio. */

@@ -4,7 +4,8 @@ import { z } from 'zod';
 import type { Contract, ContractAnnexItem, Signature, Store, User } from '../data/types';
 import { annexText, renderTemplate } from '../domain/contract';
 import { permitState } from '../domain/compliance';
-import { storeEarning } from '../domain/money-rules';
+import { precioDelLocal } from '../domain/precios-local';
+import { round2 } from '../lib/money';
 import { fmtDate } from '../lib/time';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, notify, nowIso } from './context';
 import { STORE_STATUS_LABEL, loadStoreForActor } from './stores';
@@ -45,9 +46,9 @@ async function buildBody(ctx: Ctx, store: Store, version: number) {
       name: p.name,
       sku: p.sku,
       unitName: p.unitName,
-      priceToStore: p.priceToStore,
+      priceToStore: precioDelLocal(store, p),
       suggestedRetail: p.suggestedRetail,
-      storeEarning: storeEarning(p),
+      storeEarning: round2(p.suggestedRetail - precioDelLocal(store, p)),
     }));
   const vars: Record<string, string> = {
     'contrato.version': String(version),

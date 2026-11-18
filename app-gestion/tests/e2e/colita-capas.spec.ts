@@ -20,7 +20,7 @@ async function crearBehike(page: Page) {
   await page.getByLabel('Fortaleza').selectOption('media');
   // La vista previa del formulario ya la dibuja con la colita.
   await expect(page.getByRole('img', { name: /con colita$/ })).toBeVisible();
-  await page.getByLabel('Precio al local por mazo').fill('22');
+  await page.getByLabel('Precio base por mazo').fill('22');
   await page.getByLabel('PVP sugerido por mazo').fill('38');
   await page.getByLabel('Costo por mazo (USD)').fill('9');
   await page.getByRole('button', { name: 'Crear producto' }).click();

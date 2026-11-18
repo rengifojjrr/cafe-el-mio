@@ -18,8 +18,8 @@ test.describe('un navegador nuevo del programa de café', () => {
     await expect(page.getByText('Sin precio').first()).toBeVisible();
     await page.getByRole('link', { name: /Café Espresso El Mío/ }).first().click({ position: { x: 24, y: 24 } });
     await expect(page.getByRole('heading', { name: 'Café Espresso El Mío', level: 1 })).toBeVisible();
-    await expect(page.getByText(/Le falta el precio al local/)).toBeVisible();
+    await expect(page.getByText(/Le falta el precio base/)).toBeVisible();
     await page.getByRole('button', { name: 'Activar' }).click();
-    await toast(page, /todavía no tiene precio al local/);
+    await toast(page, /todavía no tiene precio base/);
   });
 });

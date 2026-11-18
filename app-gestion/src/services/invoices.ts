@@ -8,7 +8,7 @@ import { ComplianceError, firmSaleCheck, supplyCheck } from '../domain/complianc
 import { creditDaysFor, creditText, hasValidResaleCert, invoiceBalance, invoiceCommissions, invoiceDueOn, invoiceStatus, invoiceTotals, isInvoiceOverdue } from '../domain/invoices';
 import { WAREHOUSE, allocate } from '../domain/ledger';
 import { type AgingBucket, agingBucket } from '../domain/money-rules';
-import { baseQty, priceFor } from '../domain/pricing';
+import { baseQty, priceForStore } from '../domain/pricing';
 import { countText, unitNames, unitsText } from '../domain/products';
 import { fmtMoney, round2 } from '../lib/money';
 import { addDays, daysBetween, fmtDate, toIsoDate } from '../lib/time';
@@ -109,7 +109,8 @@ export async function writeFirmInvoice(
   for (const it of args.items) {
     const p = snap.productsById.get(it.productId)!;
     const qty = baseQty(p, it.pack, it.packQty);
-    const quote = priceFor(p, list, { pack: it.pack, qty: it.packQty });
+    // El precio que le puso su vendedor a este local manda sobre la lista (nunca menos que el base).
+    const quote = priceForStore(p, store, list, { pack: it.pack, qty: it.packQty });
     const parts = allocate(snap.balances, snap.lotsById, WAREHOUSE, p.id, qty, p.name);
     let cost = 0;
     const lots: InvoiceLine['lots'] = [];

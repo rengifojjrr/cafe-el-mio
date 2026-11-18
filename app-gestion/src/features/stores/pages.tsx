@@ -86,6 +86,7 @@ import { DEFAULT_PERMIT_ISSUER } from '../../domain/fiscal';
 import { pointInMarket } from '../../domain/markets';
 import { FiscalFormCard, ResaleCertPill, StoreFiscalSection, issuerOptions, type FiscalFormValue } from '../red/fiscal';
 import { InviteButton } from '../red/invite';
+import { PreciosDelLocalCard } from './precios-local';
 import { InvoiceItem, InvoiceSheet } from '../sales/invoices';
 
 type Filter = 'todos' | 'activos' | 'proceso' | 'pausados';
@@ -789,6 +790,12 @@ export function StoreDetailPage() {
         <StoreFiscalSection store={s} canEdit={canWork} />
       </div>
 
+      {(isAdmin || isOwnerSeller) && s.status !== 'cerrado' ? (
+        <div className="mt-4">
+          <PreciosDelLocalCard store={s} canEdit={canWork} />
+        </div>
+      ) : null}
+
       {s.prospectVisits?.length ? (
         <Card className="mt-4 p-4 sm:p-5">
           <h2 className="font-bold">Visitas de recorrido</h2>
@@ -857,7 +864,9 @@ export function StoreDetailPage() {
                       <div className="min-w-0">
                         <p className="font-semibold">{c.name}</p>
                         <p className="text-sm text-muted">
-                          {fmtMoney(c.priceToStore)} al local · PVP {fmtMoney(c.suggestedRetail)} · el local gana {fmtMoney(c.storeEarning)}
+                          {c.capas.length > 1
+                            ? `${c.capas.map((k) => `${k.qty} a ${fmtMoney(k.unitPrice)}`).join(' · ')} · PVP ${fmtMoney(c.suggestedRetail)} · el local gana de ${fmtMoney(c.suggestedRetail - Math.max(...c.capas.map((k) => k.unitPrice)))} a ${fmtMoney(c.suggestedRetail - Math.min(...c.capas.map((k) => k.unitPrice)))}`
+                            : `${fmtMoney(c.priceToStore)} al local · PVP ${fmtMoney(c.suggestedRetail)} · el local gana ${fmtMoney(c.storeEarning)}`}
                         </p>
                         {c.expiringQty > 0 && c.nextExpiry ? (
                           <p className="mt-1">

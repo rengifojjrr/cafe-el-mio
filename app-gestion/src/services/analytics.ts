@@ -3,6 +3,7 @@ import type { Invoice, Market, Product, Store } from '../data/types';
 import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
 import { WAREHOUSE, storeLoc } from '../domain/ledger';
 import { aging, settlementBalance } from '../domain/money-rules';
+import { capasDelLocal, valorDeCapas } from '../domain/precios-local';
 import { round2 } from '../lib/money';
 import { addDays, daysBetween, monthKey, toIsoDate } from '../lib/time';
 import { type Ctx, guard, getSettings } from './context';
@@ -178,6 +179,7 @@ export async function inventoryValuation(ctx: Ctx): Promise<Valuation> {
   };
   const prod = new Map<string, { productId: string; name: string; warehouse: number; consignment: number; cost: number }>();
   const st = new Map<string, { storeId: string; name: string; units: number; cost: number }>();
+  const enLocales = new Set<string>();
   for (const e of snap.balances.entries()) {
     if (e.qty <= 0) continue;
     const lot = snap.lotsById.get(e.lotId);
@@ -193,7 +195,7 @@ export async function inventoryValuation(ctx: Ctx): Promise<Valuation> {
       const storeId = e.loc.slice(6);
       v.consignmentUnits += e.qty;
       v.consignmentCost += cost;
-      v.consignmentAtStorePrice += e.qty * (p?.priceToStore ?? 0);
+      enLocales.add(`${storeId}|${e.productId}`);
       pr.consignment += e.qty;
       const s = st.get(storeId) ?? { storeId, name: storesById.get(storeId)?.name ?? storeId, units: 0, cost: 0 };
       s.units += e.qty;
@@ -204,6 +206,18 @@ export async function inventoryValuation(ctx: Ctx): Promise<Valuation> {
   }
   v.warehouseCost = round2(v.warehouseCost);
   v.consignmentCost = round2(v.consignmentCost);
+  // Lo que está en los locales, a los precios a los que se le dejó a cada uno.
+  const movsPorLocal = new Map<string, typeof snap.movements>();
+  for (const m of snap.movements) {
+    if (!m.storeId) continue;
+    const xs = movsPorLocal.get(m.storeId) ?? [];
+    xs.push(m);
+    movsPorLocal.set(m.storeId, xs);
+  }
+  for (const k of enLocales) {
+    const [storeId, productId] = k.split('|') as [string, string];
+    v.consignmentAtStorePrice += valorDeCapas(capasDelLocal(movsPorLocal.get(storeId) ?? [], storeId, productId, snap.productsById.get(productId)?.priceToStore ?? 0));
+  }
   v.consignmentAtStorePrice = round2(v.consignmentAtStorePrice);
   v.byProduct = [...prod.values()].map((x) => ({ ...x, cost: round2(x.cost) })).sort((a, b) => b.cost - a.cost);
   v.byStore = [...st.values()].map((x) => ({ ...x, cost: round2(x.cost) })).sort((a, b) => b.cost - a.cost);

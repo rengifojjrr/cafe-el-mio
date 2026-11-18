@@ -148,7 +148,7 @@ export function ProductDetailPage() {
         <p className="mb-4 rounded-xl bg-surface-2 p-3 text-sm text-muted">
           {pr.priceToStore > 0
             ? 'Este producto está inactivo: no aparece para vendedores ni locales.'
-            : 'Le falta el precio al local (y el costo): ponlos con «Editar» y actívalo. Mientras tanto no aparece para vendedores ni locales.'}
+            : 'Le falta el precio base (y el costo): ponlos con «Editar» y actívalo. Mientras tanto no aparece para vendedores ni locales.'}
         </p>
       ) : null}
 
@@ -258,19 +258,19 @@ export function ProductDetailPage() {
         <Card className="p-4">
           <h2 className="mb-2 font-bold">Precios por {unit.one}</h2>
           <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
-            <dt className="text-muted">Precio al local</dt>
+            <dt className="text-muted">{actor.role === 'store' ? 'Pagas' : 'Precio base'}</dt>
             <dd className="text-right font-semibold tabular">{priced ? fmtMoney(pr.priceToStore) : 'Sin precio'}</dd>
             <dt className="text-muted">Por caja</dt>
             <dd className="text-right tabular">{priced ? fmtMoney(pr.boxPrice && pr.boxPrice > 0 ? pr.boxPrice : pr.priceToStore * pr.packSize) : '—'}</dd>
             <dt className="text-muted">PVP sugerido</dt>
             <dd className="text-right font-semibold tabular">{fmtMoney(pr.suggestedRetail)}</dd>
-            <dt className="text-muted">El local gana</dt>
+            <dt className="text-muted">El local gana{actor.role === 'seller' && v.sellerCommissionRule?.type === 'diferencia' ? ' (al precio base)' : ''}</dt>
             <dd className="text-right font-bold tabular text-ok">{priced ? fmtMoney(storeEarning(pr)) : '—'}</dd>
             {v.sellerCommissionRule ? (
               <>
-                <dt className="text-muted">{actor.role === 'seller' ? 'Tu comisión' : 'Comisión del vendedor'}</dt>
+                <dt className="text-muted">{actor.role === 'seller' ? 'Tu comisión' : 'Comisión del vendedor (según cada producto)'}</dt>
                 <dd className="text-right font-semibold tabular">
-                  {fmtMoney(v.sellerCommissionPerUnit ?? 0)}
+                  {v.sellerCommissionRule.type === 'diferencia' ? `Lo cobrado sobre ${fmtMoney(pr.priceToStore)}` : fmtMoney(v.sellerCommissionPerUnit ?? 0)}
                   <span className="block text-xs font-normal text-muted">{describeRule(v.sellerCommissionRule)}</span>
                 </dd>
               </>

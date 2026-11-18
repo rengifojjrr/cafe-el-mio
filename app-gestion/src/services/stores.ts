@@ -1,15 +1,16 @@
 // Locales (tiendas): el vendedor los inscribe; administración los aprueba.
 import { z } from 'zod';
-import type { Contract, Invoice, Photo, SaleMode, Store, StoreStatus, User } from '../data/types';
+import type { Contract, Invoice, Movement, Photo, SaleMode, Store, StoreStatus, User } from '../data/types';
 import { permitState, type PermitState } from '../domain/compliance';
 import { vendedorDelLocal } from '../domain/equipo';
+import { capasDelLocal, importeDeCapas, precioDelLocal, valorDeCapas } from '../domain/precios-local';
 import { DEFAULT_PERMIT_ISSUER, normalizeEin } from '../domain/fiscal';
 import { pointInMarket } from '../domain/markets';
 import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
 import { WAREHOUSE, storeLoc } from '../domain/ledger';
-import { settlementBalance, storeEarning } from '../domain/money-rules';
+import { settlementBalance } from '../domain/money-rules';
 import { can } from '../domain/permissions';
-import { round2 } from '../lib/money';
+import { fmtMoney, round2 } from '../lib/money';
 import { addDays, addDaysToDate, daysBetween, toIsoDate } from '../lib/time';
 import { type Ctx, ForbiddenError, NotFoundError, ValidationError, audit, guard, mutate, notify, nowIso } from './context';
 import { loadInventory } from './inventory';
@@ -91,6 +92,14 @@ export async function listStores(ctx: Ctx): Promise<StoreView[]> {
   const usersById = new Map(users.map((u) => [u.id, u]));
   const zonesById = new Map(zones.map((z) => [z.id, z]));
   const since = addDays(now, -30);
+  // Los movimientos de cada local, una sola pasada (para el valor de lo que tiene en consignación).
+  const movsPorLocal = new Map<string, Movement[]>();
+  for (const m of snap.movements) {
+    if (!m.storeId) continue;
+    const xs = movsPorLocal.get(m.storeId) ?? [];
+    xs.push(m);
+    movsPorLocal.set(m.storeId, xs);
+  }
   return stores
     .map((store) => {
       const held = snap.balances.byProduct(storeLoc(store.id));
@@ -99,7 +108,8 @@ export async function listStores(ctx: Ctx): Promise<StoreView[]> {
       for (const [pid, q] of held) {
         if (q <= 0) continue;
         units += q;
-        value += q * (snap.productsById.get(pid)?.priceToStore ?? 0);
+        // A los precios a los que se le dejó (lo dejado sin precio guardado, al precio base de hoy).
+        value += valorDeCapas(capasDelLocal(movsPorLocal.get(store.id) ?? [], store.id, pid, snap.productsById.get(pid)?.priceToStore ?? 0));
       }
       const mySettlements = settlements.filter((s) => s.storeId === store.id);
       const myInvoices = invoices.filter((i) => i.storeId === store.id);
@@ -143,18 +153,24 @@ export interface ConsignmentLine {
   /** Unidad del producto (mazo, tabaco, unidad). */
   unitName: string;
   qty: number;
+  /** Lo que paga el local por la próxima unidad que venda (lo más viejo primero). */
   priceToStore: number;
   suggestedRetail: number;
+  /** PVP sugerido menos `priceToStore`. */
   storeEarning: number;
+  /** Lo que vale todo lo que tiene, a los precios a los que se le dejó. */
   value: number;
+  /** Lo que tiene, por precio (lo más viejo primero). Una sola capa si todo se le dejó al mismo precio. */
+  capas: { qty: number; unitPrice: number }[];
   /** Café: lote más próximo a vencer en el local. */
   nextExpiry?: string;
   expiringQty: number;
 }
 
 export async function storeConsignment(ctx: Ctx, storeId: string): Promise<ConsignmentLine[]> {
-  await loadStoreForActor(ctx, storeId);
+  const store = await loadStoreForActor(ctx, storeId);
   const snap = await loadInventory(ctx);
+  const movs = snap.movements.filter((m) => m.storeId === storeId || (m.to.kind === 'store' && m.to.storeId === storeId) || (m.from.kind === 'store' && m.from.storeId === storeId));
   const now = ctx.now();
   const out: ConsignmentLine[] = [];
   for (const [pid, qty] of snap.balances.byProduct(storeLoc(storeId))) {
@@ -169,16 +185,29 @@ export async function storeConsignment(ctx: Ctx, storeId: string): Promise<Consi
       if (!nextExpiry || lot.bestBefore < nextExpiry) nextExpiry = lot.bestBefore;
       if (daysBetween(now, lot.bestBefore) <= 21) expiringQty += l.qty;
     }
+    // A los precios a los que se le dejó; si las capas no cubren todo (no debería), lo que falta, al de hoy.
+    // Al local le importa a qué precio, no con qué base: lo seguido al mismo precio va junto.
+    const capas: { qty: number; unitPrice: number }[] = [];
+    const sumar = (q: number, unitPrice: number) => {
+      const ultima = capas[capas.length - 1];
+      if (ultima && ultima.unitPrice === unitPrice) ultima.qty += q;
+      else capas.push({ qty: q, unitPrice });
+    };
+    for (const c of capasDelLocal(movs, storeId, pid, p.priceToStore)) sumar(c.qty, c.unitPrice);
+    const enCapas = capas.reduce((a, c) => a + c.qty, 0);
+    if (enCapas < qty) sumar(qty - enCapas, precioDelLocal(store, p));
+    const precio = capas[0]?.unitPrice ?? precioDelLocal(store, p);
     out.push({
       productId: pid,
       name: p.name,
       sku: p.sku,
       unitName: p.unitName,
       qty,
-      priceToStore: p.priceToStore,
+      priceToStore: precio,
       suggestedRetail: p.suggestedRetail,
-      storeEarning: storeEarning(p),
-      value: round2(qty * p.priceToStore),
+      storeEarning: round2(p.suggestedRetail - precio),
+      value: importeDeCapas(capas, qty, precio),
+      capas,
       nextExpiry,
       expiringQty,
     });
@@ -613,4 +642,94 @@ export async function storeDebt(ctx: Ctx, storeId: string): Promise<StoreDebt> {
     nextDueOn: [...open.map((s) => s.dueOn), ...openInv.map((i) => i.dueOn)].sort()[0],
     nextSettlementOn: pending.length && base ? addDaysToDate(toIsoDate(base), every) : undefined,
   };
+}
+
+// ---------- Precios de cada local ----------
+
+/**
+ * Pone (o quita, con `null`) el precio de este local para cada producto: lo que el local paga por
+ * unidad. Nunca menos que el precio base del producto. Administración o el vendedor del local. Lo
+ * que ya está en el local en consignación sigue al precio con que se dejó: el precio nuevo vale para
+ * lo que se entregue después (y para las ventas en firme desde ahora).
+ */
+export interface PrecioDelLocalFila {
+  productId: string;
+  name: string;
+  unitName: string;
+  /** Precio base del producto, por unidad. */
+  base: number;
+  /** PVP sugerido: por encima, el local pierde si lo vende a ese precio. */
+  pvp: number;
+  /** El precio propio de este local, si tiene (si no, paga el base). */
+  precio?: number;
+}
+
+export interface PreciosDelLocal {
+  filas: PrecioDelLocalFila[];
+  /** Nombre del vendedor del local. */
+  vendedor?: string;
+  /** Su vendedor gana la diferencia entre lo que cobra y el precio base. */
+  diferencia: boolean;
+  /** Consignación con contrato firmado: el anexo tiene los precios de cuando firmó. */
+  contratoFirmado: boolean;
+}
+
+/**
+ * Los precios de un local, producto por producto, con el base al lado. Solo Administración y el
+ * vendedor del local (la cuenta del local nunca ve el precio base).
+ */
+export async function preciosDelLocal(ctx: Ctx, storeId: string): Promise<PreciosDelLocal> {
+  const s = await loadStoreForActor(ctx, storeId);
+  const esSuVendedor = ctx.actor.role === 'seller' && s.sellerId === ctx.actor.userId;
+  if (ctx.actor.role !== 'admin' && !esSuVendedor) throw new ForbiddenError('Solo Administración o el vendedor del local ven sus precios.');
+  const [products, seller, contracts] = await Promise.all([ctx.repo.products.all(), ctx.repo.users.get(s.sellerId), ctx.repo.contracts.where('storeId', s.id)]);
+  const filas = products
+    .filter((p) => p.active || s.precios?.[p.id] !== undefined)
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    .map((p) => {
+      const propio = s.precios?.[p.id];
+      return { productId: p.id, name: p.name, unitName: p.unitName, base: round2(p.priceToStore), pvp: round2(p.suggestedRetail), precio: propio !== undefined && propio >= p.priceToStore ? propio : undefined };
+    });
+  return {
+    filas,
+    vendedor: seller?.name,
+    diferencia: seller?.commissionOverride?.type === 'diferencia',
+    contratoFirmado: s.saleMode !== 'firme' && contracts.some((c) => c.status === 'firmado'),
+  };
+}
+
+export async function guardarPreciosDelLocal(ctx: Ctx, storeId: string, cambios: Record<string, number | null>): Promise<Store> {
+  return mutate(ctx, async () => {
+    const s = await ctx.repo.stores.get(storeId);
+    if (!s) throw new NotFoundError('el local');
+    guard(ctx, 'store.update', { type: 'store', store: s });
+    if (ctx.actor.role !== 'admin' && ctx.actor.role !== 'seller') throw new ForbiddenError('Solo Administración o el vendedor del local ponen sus precios.');
+    const productos = new Map((await ctx.repo.products.all()).map((p) => [p.id, p]));
+    const precios: Record<string, number> = { ...(s.precios ?? {}) };
+    const cambiados: string[] = [];
+    for (const [pid, valor] of Object.entries(cambios)) {
+      const p = productos.get(pid);
+      if (!p) throw new NotFoundError('el producto');
+      if (valor === null || !Number.isFinite(valor)) {
+        if (pid in precios) {
+          delete precios[pid];
+          cambiados.push(`${p.name}: el precio base`);
+        }
+        continue;
+      }
+      if (valor < p.priceToStore) {
+        throw new ValidationError(`${p.name}: el precio no puede ser menor que el precio base (${fmtMoney(p.priceToStore)}).`);
+      }
+      const precio = round2(valor);
+      if (precios[pid] !== precio) {
+        precios[pid] = precio;
+        cambiados.push(`${p.name}: ${fmtMoney(precio)} (base ${fmtMoney(p.priceToStore)})`);
+      }
+    }
+    const next: Store = { ...s, precios };
+    if (Object.keys(precios).length === 0) delete next.precios;
+    await ctx.repo.stores.put(next);
+    if (cambiados.length) await audit(ctx, 'local.precios', 'store', s.id, `Precios de ${s.name}: ${cambiados.join('; ')}`);
+    return next;
+  });
 }

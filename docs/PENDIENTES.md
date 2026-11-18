@@ -172,3 +172,20 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 - **Zona sin responsable:** sus locales se quedan con quien los tenía. Si conviene que pasen a «sin vendedor», hay que
   decidirlo (hoy todo local tiene un vendedor, porque de eso dependen comisiones y avisos).
 
+## Comisión por diferencia (18 de noviembre de 2026)
+
+- **Mientras los vendedores no entren al servidor (Equipo, parte 2), los precios de cada local los pone
+  Administración** desde su cuenta, en la ficha de cada local. La hoja ya está hecha para el vendedor: cuando entre
+  con su cuenta, verá y cambiará solo los de sus locales.
+- **Contadora:** cómo se declara lo que se le paga al vendedor (la diferencia es su comisión) y si algún impuesto del
+  tabaco se calcula sobre el precio de venta al local: con la diferencia, ese precio es más alto que el base.
+- **Contrato firmado y precios nuevos:** hoy la app avisa que hay que preparar una nueva versión, pero deja entregar a
+  los precios nuevos sin ella. Si el abogado prefiere que no se entregue hasta firmar, se cambia.
+- **Locales en firme con lista de precios:** con la diferencia, si la lista del local le da un precio mayor que el
+  base, el vendedor gana esa diferencia aunque la lista la puso Administración (la regla es «lo que se cobra por
+  encima del base»). Si la empresa quiere quedarse con lo que la lista pone encima del base, hay que decidirlo.
+- **Un solo precio base por producto** para Miami y Houston. Si Houston necesita otro base, hay que agregarlo.
+- **Los vendedores que ya existían siguen con su comisión de antes.** Para pasarlos a la diferencia: Usuarios →
+  el vendedor → «Comisión».
+- **Precio por caja y por volumen:** con precio propio, la caja es unidad × unidades por caja; no hay descuento por
+  caja ni por volumen encima del precio del vendedor.

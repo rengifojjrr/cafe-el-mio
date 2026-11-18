@@ -24,22 +24,28 @@ export function effectiveRule(product: Pick<Product, 'sellerCommission'>, seller
   return seller?.commissionOverride ?? product.sellerCommission;
 }
 
-/** Comisión del vendedor por una venta: % del precio al local, o fija por unidad. */
-export function commissionAmount(rule: CommissionRule, qty: number, unitPrice: number): number {
+/**
+ * Comisión del vendedor por una venta: % de lo que paga el local, fija por unidad, o la diferencia entre
+ * lo que pagó el local y el precio base (nunca negativa). `basePrice`: el precio base con que se
+ * dejó (si falta, el mismo precio: sin diferencia).
+ */
+export function commissionAmount(rule: CommissionRule, qty: number, unitPrice: number, basePrice = unitPrice): number {
   if (qty <= 0) return 0;
   if (rule.type === 'percent') return round2((qty * unitPrice * rule.value) / 100);
+  if (rule.type === 'diferencia') return round2(qty * Math.max(0, unitPrice - basePrice));
   return round2(qty * rule.value);
 }
 
 export function describeRule(rule: CommissionRule): string {
+  if (rule.type === 'diferencia') return 'la diferencia sobre el precio base';
   return rule.type === 'percent'
-    ? `${rule.value.toLocaleString('es-US')} % del precio al local`
+    ? `${rule.value.toLocaleString('es-US')} % de lo que paga el local`
     : `${rule.value.toLocaleString('es-US', { style: 'currency', currency: 'USD' })} por unidad`;
 }
 
-/** Comisión por unidad, para mostrarla en el catálogo del vendedor. */
-export function commissionPerUnit(rule: CommissionRule, priceToStore: number): number {
-  return commissionAmount(rule, 1, priceToStore);
+/** Comisión por unidad, para mostrarla en el catálogo del vendedor (a un precio de local dado). */
+export function commissionPerUnit(rule: CommissionRule, priceToStore: number, storePrice = priceToStore): number {
+  return commissionAmount(rule, 1, storePrice, priceToStore);
 }
 
 /** Agrupa las ventas de varios reportes en líneas de liquidación (producto × precio). */

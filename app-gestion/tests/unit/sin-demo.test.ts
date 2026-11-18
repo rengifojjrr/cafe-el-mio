@@ -118,7 +118,7 @@ describe('un navegador nuevo', () => {
     const ctx = await ctxFor('cafe', 'cafe:admin');
     const elmio = ((await getLineRepo('cafe').products.all()) as Product[]).find((p) => p.sku === 'CF-ELMIO-10OZ')!;
     await expect(setProductActive(ctx, elmio.id, true)).rejects.toThrow(ValidationError);
-    await expect(setProductActive(ctx, elmio.id, true)).rejects.toThrow(/todavía no tiene precio al local/);
+    await expect(setProductActive(ctx, elmio.id, true)).rejects.toThrow(/todavía no tiene precio base/);
     const { id, sku, name, brandLine, suggestedRetail, sellerCommission, lowStockThreshold, packSize, unitName, notes, pairing, attrs } = elmio;
     await saveProduct(ctx, { id, sku, name, brandLine, suggestedRetail, sellerCommission, lowStockThreshold, packSize, unitName, notes, pairing, attrs, cost: 2.5, priceToStore: 4.25, active: false });
     await setProductActive(ctx, elmio.id, true);

@@ -480,7 +480,7 @@ export function optionErrors(line: LineId, o: ImportOptions, map: ColumnMap): st
   } else if (!whole(o.unitsPerBox)) out.push('Las unidades por caja son un número entero mayor que cero.');
   if (map.price === undefined && !(o.defaultPrice > 0)) out.push(line === 'tabaco' ? 'Escribe el precio por mazo.' : 'Escribe el precio por unidad.');
   if (o.defaultCost !== null && !(o.defaultCost >= 0)) out.push('El costo no puede ser negativo.');
-  if (!(o.pvpFactor >= 1)) out.push('El PVP no puede ser menor que el precio al local.');
+  if (!(o.pvpFactor >= 1)) out.push('El PVP no puede ser menor que el precio base.');
   return out;
 }
 

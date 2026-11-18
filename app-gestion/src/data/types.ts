@@ -16,7 +16,15 @@ export interface Entity {
 }
 
 // ---------- Catálogo ----------
-export type CommissionRule = { type: 'percent'; value: number } | { type: 'fixed'; value: number };
+/**
+ * Comisión del vendedor: % de lo que paga el local, monto fijo por unidad, o la diferencia entre lo que
+ * paga el local y el precio base del producto (`diferencia`: el vendedor pone el precio y gana lo que
+ * cobre por encima del base; `value` no se usa y va en 0).
+ */
+export type CommissionRule = ProductCommissionRule | { type: 'diferencia'; value: number };
+
+/** La regla de un producto (o la de la línea por defecto): % o monto fijo. La diferencia se elige por vendedor. */
+export type ProductCommissionRule = { type: 'percent'; value: number } | { type: 'fixed'; value: number };
 
 /** Tabaco: premium (con marca, capote y tripa) o de mazo (sin marca). */
 export type ProductKind = 'premium' | 'mazo';
@@ -32,7 +40,7 @@ export interface Product extends Entity {
   priceToStore: number;
   /** Precio de venta al público sugerido. La ganancia del local es PVP − precio al local. */
   suggestedRetail: number;
-  sellerCommission: CommissionRule;
+  sellerCommission: ProductCommissionRule;
   /** Comisión propia: este producto paga siempre su regla, aunque haya comisión progresiva. */
   commissionCustom?: boolean;
   lowStockThreshold: number;
@@ -189,6 +197,12 @@ export interface Movement extends Entity {
   refId: string;
   reason?: string;
   actorId: string;
+  /**
+   * Consignación: a qué precio por unidad se le dejó al local y cuál era el precio base ese día. Lo
+   * que se vende después se cobra a ese precio (lo más viejo primero), aunque el precio cambie.
+   */
+  unitPrice?: number;
+  basePrice?: number;
 }
 
 // ---------- Locales ----------
@@ -230,6 +244,11 @@ export interface Store extends Entity {
    * local sigue a su zona: si la zona cambia de responsable, el local pasa al nuevo.
    */
   sellerFijo?: boolean;
+  /**
+   * Lo que paga este local por unidad (mazo, tabaco o unidad), producto por producto: el precio que
+   * puso su vendedor. Nunca menos que el precio base del producto. Sin precio: paga el base.
+   */
+  precios?: Record<string, number>;
   status: StoreStatus;
   tobaccoPermit?: TobaccoPermit;
   /** Si falta, consignación. */
@@ -399,6 +418,8 @@ export interface SaleLine {
   productId: string;
   qty: number;
   unitPrice: number;
+  /** El precio base con que se dejó (para la comisión por diferencia). Sin esto: el precio al local. */
+  basePrice?: number;
   /** Costo por lote de lo vendido (COGS). */
   cost: number;
   lots: { lotId: string; qty: number; unitCost: number }[];
@@ -643,7 +664,7 @@ export interface LineSettings extends Entity {
   settlementEveryDays: number;
   paymentTermsDays: number;
   commissionPayableOn: 'venta' | 'cobro';
-  defaultSellerCommission: CommissionRule;
+  defaultSellerCommission: ProductCommissionRule;
   defaultLowStock: number;
   expiryWarningDays: number;
   noRotationDays: number;

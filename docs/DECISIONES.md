@@ -411,3 +411,33 @@ Pedido: «mete el tabaco también, y que quede como separado, que cuando paguemo
 - **La prueba de ancho corre también con el servidor y con datos largos** (`telefono-servidor.spec.ts`): las cosas que
   solo existen con el servidor (la lista de accesos con el correo y la última entrada) no salen en la demo.
 
+## Comisión por diferencia sobre el precio base (18 de noviembre de 2026)
+
+- **El precio que la empresa le pone a cada producto es el precio base** (`Product.priceToStore`; en las pantallas
+  decía «precio al local»). Cada local puede tener su precio por producto (`Store.precios`), que le pone su vendedor
+  o Administración desde la ficha del local, nunca menos que el base: el servicio lo rechaza y la hoja no deja
+  guardar. Sin precio propio, el local paga el base, como antes.
+- **Más que el PVP sugerido se avisa, no se prohíbe.** El vendedor cobra lo que quiera (así se pidió), pero la hoja
+  avisa que, al PVP sugerido, el local perdería en cada venta.
+- **La empresa cobra el precio del local y le paga al vendedor la diferencia** (`{ type: 'diferencia' }` en la
+  comisión especial del vendedor). Se elige por vendedor; es la que viene marcada al dar de alta uno nuevo. Los que ya
+  estaban no se cambiaron solos.
+- **Consignación: cada entrega guarda su precio y el base de ese día** (`Movement.unitPrice` y `basePrice`). Lo que se
+  vende después se cobra a esos precios, lo más viejo primero (`capasDelLocal` y `consumir` en
+  `src/domain/precios-local.ts`), aunque el vendedor o la empresa cambien los precios: el local paga lo que firmó al
+  recibir. Lo dejado antes de este cambio no tiene precio guardado y vale el base de hoy (como antes).
+- **Venta en firme: el precio del local manda sobre su lista de precios**; la caja es precio por unidad × unidades por
+  caja (sin el precio de caja ni el de volumen de la lista).
+- **La comisión por diferencia** es cantidad × (precio − base de esa entrega), nunca negativa; en una factura, el
+  importe menos cantidad × base.
+- **Para un vendedor con la diferencia, la diferencia manda también en los productos con «comisión propia».** Si
+  mandara la del producto, la empresa se quedaría con lo que él cobró por encima del base. Un especial de % o monto
+  sigue debajo de la comisión propia, como antes.
+- **La cuenta del local nunca ve el precio base**: en el catálogo, su inicio, «Reportar ventas», «Pedir producto» y
+  el anexo del contrato ve su precio. El vendedor del local y Administración ven los dos. Si tiene unidades a
+  distintos precios, se ven por separado («10 a $5.50 · 5 a $6.00»).
+- **El contrato** dice que cada cambio de precios genera una nueva versión. La app avisa al cambiar los precios de un
+  local en consignación con contrato firmado, pero no lo exige: el anexo de la versión nueva ya sale con los precios
+  del local.
+- **El catálogo de Administración** muestra la comisión «según cada producto» y el margen con ella: con la
+  diferencia, la empresa se queda con el base menos el costo, y el vendedor con lo que cobre encima.

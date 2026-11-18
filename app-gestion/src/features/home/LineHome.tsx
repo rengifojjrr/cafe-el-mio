@@ -411,7 +411,7 @@ function StoreHome() {
   if (view.store.saleMode === 'firme') return <FirmStoreHome view={view} />;
   const s = view.store;
   const units = (lines.data ?? []).reduce((a, l) => a + l.qty, 0);
-  const potential = (lines.data ?? []).reduce((a, l) => a + l.qty * l.storeEarning, 0);
+  const potential = (lines.data ?? []).reduce((a, l) => a + l.qty * l.suggestedRetail - l.value, 0);
   // Lo que debe es todo lo vendido: lo liquidado sin pagar y lo que todavía no se liquidó.
   const owed = debt.data?.total ?? 0;
   const nextDue = debt.data?.nextDueOn;
@@ -473,7 +473,7 @@ function StoreHome() {
               <div className="min-w-0">
                 <p className="font-semibold">{l.name}</p>
                 <p className="text-sm text-muted">
-                  Pagas {fmtMoney(l.priceToStore)} · PVP {fmtMoney(l.suggestedRetail)}
+                  {l.capas.length > 1 ? `Pagas ${l.capas.map((k) => `${k.qty} a ${fmtMoney(k.unitPrice)}`).join(', ')}` : `Pagas ${fmtMoney(l.priceToStore)}`} · PVP {fmtMoney(l.suggestedRetail)}
                 </p>
                 {l.expiringQty > 0 && l.nextExpiry ? (
                   <p className="mt-1">

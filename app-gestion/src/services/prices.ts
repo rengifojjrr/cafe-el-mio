@@ -3,7 +3,7 @@
 // su vendedor y administración ven el precio que le toca a ese local, nunca el costo.
 import { z } from 'zod';
 import type { LineSettings, PriceEntry, PriceList, Product, SaleMode, Store } from '../data/types';
-import { PRICE_LIST_KIND_LABEL, type PriceSource, priceFor } from '../domain/pricing';
+import { PRICE_LIST_KIND_LABEL, type PriceSource, priceFor, priceForStore } from '../domain/pricing';
 import { round2 } from '../lib/money';
 import { type Ctx, NotFoundError, ValidationError, audit, getSettings, guard, mutate, nowIso } from './context';
 import { loadStoreForActor } from './stores';
@@ -42,11 +42,11 @@ export interface StorePrices {
   prices: Record<string, StorePriceRow>;
 }
 
-export function computeStorePrices(store: Pick<Store, 'id' | 'saleMode'>, products: readonly Product[], list: PriceList | undefined): StorePrices {
+export function computeStorePrices(store: Pick<Store, 'id' | 'saleMode' | 'precios'>, products: readonly Product[], list: PriceList | undefined): StorePrices {
   const prices: Record<string, StorePriceRow> = {};
   for (const p of products) {
-    const q = priceFor(p, list);
-    const v = list?.entries[p.id]?.volume;
+    const q = priceForStore(p, store, list);
+    const v = q.source === 'local' ? undefined : list?.entries[p.id]?.volume;
     prices[p.id] = { unit: q.unit, box: q.box, source: q.source, volume: v && v.box > 0 && v.minBoxes > 1 ? { minBoxes: v.minBoxes, box: v.box } : undefined };
   }
   return { storeId: store.id, saleMode: store.saleMode ?? 'consignacion', listId: list?.id, listName: list?.name ?? 'Precio al local', prices };

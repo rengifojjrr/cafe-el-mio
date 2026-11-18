@@ -65,6 +65,9 @@ export function commissionRate(scheme: CommissionScheme, metrics: CommissionMetr
 /**
  * La regla de comisión de una venta. Orden de prioridad:
  * 1. Sin vendedor (venta directa): sin comisión.
+ * 1b. Vendedor que gana «la diferencia sobre el precio base»: esa, en todos los productos (él le pone
+ *     el precio a cada local; si mandara la comisión propia del producto, la empresa se quedaría con
+ *     lo que él cobró por encima del base).
  * 2. Producto con «comisión propia»: la del producto.
  * 3. Vendedor con comisión especial fija (la de antes): esa.
  * 4. Comisión progresiva (la del vendedor o, si no tiene, la de la línea): el % que da el esquema.
@@ -78,6 +81,7 @@ export function resolveCommissionRule(input: {
 }): CommissionRule | null {
   const { product, seller } = input;
   if (!seller) return null;
+  if (seller.commissionOverride?.type === 'diferencia') return seller.commissionOverride;
   if (product.commissionCustom) return product.sellerCommission;
   if (seller.commissionOverride) return seller.commissionOverride;
   const scheme = seller.commissionScheme ?? input.lineScheme ?? null;

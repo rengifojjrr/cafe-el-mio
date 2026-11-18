@@ -24,6 +24,9 @@ const ruleSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
+/** La comisión propia de un vendedor: la de los productos, o la diferencia sobre el precio base. */
+const reglaVendedorSchema = z.union([ruleSchema, z.object({ type: z.literal('diferencia'), value: z.literal(0).default(0) })]);
+
 const userSchema = z.object({
   id: z.string().optional(),
   role: z.enum(['admin', 'seller']),
@@ -36,7 +39,7 @@ const userSchema = z.object({
   zoneIds: z.array(z.string()).optional(),
   /** Vendedor: su mercado (si falta, el de sus zonas). */
   marketId: z.string().optional(),
-  commissionOverride: ruleSchema.optional(),
+  commissionOverride: reglaVendedorSchema.optional(),
   active: z.boolean().default(true),
 });
 

@@ -310,7 +310,7 @@ function ColumnsStep({
           {map.price === undefined ? (
             <>
               <NumberInput
-                label={tabaco ? 'Precio al local por mazo (USD)' : 'Precio al local por unidad (USD)'}
+                label={tabaco ? 'Precio base por mazo (USD)' : 'Precio base por unidad (USD)'}
                 min={0}
                 step={0.01}
                 value={shown(opts.defaultPrice)}

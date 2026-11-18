@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import type { Delivery, Reorder } from '../../data/types';
 import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitNames, unitOf, unitsText } from '../../domain/products';
 import { fmtMoney } from '../../lib/money';
+import { importeDeCapas } from '../../domain/precios-local';
 import { fmtDate, fmtDateTime, fmtRelativeDays } from '../../lib/time';
 import type { NewPhoto } from '../../lib/image';
 import { useAsync, useBackState } from '../../app/hooks';
@@ -71,7 +72,7 @@ function Visit() {
     setScanned(true);
   };
   const soldUnits = data.reduce((a, l) => a + (l.qty - value(l.productId, l.qty)), 0);
-  const soldAmount = data.reduce((a, l) => a + (l.qty - value(l.productId, l.qty)) * l.priceToStore, 0);
+  const soldAmount = data.reduce((a, l) => a + importeDeCapas(l.capas, l.qty - value(l.productId, l.qty), l.priceToStore), 0);
   if (store.error) return <ErrorBox error={store.error} />;
   if (!store.data || (lines.loading && !lines.data)) return <Loading rows={4} />;
   const s = store.data;
@@ -118,7 +119,7 @@ function Visit() {
                   <p className="text-sm text-muted">
                     Había {l.qty} en consignación{l.nextExpiry ? ` · vence ${fmtDate(l.nextExpiry)}` : ''}
                   </p>
-                  <p className={`mt-1 text-sm font-semibold ${sold > 0 ? 'text-ok' : 'text-muted'}`}>{sold > 0 ? `${sold} vendidas · ${fmtMoney(sold * l.priceToStore)}` : 'Sin ventas'}</p>
+                  <p className={`mt-1 text-sm font-semibold ${sold > 0 ? 'text-ok' : 'text-muted'}`}>{sold > 0 ? `${sold} vendidas · ${fmtMoney(importeDeCapas(l.capas, sold, l.priceToStore))}` : 'Sin ventas'}</p>
                 </div>
                 <div className="grid justify-items-end gap-1">
                   <span className="text-xs text-muted">Contados ahora</span>

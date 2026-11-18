@@ -9,6 +9,7 @@ import { type PasteLine, parsePastedOrder } from '../../domain/paste-order';
 import { baseQty } from '../../domain/pricing';
 import { mixedUnitsText, normalize, searchText, stockText, unitNames } from '../../domain/products';
 import { fmtMoney } from '../../lib/money';
+import { precioDelLocal } from '../../domain/precios-local';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { createPhoneOrder } from '../../services/consignment';
@@ -45,11 +46,11 @@ function useOrderData() {
   return { stores, storeId, setStoreId, catalog, picked };
 }
 
-/** Lo que paga el local: su lista si compra en firme; en consignación, el precio al local. */
+/** Lo que paga el local: su lista (o su precio) si compra en firme; en consignación, su precio o el base. */
 function priceText(x: QuickProduct, store: QuickStore): string {
   const unit = unitNames(x.product.unitName).one;
   if (store.store.saleMode === 'firme') return `${fmtMoney(x.price.unit)} por ${unit} · ${fmtMoney(x.price.box)} la caja`;
-  return `${fmtMoney(x.product.priceToStore)} por ${unit} al local (consignación)`;
+  return `${fmtMoney(precioDelLocal(store.store, x.product))} por ${unit} al local (consignación)`;
 }
 
 function OrderDone({ code, onAgain }: { code: string; onAgain: () => void }) {
@@ -87,7 +88,7 @@ function PhoneOrder() {
     const v = qty[x.product.id];
     return v && v.packQty > 0 ? [{ x, ...v, base: baseQty(x.product, v.pack, v.packQty) }] : [];
   });
-  const total = items.reduce((a, i) => a + (picked?.store.saleMode === 'firme' ? (i.pack === 'caja' ? i.x.price.box : i.x.price.unit) * i.packQty : i.base * i.x.product.priceToStore), 0);
+  const total = items.reduce((a, i) => a + (picked?.store.saleMode === 'firme' ? (i.pack === 'caja' ? i.x.price.box : i.x.price.unit) * i.packQty : i.base * precioDelLocal(picked?.store, i.x.product)), 0);
   const reset = () => {
     setQty({});
     setNote('');

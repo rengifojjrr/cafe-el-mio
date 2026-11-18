@@ -177,7 +177,7 @@ export function CatalogPage() {
           {data.length
             ? 'Prueba con otra palabra o quita algún filtro.'
             : hiddenInactive
-              ? 'Los productos que no tienen precio al local (como los cafés de El Mío al empezar) quedan desactivados hasta que se lo pongas.'
+              ? 'Los productos que no tienen precio base (como los cafés de El Mío al empezar) quedan desactivados hasta que se lo pongas.'
               : isAdmin
                 ? 'Toca «Nuevo producto» o «Importar» para armar el catálogo.'
                 : 'Administración todavía no cargó productos.'}
@@ -411,11 +411,13 @@ function FamilyCard({ family, now, onOrder }: { family: Family<ProductView>; now
             </p>
           ) : (
             <p className="flex justify-between gap-2">
-              <span className="text-muted">Al local, por {sameUnit ? unit.one : 'unidad'}</span>
+              <span className="text-muted">Precio base, por {sameUnit ? unit.one : 'unidad'}</span>
               <span className="font-semibold tabular">{priceRange(family.variants.map((v) => v.product.priceToStore))}</span>
             </p>
           )}
-          {actor.role === 'seller' && first.sellerCommissionPerUnit !== undefined ? (
+          {actor.role === 'seller' && first.sellerCommissionRule?.type === 'diferencia' ? (
+            <p className="text-sm text-ink">Ganas lo que le cobres al local por encima del precio base.</p>
+          ) : actor.role === 'seller' && first.sellerCommissionPerUnit !== undefined ? (
             <p className="flex justify-between gap-2">
               <span className="text-muted">Tu comisión por {unit.one}</span>
               <span className="glow font-bold tabular">{priceRange(family.variants.map((v) => v.sellerCommissionPerUnit ?? 0))}</span>

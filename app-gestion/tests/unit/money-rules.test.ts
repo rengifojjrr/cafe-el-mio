@@ -86,7 +86,7 @@ describe('comisión del vendedor', () => {
   });
   it('describe la regla en palabras', () => {
     expect(describeRule({ type: 'percent', value: 8 })).toContain('8');
-    expect(describeRule({ type: 'percent', value: 8 })).toContain('precio al local');
+    expect(describeRule({ type: 'percent', value: 8 })).toContain('de lo que paga el local');
     expect(describeRule({ type: 'fixed', value: 0.4 })).toContain('por unidad');
   });
 });

@@ -166,3 +166,10 @@ una línea real y empezar de nuevo.
 | Dar de alta un vendedor con varias zonas (avisa qué pasa antes de guardar) | Tabaco · Administración | Usuarios → «Alta de vendedor» |
 | Un local nuevo es del responsable de su zona | Tabaco · Administración | Locales → «Registrar tienda» → «Vendedor responsable» |
 
+## Comisión por diferencia
+
+| Quiero ver | Cuenta | Dónde |
+|---|---|---|
+| Ponerle a un local su precio (nunca menos que el base) y ver lo que gana el vendedor | Tabaco · Vendedor | Mis locales → Tabaquería El Faro → «Precios de este local» |
+| El local ve su precio y no el base | Tabaco · Local | Catálogo → Biscayne Robusto → «Pagas» |
+| Elegir cómo cobra cada vendedor (la diferencia es la de los nuevos) | Tabaco · Administración | Usuarios → el vendedor → «Comisión» |

@@ -261,7 +261,7 @@ function Accounting() {
                 <p className="text-sm font-medium text-muted">En consignación en locales</p>
                 <p className="glow tabular mt-1 text-2xl font-bold">{fmtMoney(val.data.consignmentCost)}</p>
                 <p className="text-sm text-muted">
-                  {fmtNumber(val.data.consignmentUnits)} unidades · {fmtMoney(val.data.consignmentAtStorePrice)} a precio al local
+                  {fmtNumber(val.data.consignmentUnits)} unidades · {fmtMoney(val.data.consignmentAtStorePrice)} a lo que paga cada local
                 </p>
               </Card>
             </div>

@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import type { Store } from '../../data/types';
 import { supplyCheck } from '../../domain/compliance';
 import { creditText } from '../../domain/invoices';
+import { importeDeCapas, precioDelLocal } from '../../domain/precios-local';
 import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitOf, unitsText } from '../../domain/products';
 import type { NewPhoto } from '../../lib/image';
 import { fmtMoney } from '../../lib/money';
@@ -342,7 +343,7 @@ export function RequestDeliverySheet({ open, onClose, store }: { open: boolean; 
                     Hay {unitsText(v.product, v.stock.available)} ·{' '}
                     {firm && prices.data?.prices[v.product.id]
                       ? `${fmtMoney(prices.data.prices[v.product.id]!.unit)} por ${unitOf(v.product).one} · ${fmtMoney(prices.data.prices[v.product.id]!.box)} la caja`
-                      : `${fmtMoney(v.product.priceToStore)} por ${unitOf(v.product).one} al local`}
+                      : `${fmtMoney(precioDelLocal(store, v.product))} por ${unitOf(v.product).one} al local`}
                     {v.stock.available === 0 && v.stock.nextArrival ? ` · llegan ${v.stock.nextArrival.qty} ${fmtRelativeDays(v.stock.nextArrival.eta, ctx.now())}` : ''}
                   </p>
                 </div>
@@ -368,7 +369,14 @@ export function ReportSalesSheet({ open, onClose, store, lines }: { open: boolea
   const items = Object.entries(qty)
     .filter(([, q]) => q > 0)
     .map(([productId, q]) => ({ productId, qty: q }));
-  const total = useMemo(() => items.reduce((a, i) => a + i.qty * (lines.find((l) => l.productId === i.productId)?.priceToStore ?? 0), 0), [items, lines]);
+  const total = useMemo(
+    () =>
+      items.reduce((a, i) => {
+        const l = lines.find((x) => x.productId === i.productId);
+        return a + (l ? importeDeCapas(l.capas, i.qty, l.priceToStore) : 0);
+      }, 0),
+    [items, lines],
+  );
   return (
     <Sheet open={open} onClose={onClose} title="Reportar ventas">
       <form
@@ -382,7 +390,7 @@ export function ReportSalesSheet({ open, onClose, store, lines }: { open: boolea
           }, 'Ventas reportadas. Entran en la próxima liquidación.');
         }}
       >
-        <p className="text-muted">Lo vendido baja de la consignación y entra en la próxima liquidación al precio al local.</p>
+        <p className="text-muted">Lo vendido baja de la consignación y entra en la próxima liquidación al precio al que se le dejó (lo más viejo primero).</p>
         {lines.length === 0 ? <p className="text-muted">No hay producto en consignación.</p> : null}
         <ul className="grid gap-2">
           {lines.map((l) => (
@@ -396,7 +404,7 @@ export function ReportSalesSheet({ open, onClose, store, lines }: { open: boolea
           ))}
         </ul>
         <Button type="submit" variant="primary" big icon={FileText} busy={busy} disabled={items.length === 0}>
-          Reportar ventas ({fmtMoney(total)} al precio al local)
+          Reportar ventas ({fmtMoney(total)})
         </Button>
       </form>
     </Sheet>

@@ -68,9 +68,13 @@ export function invoiceCommissionRule(product: Pick<Product, 'sellerCommission'>
   return effectiveRule(product, seller);
 }
 
-/** Comisión sobre el importe de una línea (sin impuesto): % del importe o fijo por unidad base. */
-export function commissionOnAmount(rule: CommissionRule, qty: number, amount: number): number {
+/**
+ * Comisión sobre el importe de una línea (sin impuesto): % del importe, fijo por unidad base, o la
+ * diferencia entre el importe y el precio base de esas unidades (nunca negativa).
+ */
+export function commissionOnAmount(rule: CommissionRule, qty: number, amount: number, basePrice = 0): number {
   if (qty <= 0 || amount <= 0) return 0;
+  if (rule.type === 'diferencia') return round2(Math.max(0, amount - qty * basePrice));
   return rule.type === 'percent' ? round2((amount * rule.value) / 100) : round2(qty * rule.value);
 }
 
@@ -80,7 +84,7 @@ export function commissionOnAmount(rule: CommissionRule, qty: number, amount: nu
  */
 export function invoiceCommissions(
   invoice: Pick<Invoice, 'id' | 'storeId' | 'sellerId' | 'lines' | 'issuedAt'>,
-  productsById: ReadonlyMap<string, Pick<Product, 'id' | 'sellerCommission'>>,
+  productsById: ReadonlyMap<string, Pick<Product, 'id' | 'sellerCommission'> & Partial<Pick<Product, 'priceToStore'>>>,
   seller: Pick<User, 'id' | 'commissionOverride'> | undefined,
   payableOn: LineSettings['commissionPayableOn'],
   newId: (prefix: string) => string,
@@ -102,7 +106,7 @@ export function invoiceCommissions(
       invoiceId: invoice.id,
       qty: l.qty,
       base: l.amount,
-      amount: commissionOnAmount(rule, l.qty, l.amount),
+      amount: commissionOnAmount(rule, l.qty, l.amount, p.priceToStore ?? 0),
       rule,
       status: payableOn === 'venta' ? 'pagable' : 'devengada',
       accruedAt: invoice.issuedAt,

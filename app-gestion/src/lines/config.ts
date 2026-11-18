@@ -1,7 +1,7 @@
 // Un mismo motor, dos configuraciones. Todo lo que cambia entre Tabaco y Café vive aquí:
 // los campos del producto, de dónde entra el inventario, la plantilla de contrato,
 // las reglas de comisión por defecto y el tema de color.
-import type { ArrivalStatus, CommissionRule, LineId, ProductKind } from '../data/types';
+import type { ArrivalStatus, LineId, ProductCommissionRule, ProductKind } from '../data/types';
 import { CABEZAS } from '../domain/cabeza';
 import { CAPAS_ANTIGUAS, CAPAS_OFRECIDAS } from '../domain/products';
 import { CAFE_CONTRACT, TABACO_CONTRACT } from './contract-templates';
@@ -46,7 +46,7 @@ export interface LineConfig {
   pairingLabel: string;
   storeTypes: string[];
   requiresTobaccoPermit: boolean;
-  defaultCommission: CommissionRule;
+  defaultCommission: ProductCommissionRule;
   contractTemplate: string;
   skuPrefix: string;
 }

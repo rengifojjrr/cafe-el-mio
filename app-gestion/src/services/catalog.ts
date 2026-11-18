@@ -1,7 +1,9 @@
 // Catálogo de la línea. Los costos solo los ve administración: para los demás roles
 // el campo ni siquiera viaja en el objeto.
 import { z } from 'zod';
-import type { CommissionRule, Photo, Product } from '../data/types';
+import type { CommissionRule, Photo, Product, Store } from '../data/types';
+import { precioDelLocal } from '../domain/precios-local';
+import { round2 } from '../lib/money';
 import { commissionPerUnit, storeEarning } from '../domain/money-rules';
 import { capaShade, composeName, familyIdFor, variantLabelFor } from '../domain/products';
 import { can } from '../domain/permissions';
@@ -36,6 +38,12 @@ export function hasCost(p: Product | PublicProduct): p is Product {
   return 'cost' in p;
 }
 
+/** La cuenta de un local: su local (para mostrarle su precio). */
+async function viewerStore(ctx: Ctx): Promise<Store | undefined> {
+  if (ctx.actor.role !== 'store' || !ctx.actor.storeId) return undefined;
+  return ctx.repo.stores.get(ctx.actor.storeId);
+}
+
 /** Vendedor: su comisión de hoy (la progresiva según cómo va en el mes, o la de cada producto). */
 async function viewerSeller(ctx: Ctx): Promise<SellerCommissionContext | undefined> {
   if (ctx.actor.role !== 'seller') return undefined;
@@ -44,7 +52,7 @@ async function viewerSeller(ctx: Ctx): Promise<SellerCommissionContext | undefin
 
 export async function listProducts(ctx: Ctx, opts?: { includeInactive?: boolean }): Promise<ProductView[]> {
   guard(ctx, 'product.read');
-  const [snap, settings, seller] = await Promise.all([loadInventory(ctx), getSettings(ctx), viewerSeller(ctx)]);
+  const [snap, settings, seller, local] = await Promise.all([loadInventory(ctx), getSettings(ctx), viewerSeller(ctx), viewerStore(ctx)]);
   const lines = stockLines(snap, ctx.now(), settings.expiryWarningDays);
   const isAdmin = can(ctx.actor, 'product.readCost', ctx.line);
   const showInactive = isAdmin && opts?.includeInactive;
@@ -53,7 +61,7 @@ export async function listProducts(ctx: Ctx, opts?: { includeInactive?: boolean 
   return snap.products
     .filter((p) => p.active || showInactive)
     .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-    .map((p) => withStorePrice(toView(ctx, p, scopeStock(lines.get(p.id)!, snap, visible), isAdmin, seller), firm));
+    .map((p) => withStorePrice(toView(ctx, p, scopeStock(lines.get(p.id)!, snap, visible), isAdmin, seller, local), firm));
 }
 
 /** Para la cuenta de un local que compra en firme: los precios de su lista. */
@@ -90,11 +98,14 @@ function scopeStock(line: StockLine, snap: InventorySnapshot, visible: Set<strin
   return { ...line, consignment, storesHolding };
 }
 
-function toView(ctx: Ctx, p: Product, stock: StockLine, isAdmin: boolean, seller?: SellerCommissionContext): ProductView {
+function toView(ctx: Ctx, p: Product, stock: StockLine, isAdmin: boolean, seller?: SellerCommissionContext, local?: Store): ProductView {
+  const product = isAdmin ? p : toPublicProduct(p);
+  // La cuenta de un local ve SU precio (el que le puso su vendedor), nunca el precio base.
+  const precio = local ? precioDelLocal(local, p) : p.priceToStore;
   const view: ProductView = {
-    product: isAdmin ? p : toPublicProduct(p),
+    product: precio === p.priceToStore ? product : { ...product, priceToStore: precio, boxPrice: round2(precio * p.packSize) },
     stock,
-    storeEarning: storeEarning(p),
+    storeEarning: local ? round2(p.suggestedRetail - precio) : storeEarning(p),
   };
   if (ctx.actor.role === 'seller' || isAdmin) {
     const rule = seller ? ruleFromContext(seller, p) : p.sellerCommission;
@@ -108,13 +119,13 @@ function toView(ctx: Ctx, p: Product, stock: StockLine, isAdmin: boolean, seller
 
 export async function getProduct(ctx: Ctx, id: string): Promise<ProductView> {
   guard(ctx, 'product.read');
-  const [snap, settings, seller] = await Promise.all([loadInventory(ctx), getSettings(ctx), viewerSeller(ctx)]);
+  const [snap, settings, seller, local] = await Promise.all([loadInventory(ctx), getSettings(ctx), viewerSeller(ctx), viewerStore(ctx)]);
   const p = snap.productsById.get(id);
   if (!p) throw new NotFoundError('el producto');
   const isAdmin = can(ctx.actor, 'product.readCost', ctx.line);
   if (!p.active && !isAdmin) throw new NotFoundError('el producto');
   const lines = stockLines(snap, ctx.now(), settings.expiryWarningDays);
-  return withStorePrice(toView(ctx, p, scopeStock(lines.get(p.id)!, snap, await visibleStoreIds(ctx)), isAdmin, seller), await firmPrices(ctx, snap));
+  return withStorePrice(toView(ctx, p, scopeStock(lines.get(p.id)!, snap, await visibleStoreIds(ctx)), isAdmin, seller, local), await firmPrices(ctx, snap));
 }
 
 const ruleSchema = z.discriminatedUnion('type', [
@@ -130,7 +141,7 @@ const productSchema = z
     brandLine: z.string().trim().min(2, 'Escribe la marca o línea.').max(60),
     active: z.boolean().default(true),
     cost: z.number({ error: 'Escribe el costo.' }).nonnegative('El costo no puede ser negativo.'),
-    priceToStore: z.number({ error: 'Escribe el precio al local.' }).positive('El precio al local tiene que ser mayor que cero.'),
+    priceToStore: z.number({ error: 'Escribe el precio base.' }).positive('El precio base tiene que ser mayor que cero.'),
     suggestedRetail: z.number({ error: 'Escribe el PVP sugerido.' }).positive('El PVP tiene que ser mayor que cero.'),
     sellerCommission: ruleSchema,
     /** Comisión propia: el producto paga su regla aunque haya comisión progresiva. */
@@ -154,7 +165,7 @@ const productSchema = z
     boxPrice: z.number().nonnegative().optional(),
   })
   .refine((p) => p.suggestedRetail >= p.priceToStore, {
-    message: 'El PVP sugerido no puede ser menor que el precio al local: el local perdería en cada venta.',
+    message: 'El PVP sugerido no puede ser menor que el precio base: el local perdería en cada venta.',
     path: ['suggestedRetail'],
   });
 
@@ -245,9 +256,9 @@ export async function setProductActive(ctx: Ctx, id: string, active: boolean): P
   await mutate(ctx, async () => {
     const p = await ctx.repo.products.get(id);
     if (!p) throw new NotFoundError('el producto');
-    // Un producto sin precio al local (los cafés de El Mío al empezar) no se activa: se entregaría a $0.
+    // Un producto sin precio base (los cafés de El Mío al empezar) no se activa: se entregaría a $0.
     if (active && !(p.priceToStore > 0)) {
-      throw new ValidationError(`${p.name} todavía no tiene precio al local: ponlo con «Editar» antes de activarlo.`);
+      throw new ValidationError(`${p.name} todavía no tiene precio base: ponlo con «Editar» antes de activarlo.`);
     }
     p.active = active;
     p.updatedAt = nowIso(ctx);

@@ -15,7 +15,7 @@ test('nuevo producto sin procedencia ni región: se guarda, sale con «—» y s
   // Procedencia y Región quedan en blanco.
   await expect(page.getByLabel('Procedencia')).toHaveValue('');
   await expect(page.getByLabel('Región')).toHaveValue('');
-  await page.getByLabel('Precio al local por mazo').fill('20');
+  await page.getByLabel('Precio base por mazo').fill('20');
   await page.getByLabel('PVP sugerido por mazo').fill('35');
   await page.getByLabel('Costo por mazo (USD)').fill('8');
   await page.getByRole('button', { name: 'Crear producto' }).click();

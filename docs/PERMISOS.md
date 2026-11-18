@@ -18,7 +18,7 @@ prohibido y comprueban que falla.
 
 | Acción | Administración | Vendedor | Local | Dirección |
 |---|---|---|---|---|
-| Ver catálogo (`product.read`) | ✔ | ✔ (con su comisión) | ✔ (con lo que gana) | — |
+| Ver catálogo (`product.read`) | ✔ | ✔ (con su comisión) | ✔ (su precio y lo que gana; nunca el precio base) | — |
 | Ver costos (`product.readCost`) | ✔ | — | — | — |
 | Editar catálogo, fotos (`product.write`) | ✔ | — | — | — |
 | Ver stock y llegadas (`inventory.read`) | ✔ | ✔ | ✔ | — |
@@ -27,6 +27,7 @@ prohibido y comprueban que falla.
 | Ver un local (`store.read`) | ✔ | si es suyo | si es el suyo | — |
 | Registrar tienda (`store.create`) | ✔ | ✔ (queda a su nombre) | — | — |
 | Editar tienda (`store.update`) | ✔ | si es suya | — | — |
+| Precios de cada local, con el base al lado (verlos: `store.read`; ponerlos, nunca menos que el base: `store.update`) | ✔ | si es suyo | — | — |
 | Ver los recorridos de prospectos (`store.list`) | todos | los suyos | — | — |
 | Anotar la visita a un prospecto (`store.update`) | ✔ | si es suyo | — | — |
 | Aprobar, pausar, cerrar (`store.approve`) | ✔ | — | — | — |

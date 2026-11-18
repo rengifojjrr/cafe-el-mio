@@ -92,7 +92,7 @@ export function CommissionSchemeSettings({ scheme }: { scheme?: CommissionScheme
     <Section title="Comisión progresiva">
       <Card className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="max-w-[70ch] text-sm text-muted">
-          El vendedor gana un % del precio al local que sube con sus locales activos o con lo que vende en el mes, sin pasar del tope. El % se fija al reportarse cada venta, con lo que lleva en el mes hasta ese momento; lo ya devengado no cambia. Los productos con «comisión propia» y los vendedores con comisión especial fija no la usan.
+          El vendedor gana un % de lo que paga el local que sube con sus locales activos o con lo que vende en el mes, sin pasar del tope. El % se fija al reportarse cada venta, con lo que lleva en el mes hasta ese momento; lo ya devengado no cambia. No la usan los productos con «comisión propia», los vendedores con comisión especial fija ni los que ganan la diferencia sobre el precio base.
         </p>
         <label className="flex min-h-12 items-center gap-3">
           <input type="checkbox" className="h-5 w-5 accent-[var(--accent)]" checked={on} onChange={(e) => setOn(e.target.checked)} disabled={actor.readOnly} />
@@ -146,7 +146,9 @@ export function Simulator({ scheme }: { scheme: CommissionScheme }) {
 /** En la tarjeta del vendedor (Usuarios): qué comisión le rige. */
 export function SellerCommissionText({ user, lineScheme }: { user: User; lineScheme?: CommissionScheme }) {
   const text = user.commissionOverride
-    ? `especial, ${describeRule(user.commissionOverride)}`
+    ? user.commissionOverride.type === 'diferencia'
+      ? 'la diferencia sobre el precio base (le pone el precio a cada local)'
+      : `especial, ${describeRule(user.commissionOverride)}`
     : user.commissionScheme
       ? `progresiva propia (${describeScheme(user.commissionScheme)})`
       : lineScheme

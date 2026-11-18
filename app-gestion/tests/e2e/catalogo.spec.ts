@@ -86,7 +86,7 @@ test('nuevo producto de mazo: primero «¿Premium o de mazo?» y el nombre se ar
   await page.getByLabel('Fortaleza').selectOption('fuerte');
   await page.getByLabel('Procedencia').fill('Nicaragua');
   await expect(page.getByText('Robusto 5 × 54 · Maduro')).toBeVisible();
-  await page.getByLabel('Precio al local por mazo').fill('24');
+  await page.getByLabel('Precio base por mazo').fill('24');
   await page.getByLabel('PVP sugerido por mazo').fill('42');
   await page.getByLabel('Costo por mazo (USD)').fill('10');
   await page.getByRole('button', { name: 'Crear producto' }).click();

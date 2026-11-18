@@ -17,6 +17,7 @@ import type {
 import { assertCanSupply, supplyCheck } from '../domain/compliance';
 import { WAREHOUSE, allocate, storeLoc } from '../domain/ledger';
 import { commissionAmount } from '../domain/money-rules';
+import { capasDelLocal, consumir, precioDelLocal, repartirLotes, type Capa } from '../domain/precios-local';
 import { splitIntoPacks } from '../domain/pricing';
 import type { NewPhoto } from '../lib/image';
 import { round2 } from '../lib/money';
@@ -283,6 +284,9 @@ export async function receiveDelivery(ctx: Ctx, deliveryId: string, signature: z
         if (qty <= 0) continue;
         const product = snap.productsById.get(it.productId);
         const parts = allocate(snap.balances, snap.lotsById, WAREHOUSE, it.productId, qty, product?.name);
+        // Se deja al precio de este local hoy (el que le puso su vendedor, o el base) y con el base de
+        // hoy: lo que se venda después se cobra así, aunque los precios cambien.
+        const precio = product ? { unitPrice: precioDelLocal(store, product), basePrice: round2(product.priceToStore) } : {};
         for (const part of parts) {
           const mv: Movement = {
             id: ctx.newId('mov'),
@@ -297,6 +301,7 @@ export async function receiveDelivery(ctx: Ctx, deliveryId: string, signature: z
             refType: 'delivery',
             refId: d.id,
             actorId: ctx.actor.userId,
+            ...precio,
           };
           await ctx.repo.movements.put(mv);
           snap.balances.apply(mv);
@@ -336,16 +341,16 @@ async function createSalesReport(
   const reportId = ctx.newId('vta');
   const lines: SaleLine[] = [];
   const commissions: Commission[] = [];
+  // Lo que el local tiene de cada producto, por capas (a qué precio y con qué base se le dejó).
+  const capas = new Map<string, Capa[]>();
   for (const it of items) {
     if (it.qty <= 0) continue;
     const p = snap.productsById.get(it.productId);
     if (!p) throw new ValidationError('Producto desconocido.');
     const parts = allocate(snap.balances, snap.lotsById, storeLoc(store.id), it.productId, it.qty, p.name);
-    let cost = 0;
     const lots: SaleLine['lots'] = [];
     for (const part of parts) {
       const unitCost = snap.lotsById.get(part.lotId)?.unitCost ?? p.cost;
-      cost += part.qty * unitCost;
       lots.push({ lotId: part.lotId, qty: part.qty, unitCost });
       const mv: Movement = {
         id: ctx.newId('mov'),
@@ -364,24 +369,29 @@ async function createSalesReport(
       await ctx.repo.movements.put(mv);
       snap.balances.apply(mv);
     }
-    lines.push({ productId: it.productId, qty: it.qty, unitPrice: p.priceToStore, cost: round2(cost), lots });
+    // Lo vendido sale de lo más viejo: cada parte a su precio y con su base, con sus lotes y su costo.
+    const delProducto = capas.get(p.id) ?? capasDelLocal(snap.movements, store.id, p.id, p.priceToStore);
+    capas.set(p.id, delProducto);
     const rule = ruleFromContext(commissionCtx, p);
-    if (!rule) continue;
-    commissions.push({
-      id: ctx.newId('com'),
-      sellerId: store.sellerId,
-      storeId: store.id,
-      productId: p.id,
-      salesReportId: reportId,
-      settlementId: null,
-      qty: it.qty,
-      base: round2(it.qty * p.priceToStore),
-      amount: commissionAmount(rule, it.qty, p.priceToStore),
-      rule,
-      status: settings.commissionPayableOn === 'venta' ? 'pagable' : 'devengada',
-      accruedAt: at,
-      payableAt: settings.commissionPayableOn === 'venta' ? at : undefined,
-    });
+    for (const parte of repartirLotes(consumir(delProducto, it.qty, p.priceToStore), lots)) {
+      lines.push({ productId: it.productId, qty: parte.qty, unitPrice: parte.unitPrice, basePrice: parte.basePrice, cost: parte.cost, lots: parte.lots });
+      if (!rule) continue;
+      commissions.push({
+        id: ctx.newId('com'),
+        sellerId: store.sellerId,
+        storeId: store.id,
+        productId: p.id,
+        salesReportId: reportId,
+        settlementId: null,
+        qty: parte.qty,
+        base: round2(parte.qty * parte.unitPrice),
+        amount: commissionAmount(rule, parte.qty, parte.unitPrice, parte.basePrice),
+        rule,
+        status: settings.commissionPayableOn === 'venta' ? 'pagable' : 'devengada',
+        accruedAt: at,
+        payableAt: settings.commissionPayableOn === 'venta' ? at : undefined,
+      });
+    }
   }
   if (lines.length === 0) throw new ValidationError('No hay ventas para reportar.');
   const report: SalesReport = {
