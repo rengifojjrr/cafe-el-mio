@@ -5,6 +5,8 @@ import { CheckCircle2, ClipboardPaste, PackageCheck, Phone, Search, Send, Trash2
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import type { SalePack } from '../../data/types';
+import { type ClaseCliente, esLocal } from '../../domain/clientes';
+import { pideEdad } from '../../domain/compliance';
 import { type PasteLine, parsePastedOrder } from '../../domain/paste-order';
 import { baseQty } from '../../domain/pricing';
 import { mixedUnitsText, normalize, searchText, stockText, unitNames } from '../../domain/products';
@@ -12,12 +14,13 @@ import { fmtMoney } from '../../lib/money';
 import { precioDelLocal } from '../../domain/precios-local';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
+import { verCliente } from '../../services/clientes';
 import { createPhoneOrder } from '../../services/consignment';
 import { type QuickProduct, type QuickStore, packQtyText, quickSaleProducts, quickSaleStores } from '../../services/invoices';
 import { Button, Card, ErrorBox, LinkButton, Loading, PageHeader, Pill, Section, SelectInput, TextArea } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { RoleGate } from '../common';
-import { PackQty, PickedStore, StorePicker, defaultPack } from './parts';
+import { ClientePicker, PackQty, PickedStore, clienteRapido, defaultPack } from './parts';
 
 export function PhoneOrderPage() {
   return (
@@ -35,15 +38,45 @@ export function PasteOrderPage() {
   );
 }
 
-/** El local y sus productos (con sus precios) para anotar un pedido. */
+/** El cliente (local, persona o mostrador) y sus productos (con sus precios) para anotar un pedido. */
 function useOrderData() {
   const { ctx } = useLine();
   const [params] = useSearchParams();
   const stores = useAsync(() => quickSaleStores(ctx, 'pedido'), [ctx]);
   const [storeId, setStoreId] = useState<string | null>(params.get('local'));
+  const [clase, setClase] = useState<ClaseCliente>('local');
+  // Una persona o el mostrador (no están en la lista de locales). Si llega por el link, se busca.
+  const [otro, setOtro] = useState<QuickStore | null>(null);
+  const inicial = useAsync(async () => {
+    const id = params.get('local');
+    if (!id) return null;
+    try {
+      return clienteRapido(await verCliente(ctx, id));
+    } catch {
+      return null;
+    }
+  }, [ctx]);
   const catalog = useAsync(() => quickSaleProducts(ctx, storeId, 'pedido'), [ctx, storeId]);
-  const picked = stores.data?.find((s) => s.store.id === storeId && !s.blocked);
-  return { stores, storeId, setStoreId, catalog, picked };
+  const fuera = [otro, inicial.data].find((x) => x && x.store.id === storeId) ?? undefined;
+  const picked = fuera ?? stores.data?.find((s) => s.store.id === storeId && !s.blocked);
+  const pick = (s: QuickStore | null) => {
+    setStoreId(s?.store.id ?? null);
+    setOtro(s && !esLocal(s.store) ? s : null);
+  };
+  return { stores, storeId, pick, catalog, picked, clase, setClase };
+}
+
+/** En tabaco, a una persona o al mostrador: tiene 21 o más (se comprueba con su identificación al entregar). */
+function EdadCheck({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="mt-4 flex items-start gap-3 rounded-2xl border border-warn bg-warn-soft p-3">
+      <input type="checkbox" className="mt-1 h-5 w-5 flex-none" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        <span className="font-semibold text-ink">Tiene 21 años o más</span>
+        <span className="block text-sm text-muted">Se comprueba con su identificación al entregar. A menores de 21 no se les vende tabaco.</span>
+      </span>
+    </label>
+  );
 }
 
 /** Lo que paga el local: su lista (o su precio) si compra en firme; en consignación, su precio o el base. */
@@ -76,7 +109,9 @@ function OrderDone({ code, onAgain }: { code: string; onAgain: () => void }) {
 function PhoneOrder() {
   const { ctx, actor, p } = useLine();
   const { run, busy } = useAction();
-  const { stores, storeId, setStoreId, catalog, picked } = useOrderData();
+  const { stores, storeId, pick, catalog, picked, clase, setClase } = useOrderData();
+  const [edad, setEdad] = useState(false);
+  const pide = pideEdad(ctx.line, picked?.store);
   const [qty, setQty] = useState<Record<string, { pack: SalePack; packQty: number }>>({});
   const [q, setQ] = useState('');
   const [note, setNote] = useState('');
@@ -113,14 +148,15 @@ function PhoneOrder() {
         ) : picked ? (
           <PickedStore
             store={picked}
-            detail={catalog.data && picked.store.saleMode === 'firme' ? `lista ${catalog.data.listName}` : undefined}
+            detail={catalog.data && picked.store.saleMode === 'firme' && esLocal(picked.store) ? `lista ${catalog.data.listName}` : undefined}
             onChange={() => {
-              setStoreId(null);
+              pick(null);
+              setEdad(false);
               reset();
             }}
           />
         ) : (
-          <StorePicker stores={stores.data ?? []} onPick={(s) => setStoreId(s.store.id)} />
+          <ClientePicker stores={stores.data ?? []} clase={clase} onClase={setClase} onPick={pick} />
         )}
       </Section>
 
@@ -132,8 +168,9 @@ function PhoneOrder() {
             e.preventDefault();
             void run(
               async () => {
-                const r = await createPhoneOrder(ctx, { storeId: picked.store.id, items: items.map((i) => ({ productId: i.x.product.id, qty: i.base })), note }, 'telefono');
+                const r = await createPhoneOrder(ctx, { storeId: picked.store.id, items: items.map((i) => ({ productId: i.x.product.id, qty: i.base })), note, edadComprobada: pide ? edad : undefined }, 'telefono');
                 setQty({});
+                setEdad(false);
                 setDone(r.reorder.code);
                 return r;
               },
@@ -166,6 +203,7 @@ function PhoneOrder() {
           </Section>
           <Card className="mt-4 p-4">
             <TextArea label="Nota (opcional)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Por ejemplo: lo recoge el sábado" />
+            {pide ? <EdadCheck checked={edad} onChange={setEdad} /> : null}
           </Card>
           <div className="sticky bottom-[76px] z-20 mt-5 flex flex-wrap items-center justify-end gap-3 lg:bottom-4 lg:justify-start">
             {items.length ? (
@@ -173,7 +211,7 @@ function PhoneOrder() {
                 {mixedUnitsText(items.map((i) => ({ product: i.x.product, qty: i.base })))} · <span className="glow tabular">{fmtMoney(total)}</span>
               </p>
             ) : null}
-            <Button type="submit" variant="primary" big icon={Phone} busy={busy} disabled={items.length === 0 || actor.readOnly}>
+            <Button type="submit" variant="primary" big icon={Phone} busy={busy} disabled={items.length === 0 || actor.readOnly || (pide && !edad)}>
               Crear pedido
             </Button>
           </div>
@@ -194,7 +232,9 @@ const EXAMPLE = '10 toro maduro, 5 robusto habano\n2 cajas torpedo maduro\n3 mz 
 function PasteOrder() {
   const { ctx, actor, p, line } = useLine();
   const { run, busy } = useAction();
-  const { stores, storeId, setStoreId, catalog, picked } = useOrderData();
+  const { stores, storeId, pick, catalog, picked, clase, setClase } = useOrderData();
+  const [edad, setEdad] = useState(false);
+  const pide = pideEdad(ctx.line, picked?.store);
   const [text, setText] = useState('');
   const [lines, setLines] = useState<ReviewLine[] | null>(null);
   const [ignored, setIgnored] = useState<string[]>([]);
@@ -249,19 +289,20 @@ function PasteOrder() {
           </LinkButton>
         }
       />
-      <Section title="¿De qué local es?">
+      <Section title="¿De quién es?">
         {stores.loading && !stores.data ? (
           <Loading rows={2} />
         ) : picked ? (
           <PickedStore
             store={picked}
             onChange={() => {
-              setStoreId(null);
+              pick(null);
+              setEdad(false);
               reset();
             }}
           />
         ) : (
-          <StorePicker stores={stores.data ?? []} onPick={(s) => setStoreId(s.store.id)} />
+          <ClientePicker stores={stores.data ?? []} clase={clase} onClase={setClase} onPick={pick} />
         )}
       </Section>
 
@@ -333,16 +374,22 @@ function PasteOrder() {
               {ignored.length ? <p className="mt-2 text-sm text-muted">No se usó: {ignored.map((t) => `«${t}»`).join(', ')}.</p> : null}
               <div className="sticky bottom-[76px] z-20 mt-5 flex flex-wrap items-center justify-end gap-3 lg:bottom-4 lg:justify-start">
                 {pending ? <p className="glass px-4 py-2 text-sm font-semibold text-warn">Falta elegir el producto en {pending} línea{pending === 1 ? '' : 's'}</p> : null}
+                {pide ? <EdadCheck checked={edad} onChange={setEdad} /> : null}
                 <Button
                   variant="primary"
                   big
                   icon={Send}
                   busy={busy}
-                  disabled={pending > 0 || merged.size === 0 || actor.readOnly}
+                  disabled={pending > 0 || merged.size === 0 || actor.readOnly || (pide && !edad)}
                   onClick={() =>
                     void run(
                       async () => {
-                        const r = await createPhoneOrder(ctx, { storeId: picked.store.id, items: [...merged].map(([productId, qty]) => ({ productId, qty })), note: `«${text.trim().replace(/\s*\n+\s*/g, ' · ').slice(0, 200)}»` }, 'pegado');
+                        const r = await createPhoneOrder(
+                          ctx,
+                          { storeId: picked.store.id, items: [...merged].map(([productId, qty]) => ({ productId, qty })), note: `«${text.trim().replace(/\s*\n+\s*/g, ' · ').slice(0, 200)}»`, edadComprobada: pide ? edad : undefined },
+                          'pegado',
+                        );
+                        setEdad(false);
                         setDone(r.reorder.code);
                         setLines(null);
                         return r;

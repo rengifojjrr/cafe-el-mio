@@ -1,6 +1,7 @@
 // Cuentas del local: lo que debe, cuándo vence, sus facturas (venta en firme), sus liquidaciones
 // (consignación) y sus pagos. En palabras de tienda.
 import { CalendarClock, CircleAlert, CircleCheck, Receipt, Wallet } from 'lucide-react';
+import { CLASES, CLASE_PLURAL, claseDe } from '../../domain/clientes';
 import { useMemo, useState } from 'react';
 import { AGING_LABEL } from '../../domain/money-rules';
 import { fmtMoney, round2 } from '../../lib/money';
@@ -41,8 +42,8 @@ export function StoreAccountsPage() {
   return (
     <>
       <PageHeader
-        title="Cuentas de los locales"
-        subtitle={actor.role === 'seller' ? 'Lo que debe cada uno de tus locales, para cobrar en la visita.' : 'Elige un local para ver su cuenta como la ve el local.'}
+        title={actor.role === 'seller' ? 'Cuentas de los locales' : 'Cuentas de los clientes'}
+        subtitle={actor.role === 'seller' ? 'Lo que debe cada uno de tus locales, para cobrar en la visita.' : 'Elige un cliente (local, persona o el almacén) para ver su cuenta.'}
       />
       {list.length === 0 ? (
         <NoAccount />
@@ -50,10 +51,12 @@ export function StoreAccountsPage() {
         <>
           <div className="mb-5 max-w-md">
             <SelectInput
-              label="Local"
+              label={actor.role === 'seller' ? 'Local' : 'Cliente'}
               value={current?.store.id ?? ''}
               onChange={(e) => setPicked(e.target.value)}
-              options={list.map((a) => ({ value: a.store.id, label: `${a.store.name}${a.overdue > 0 ? ' · vencido' : ''}` }))}
+              options={[...list]
+                .sort((a, b) => CLASES.indexOf(claseDe(a.store)) - CLASES.indexOf(claseDe(b.store)))
+                .map((a) => ({ value: a.store.id, label: `${a.store.name}${a.overdue > 0 ? ' · vencido' : ''}`, group: actor.role === 'seller' ? undefined : CLASE_PLURAL[claseDe(a.store)] }))}
             />
           </div>
           {current ? <AccountView account={current} /> : null}

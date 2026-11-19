@@ -1,11 +1,19 @@
-// Piezas de la venta rápida y de los pedidos por teléfono o pegados: elegir el local (los recientes
-// primero) y la cantidad en su presentación (mazos, tabacos o unidades, o cajas).
-import { Search, Store as StoreIcon } from 'lucide-react';
+// Piezas de la venta rápida y de los pedidos por teléfono o pegados: elegir el cliente (un local, los
+// recientes primero; una persona, sin duplicarla; o el almacén, la venta de mostrador) y la cantidad
+// en su presentación (mazos, tabacos o unidades, o cajas).
+import { Search, Store as StoreIcon, UserPlus, UserRound, Warehouse } from 'lucide-react';
 import { useState } from 'react';
-import type { Product, SalePack } from '../../data/types';
+import type { Product, SalePack, Store } from '../../data/types';
+import { type ClaseCliente, CLASE_LABEL, claseDe, claveNombre } from '../../domain/clientes';
+import { creditText } from '../../domain/invoices';
 import { normalize, unitNames } from '../../domain/products';
+import { fmtDate } from '../../lib/time';
+import { useAsync } from '../../app/hooks';
+import { useLine } from '../../app/line-context';
+import { asegurarMostrador, buscarPersonas, crearPersona, verCliente } from '../../services/clientes';
 import type { QuickStore } from '../../services/invoices';
-import { Button, QtyStepper, Tabs } from '../../ui/kit';
+import { Button, QtyStepper, Tabs, TextInput } from '../../ui/kit';
+import { useAction } from '../../ui/toast';
 
 /** Los locales como fichas grandes: los recientes y frecuentes primero; buscar si no está. */
 export function StorePicker({ stores, onPick, top = 6 }: { stores: readonly QuickStore[]; onPick: (s: QuickStore) => void; top?: number }) {
@@ -44,20 +52,126 @@ export function StorePicker({ stores, onPick, top = 6 }: { stores: readonly Quic
   );
 }
 
-/** El local elegido, con «Cambiar». */
+/** El cliente elegido (local, persona o almacén), con «Cambiar». */
 export function PickedStore({ store, detail, onChange }: { store: QuickStore; detail?: string; onChange: () => void }) {
+  const clase = claseDe(store.store);
+  const Icon = clase === 'persona' ? UserRound : clase === 'almacen' ? Warehouse : StoreIcon;
+  const extra = clase === 'persona' ? [CLASE_LABEL.persona, store.store.phone].filter(Boolean).join(' · ') : clase === 'almacen' ? 'Venta de mostrador' : store.terms;
   return (
-    <div className="glass flex flex-wrap items-center justify-between gap-3 p-3">
-      <span className="min-w-0">
-        <span className="block font-bold text-ink">{store.store.name}</span>
-        <span className="block text-sm text-muted">
-          {store.terms}
-          {detail ? ` · ${detail}` : ''}
+    <div className="glass flex flex-wrap items-center justify-between gap-3 p-3" data-cliente={clase}>
+      <span className="flex min-w-0 items-center gap-3">
+        <Icon className="h-5 w-5 flex-none text-accent" aria-hidden />
+        <span className="min-w-0">
+          <span className="block font-bold text-ink">{store.store.name}</span>
+          <span className="block text-sm text-muted">
+            {extra}
+            {detail ? ` · ${detail}` : ''}
+          </span>
         </span>
       </span>
       <Button variant="ghost" onClick={onChange}>
-        Cambiar local
+        {clase === 'local' ? 'Cambiar local' : 'Cambiar cliente'}
       </Button>
+    </div>
+  );
+}
+
+/** Un cliente que no es local, con la misma forma que los locales de la lista. */
+export function clienteRapido(store: Store): QuickStore {
+  return { store, terms: creditText(store), count: 0 };
+}
+
+/**
+ * ¿Quién compra? Un selector simple arriba: «Local · Persona · Almacén». Local: los de siempre.
+ * Persona: el nombre (y el teléfono, si quiere); mientras se escribe sugiere las que ya compraron y,
+ * si no está, «Crear “Ana Pérez”» en un toque. Almacén: la venta de mostrador, de una.
+ */
+export function ClientePicker({ stores, onPick, clase, onClase }: { stores: readonly QuickStore[]; onPick: (s: QuickStore) => void; clase: ClaseCliente; onClase: (c: ClaseCliente) => void }) {
+  const { ctx } = useLine();
+  const { run, busy } = useAction();
+  const elegir = (c: ClaseCliente) => {
+    onClase(c);
+    if (c === 'almacen') void run(async () => onPick(clienteRapido(await asegurarMostrador(ctx))));
+  };
+  return (
+    <div className="grid gap-3">
+      <Tabs<ClaseCliente>
+        label="Tipo de cliente"
+        value={clase}
+        onChange={elegir}
+        options={[
+          { value: 'local', label: 'Local' },
+          { value: 'persona', label: 'Persona' },
+          { value: 'almacen', label: 'Almacén' },
+        ]}
+      />
+      {clase === 'local' ? <StorePicker stores={stores} onPick={onPick} /> : null}
+      {clase === 'persona' ? <PersonaPicker onPick={onPick} /> : null}
+      {clase === 'almacen' ? (
+        <div className="glass flex flex-wrap items-center justify-between gap-3 p-3">
+          <span className="min-w-0 text-muted">Venta de mostrador: a quien viene a buscar al almacén sin dar su nombre.</span>
+          <Button icon={Warehouse} busy={busy} onClick={() => elegir('almacen')}>
+            Vender en el mostrador
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Persona: sugiere las que ya compraron (sin duplicar) y crea una nueva en un toque. */
+function PersonaPicker({ onPick }: { onPick: (s: QuickStore) => void }) {
+  const { ctx } = useLine();
+  const { run, busy } = useAction();
+  const [nombre, setNombre] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const term = claveNombre(nombre);
+  const found = useAsync(() => buscarPersonas(ctx, nombre), [ctx, term]);
+  const data = found.data;
+  const crear = () =>
+    void run(
+      async () => {
+        const r = await crearPersona(ctx, { nombre, telefono });
+        onPick(clienteRapido(r.persona));
+        return r;
+      },
+      (r) => (r.nueva ? `Cliente nuevo: ${r.persona.name}.` : `${r.persona.name} ya estaba: se usa la misma.`),
+    );
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <TextInput label="Nombre de la persona" value={nombre} onChange={(e) => setNombre(e.target.value)} autoComplete="off" placeholder="Por ejemplo: Ana Pérez" />
+        <TextInput label="Teléfono (opcional)" value={telefono} onChange={(e) => setTelefono(e.target.value)} inputMode="tel" autoComplete="off" />
+      </div>
+      {data?.sugerencias.length ? (
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Personas">
+          {data.sugerencias.map((x) => (
+            <li key={x.id}>
+              <button
+                type="button"
+                data-persona={x.id}
+                className="glass flex min-h-14 w-full items-center gap-3 p-3 text-left hover:border-accent"
+                // La ficha completa (con su teléfono y su estado), no solo la sugerencia.
+                onClick={() => void run(async () => onPick(clienteRapido(await verCliente(ctx, x.id))))}
+              >
+                <UserRound className="h-5 w-5 flex-none text-accent" aria-hidden />
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold text-ink">{x.nombre}</span>
+                  <span className="block text-sm text-muted">
+                    {[x.telefono, x.compras ? `${x.compras} ${x.compras === 1 ? 'compra' : 'compras'}${x.ultima ? `, la última el ${fmtDate(x.ultima)}` : ''}` : 'Sin compras todavía'].filter(Boolean).join(' · ')}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {term.length >= 2 && !data?.exacta ? (
+        <Button variant="primary" icon={UserPlus} busy={busy} onClick={crear} className="justify-self-start">
+          Crear «{nombre.replace(/\s+/g, ' ').trim()}»
+        </Button>
+      ) : null}
+      {term.length < 2 && !data?.sugerencias.length ? <p className="text-sm text-muted">Escribe el nombre: si ya compró antes, aparece aquí para no duplicarla.</p> : null}
     </div>
   );
 }

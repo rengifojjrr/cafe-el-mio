@@ -1,6 +1,7 @@
 // Facturas de venta en firme: su estado, la fila de una lista, el detalle con el PDF (factura o
 // recibo), compartirlo (WhatsApp, correo o el menú del teléfono) y registrar un pago (solo el apunte).
 import { Download, FileText, HandCoins, Mail, MessageCircle, Share2 } from 'lucide-react';
+import { CLASE_LABEL } from '../../domain/clientes';
 import { type ReactNode, useEffect, useState } from 'react';
 import type { PaymentMethod } from '../../data/types';
 import { AGING_LABEL } from '../../domain/money-rules';
@@ -29,7 +30,8 @@ export function InvoiceItem({ inv, showStore, onOpen, onPay }: { inv: InvoiceVie
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-bold">{showStore ? inv.storeName : `Factura ${inv.code}`}</span>
           <InvoiceStatusPill inv={inv} />
-          {inv.withoutResaleCert ? <Pill tone="warn">Sin certificado de reventa</Pill> : null}
+          {inv.clase !== 'local' ? <Pill tone="info">{CLASE_LABEL[inv.clase]}</Pill> : null}
+          {inv.withoutResaleCert && inv.clase === 'local' ? <Pill tone="warn">Sin certificado de reventa</Pill> : null}
         </span>
         <span className="mt-0.5 block text-sm text-muted">
           {showStore ? `${inv.code} · ` : ''}
@@ -60,12 +62,23 @@ export function pdfData(doc: InvoiceDocument, line: string): InvoicePdfData {
   if (inv.paid > 0) totals.push(['Pagado', fmtMoney(inv.paid)]);
   if (inv.balance > 0 && inv.paid > 0) totals.push(['Saldo', fmtMoney(inv.balance)]);
   const cert = doc.store.resaleCert;
-  const notes = [
-    inv.withoutResaleCert
-      ? 'El local no tenía certificado de reventa vigente al facturar: pedirle el nuevo.'
-      : `Compra para reventa: certificado de reventa ${cert?.number ?? ''} vigente.`,
-  ];
-  if (line === 'tabaco') notes.push('Venta entre empresas. El local vende tabaco solo a mayores de 21 años, con identificación.');
+  const local = !doc.store.clase;
+  const notes = local
+    ? [
+        inv.withoutResaleCert
+          ? 'El local no tenía certificado de reventa vigente al facturar: pedirle el nuevo.'
+          : `Compra para reventa: certificado de reventa ${cert?.number ?? ''} vigente.`,
+      ]
+    : [doc.store.clase === 'almacen' ? 'Venta de mostrador en el almacén.' : 'Venta a nombre de una persona.'];
+  if (line === 'tabaco') {
+    notes.push(
+      local
+        ? 'Venta entre empresas. El local vende tabaco solo a mayores de 21 años, con identificación.'
+        : inv.edadComprobada
+          ? 'Se comprobó con su identificación que tiene 21 años o más.'
+          : 'Venta solo a mayores de 21 años, con identificación.',
+    );
+  }
   return {
     title: `${inv.balance > 0 ? 'Factura' : 'Factura y recibo'} ${inv.code}`,
     company: doc.companyName,
@@ -73,7 +86,7 @@ export function pdfData(doc: InvoiceDocument, line: string): InvoicePdfData {
     issued: fmtDate(inv.issuedAt),
     due: fmtDate(inv.dueOn),
     terms: doc.terms,
-    store: { name: doc.store.name, address: `${doc.store.address}, ${doc.store.city}`, manager: doc.store.managerName, phone: doc.store.phone, taxId: doc.store.taxId },
+    store: { name: doc.store.name, address: [doc.store.address, doc.store.city].filter(Boolean).join(', '), manager: doc.store.managerName, phone: doc.store.phone, taxId: doc.store.taxId },
     lines: doc.lines.map((l) => ({ name: l.name, qty: l.qtyText, price: l.priceText, amount: fmtMoney(l.amount) })),
     totals,
     payment: doc.paymentText,
@@ -153,11 +166,13 @@ export function InvoiceSheet({ invoice, onClose, onPay }: { invoice: InvoiceView
             <InvoiceStatusPill inv={inv} />
             {inv.balance > 0 ? <Pill>{AGING_LABEL[inv.bucket]}</Pill> : null}
             <Pill>{INVOICE_ORIGIN_LABEL[inv.origin]}</Pill>
-            {inv.withoutResaleCert ? <Pill tone="warn">Sin certificado de reventa</Pill> : null}
+            {inv.withoutResaleCert && inv.clase === 'local' ? <Pill tone="warn">Sin certificado de reventa</Pill> : null}
+            {inv.edadComprobada ? <Pill tone="ok">Edad comprobada (21+)</Pill> : null}
           </div>
           <Facts
             items={[
-              ['Local', inv.storeName],
+              [inv.clase === 'local' ? 'Local' : CLASE_LABEL[inv.clase], inv.storeName],
+              ...(inv.note ? ([['Nota', inv.note]] as [string, ReactNode][]) : []),
               ['Vendedor', inv.sellerName],
               ['Emitida', fmtDate(inv.issuedAt)],
               ['Vence', `${fmtDate(inv.dueOn)}${inv.creditDays ? ` (${inv.creditDays} días)` : ' (de contado)'}`],

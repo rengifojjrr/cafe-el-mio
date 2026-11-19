@@ -1,5 +1,6 @@
 // Datos no sensibles para la portada. Vive aparte para que la portada no cargue los servicios.
 import type { LineId } from '../data/types';
+import { esLocal } from '../domain/clientes';
 import { getLineRepo } from '../data';
 
 /** Datos no sensibles para la portada (cuántos locales, productos y vendedores tiene cada línea). */
@@ -10,7 +11,7 @@ export async function lineTeaser(line: LineId): Promise<{ products: number; acti
   if (!(await repo.settings.get('settings'))) return null;
   return {
     products: products.filter((p) => p.active).length,
-    activeStores: stores.filter((s) => s.status === 'activo').length,
+    activeStores: stores.filter((s) => s.status === 'activo' && esLocal(s)).length,
     sellers: users.filter((u) => u.role === 'seller' && u.active).length,
     pendingOrders: reorders.filter((r) => r.status === 'enviado' || r.status === 'confirmado' || r.status === 'preparado').length,
   };

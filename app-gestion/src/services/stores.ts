@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import type { Contract, Invoice, Movement, Photo, SaleMode, Store, StoreStatus, User } from '../data/types';
 import { permitState, type PermitState } from '../domain/compliance';
+import { esLocal } from '../domain/clientes';
 import { vendedorDelLocal } from '../domain/equipo';
 import { capasDelLocal, importeDeCapas, precioDelLocal, valorDeCapas } from '../domain/precios-local';
 import { DEFAULT_PERMIT_ISSUER, normalizeEin } from '../domain/fiscal';
@@ -75,7 +76,8 @@ export async function loadStoreForActor(ctx: Ctx, storeId: string): Promise<Stor
 }
 
 export async function listStores(ctx: Ctx): Promise<StoreView[]> {
-  const stores = await scopedStores(ctx);
+  // Las personas y el mostrador (clientes de la venta rápida) están en «Clientes», no aquí.
+  const stores = (await scopedStores(ctx)).filter(esLocal);
   const ids = new Set(stores.map((s) => s.id));
   const [snap, users, zones, visits, reports, settlements, reorders, contracts, invoices] = await Promise.all([
     loadInventory(ctx),

@@ -107,6 +107,7 @@ const router = createHashRouter([
           { path: 'venta-rapida', element: page(sales, 'QuickSalePage') },
           { path: 'pedido-telefono', element: page(sales, 'PhoneOrderPage') },
           { path: 'pegar-pedido', element: page(sales, 'PasteOrderPage') },
+          { path: 'clientes', element: page(sales, 'ClientesPage') },
           { path: 'ajustes/precios', element: page(sales, 'PriceListsPage') },
           { path: 'cobros', element: page(money, 'CollectionsPage') },
           { path: 'cuentas', element: page(money, 'StoreAccountsPage') },

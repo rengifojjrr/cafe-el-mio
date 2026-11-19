@@ -4,7 +4,8 @@ import { CheckCircle2, FileText, MapPin, PackageCheck, Printer, ScanBarcode, Sen
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import type { Store } from '../../data/types';
-import { supplyCheck } from '../../domain/compliance';
+import { esLocal } from '../../domain/clientes';
+import { AVISO_EDAD, pideEdad, supplyCheck } from '../../domain/compliance';
 import { creditText } from '../../domain/invoices';
 import { importeDeCapas, precioDelLocal } from '../../domain/precios-local';
 import { defaultOrderQty, mixedUnitsText, orderStep, packText, unitOf, unitsText } from '../../domain/products';
@@ -173,6 +174,10 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
   const [sig, setSig] = useState<string | null>(null);
   const [allGood, setAllGood] = useState(false);
   const [withGeo, setWithGeo] = useState(true);
+  const [edad, setEdad] = useState(false);
+  // Una persona o el mostrador: firma quien recibe (no hay dueño ni encargado) y, en tabaco, se comprueba su edad.
+  const local = esLocal(store.data);
+  const pide = pideEdad(ctx.line, store.data);
   const who = name ?? store.data?.managerName ?? '';
   return (
     <Sheet open onClose={onClose} title={`Recibir ${d.code}`}>
@@ -182,7 +187,7 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
           e.preventDefault();
           void run(async () => {
             const geo = withGeo ? await askLocation() : undefined;
-            await receiveDelivery(ctx, d.id, { name: who, image: sig ?? '', geo });
+            await receiveDelivery(ctx, d.id, { name: who, image: sig ?? '', geo, ...(pide ? { edadComprobada: edad } : {}) });
             onClose();
           }, d.firm ? `Entregado y facturado a ${d.storeName}: ${units} unidades. Firmó ${who}.` : `Entregado: ${units} unidades en consignación en ${d.storeName}. Firmó ${who}.`);
         }}
@@ -190,7 +195,9 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
         <p className="rounded-2xl bg-accent-soft p-3 text-ink">
           {actor.role === 'store'
             ? 'Revisa lo que llegó. Firmas tú, como dueño o encargado del local, que recibiste todo.'
-            : 'Entrégale el teléfono al dueño o encargado del local: él revisa lo que llegó y firma que lo recibió todo. El vendedor no firma aquí.'}{' '}
+            : local
+              ? 'Entrégale el teléfono al dueño o encargado del local: él revisa lo que llegó y firma que lo recibió todo. El vendedor no firma aquí.'
+              : 'Entrégale el teléfono a quien recibe: revisa lo que llegó y firma que lo recibió todo.'}{' '}
           {d.firm ? 'Al firmar, la mercancía pasa a ser del local, baja el almacén y sale la factura.' : 'Al firmar, sube lo que el local tiene en consignación y baja el almacén.'}
         </p>
         <ul className="grid gap-1 rounded-xl bg-surface-2 p-3 text-sm">
@@ -203,8 +210,22 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
               </li>
             ))}
         </ul>
-        <TextInput label="Nombre del dueño o encargado del local" value={who} onChange={(e) => setName(e.target.value)} hint={store.data ? `Encargado registrado: ${store.data.managerName}` : undefined} />
-        <SignatureField label="Firma del dueño o encargado del local" onChange={setSig} />
+        <TextInput
+          label={local ? 'Nombre del dueño o encargado del local' : 'Nombre de quien recibe'}
+          value={who}
+          onChange={(e) => setName(e.target.value)}
+          hint={store.data && local ? `Encargado registrado: ${store.data.managerName}` : undefined}
+        />
+        <SignatureField label={local ? 'Firma del dueño o encargado del local' : 'Firma de quien recibe'} onChange={setSig} />
+        {pide ? (
+          <label className="flex items-start gap-3 rounded-2xl border border-warn bg-warn-soft p-3">
+            <input type="checkbox" className="mt-1 h-5 w-5 flex-none" checked={edad} onChange={(e) => setEdad(e.target.checked)} />
+            <span>
+              <span className="font-semibold text-ink">{AVISO_EDAD}</span>
+              <span className="block text-sm text-muted">Pídele un documento con foto. A menores de 21 no se les entrega tabaco.</span>
+            </span>
+          </label>
+        ) : null}
         <label className="flex items-start gap-3 rounded-2xl bg-surface-2 p-3">
           <input type="checkbox" className="mt-1 h-5 w-5 flex-none" checked={allGood} onChange={(e) => setAllGood(e.target.checked)} />
           <span>
@@ -218,7 +239,7 @@ function ReceiveSheet({ d, units, onClose }: { d: DeliveryView; units: number; o
           <input type="checkbox" className="h-5 w-5" checked={withGeo} onChange={(e) => setWithGeo(e.target.checked)} />
           <MapPin className="h-4 w-4 text-accent" aria-hidden /> Guardar la ubicación de la entrega (si el teléfono la da)
         </label>
-        <Button type="submit" variant="primary" big icon={CheckCircle2} busy={busy} disabled={!sig || !allGood || who.trim().length < 3}>
+        <Button type="submit" variant="primary" big icon={CheckCircle2} busy={busy} disabled={!sig || !allGood || who.trim().length < 3 || (pide && !edad)}>
           Firmar y recibir
         </Button>
       </form>

@@ -1,10 +1,14 @@
-// «Venta rápida»: el dueño de un local registrado viene al almacén y se lleva lo suyo. Tres toques
-// para un mazo: el local → el producto (va 1 mazo) → «Cobrar». Baja el stock, sale la factura (o el
-// recibo) en PDF para compartir y queda el pago anotado. La app no cobra: la tarjeta se cobra aparte.
+// «Venta rápida»: alguien viene al almacén y se lleva lo suyo: el dueño de un local, una persona (a su
+// nombre) o cualquiera en el mostrador. Tres toques para un mazo: el cliente → el producto (va 1
+// mazo) → «Cobrar». Baja el stock, sale la factura (o el recibo) en PDF para compartir y queda el
+// pago anotado. La app no cobra: la tarjeta se cobra aparte. En tabaco, a una persona o en el
+// mostrador se anota que se comprobó su edad (21 o más).
 import { CheckCircle2, CreditCard, HandCoins, Plus, Search, Trash2, Wallet, Zap } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import type { Invoice, SalePack } from '../../data/types';
+import { type ClaseCliente, esLocal } from '../../domain/clientes';
+import { AVISO_EDAD, pideEdad } from '../../domain/compliance';
 import { baseQty } from '../../domain/pricing';
 import { normalize, searchText, stockText, unitNames } from '../../domain/products';
 import { fmtMoney } from '../../lib/money';
@@ -12,14 +16,14 @@ import { fmtDate } from '../../lib/time';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { findByCode } from '../../services/codes';
-import { type QuickPayment, type QuickProduct, packQtyText, quickSale, quickSaleProducts, quickSaleStores } from '../../services/invoices';
+import { type QuickPayment, type QuickProduct, type QuickStore, packQtyText, quickSale, quickSaleProducts, quickSaleStores } from '../../services/invoices';
 import { PAYMENT_METHOD_LABEL } from '../../services/money';
 import { Button, Card, EmptyState, ErrorBox, Loading, PageHeader, Section, TextInput } from '../../ui/kit';
 import { ScanButton } from '../../ui/scanner';
 import { useAction, useToast } from '../../ui/toast';
 import { RoleGate } from '../common';
 import { InvoiceDocButtons } from './invoices';
-import { PackQty, PickedStore, StorePicker, defaultPack } from './parts';
+import { ClientePicker, PackQty, PickedStore, defaultPack } from './parts';
 
 export function QuickSalePage() {
   return (
@@ -55,8 +59,17 @@ function QuickSale() {
   const [method, setMethod] = useState<QuickPayment>('efectivo');
   const [reference, setReference] = useState('');
   const [done, setDone] = useState<Invoice | null>(null);
+  const [clase, setClase] = useState<ClaseCliente>('local');
+  // Una persona o el mostrador (no están en la lista de locales).
+  const [otro, setOtro] = useState<QuickStore | null>(null);
+  const [nota, setNota] = useState('');
+  const [edad, setEdad] = useState(false);
 
-  const picked = stores.data?.find((s) => s.store.id === storeId && !s.blocked);
+  const picked = otro && otro.store.id === storeId ? otro : stores.data?.find((s) => s.store.id === storeId && !s.blocked);
+  const pide = pideEdad(ctx.line, picked?.store);
+  const mostrador = picked?.store.clase === 'almacen';
+  // Al mostrador no se le fía: no hay a quién cobrarle después.
+  const metodos = mostrador ? PAY_OPTIONS.filter((o) => o.value !== 'cuenta') : PAY_OPTIONS;
   const products = useMemo(() => catalog.data?.products ?? [], [catalog.data]);
   const byId = useMemo(() => new Map(products.map((x) => [x.product.id, x])), [products]);
   const term = normalize(q);
@@ -105,10 +118,19 @@ function QuickSale() {
   const charge = () =>
     void run(
       async () => {
-        if (!storeId) throw new Error('Elige el local.');
-        const r = await quickSale(ctx, { storeId, items: cart.map((l) => ({ productId: l.productId, pack: l.pack, packQty: l.packQty })), payment: { method, reference } });
+        if (!storeId) throw new Error('Elige quién compra.');
+        const r = await quickSale(ctx, {
+          storeId,
+          items: cart.map((l) => ({ productId: l.productId, pack: l.pack, packQty: l.packQty })),
+          payment: { method: mostrador && method === 'cuenta' ? 'efectivo' : method, reference },
+          note: mostrador ? nota : '',
+          edadComprobada: pide ? edad : false,
+        });
         setCart([]);
         setReference('');
+        setNota('');
+        // La edad se comprueba en cada venta.
+        setEdad(false);
         setDone(r.invoice);
         return r;
       },
@@ -124,7 +146,7 @@ function QuickSale() {
   if (stores.error) return <ErrorBox error={stores.error} />;
   return (
     <>
-      <PageHeader title="Venta rápida" subtitle="El dueño vino al almacén: elige su local, lo que se lleva y cobra. Baja el stock y sale la factura para compartir." />
+      <PageHeader title="Venta rápida" subtitle="Vinieron al almacén: un local, una persona o el mostrador. Elige lo que se lleva y cobra. Baja el stock y sale la factura para compartir." />
 
       <Section title="¿Quién compra?">
         {stores.loading && !stores.data ? (
@@ -132,20 +154,27 @@ function QuickSale() {
         ) : picked ? (
           <PickedStore
             store={picked}
-            detail={catalog.data ? `lista ${catalog.data.listName}` : undefined}
+            detail={catalog.data && esLocal(picked.store) ? `lista ${catalog.data.listName}` : undefined}
             onChange={() => {
               setStoreId(null);
+              setOtro(null);
               setCart([]);
               setDone(null);
+              setEdad(false);
             }}
           />
         ) : (
-          <StorePicker
+          <ClientePicker
             stores={stores.data ?? []}
+            clase={clase}
+            onClase={setClase}
             onPick={(s) => {
               setStoreId(s.store.id);
+              setOtro(esLocal(s.store) ? null : s);
               setCart([]);
               setDone(null);
+              setEdad(false);
+              if (s.store.clase === 'almacen' && method === 'cuenta') setMethod('efectivo');
             }}
           />
         )}
@@ -198,7 +227,8 @@ function QuickSale() {
           </p>
           <p className="text-ink">
             {fmtMoney(done.total)} · {done.status === 'pagada' ? 'pagada' : `a cuenta, vence el ${fmtDate(done.dueOn)}`}
-            {done.withoutResaleCert ? ' · sin certificado de reventa vigente' : ''}
+            {done.withoutResaleCert && picked && esLocal(picked.store) ? ' · sin certificado de reventa vigente' : ''}
+            {done.edadComprobada ? ' · edad comprobada (21+)' : ''}
           </p>
           <InvoiceDocButtons invoiceId={done.id} code={done.code} />
         </Card>
@@ -231,7 +261,7 @@ function QuickSale() {
           <fieldset className="mt-4 grid gap-2">
             <legend className="field-label mb-1.5">Cómo paga</legend>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {PAY_OPTIONS.map((o) => (
+              {metodos.map((o) => (
                 <button key={o.value} type="button" className={`btn ${method === o.value ? 'btn-primary' : 'btn-secondary'}`} aria-pressed={method === o.value} onClick={() => setMethod(o.value)}>
                   <o.icon aria-hidden />
                   {o.label}
@@ -239,11 +269,25 @@ function QuickSale() {
               ))}
             </div>
             {method === 'tarjeta' ? <p className="text-sm text-muted">Se cobra aparte, en el datáfono. Aquí solo se anota; nunca escribas el número de la tarjeta.</p> : null}
-            {method === 'cuenta' ? <p className="text-sm text-muted">Queda por cobrar con los días de crédito del local ({picked.terms.toLowerCase()}).</p> : null}
+            {method === 'cuenta' ? <p className="text-sm text-muted">Queda por cobrar con los días de crédito del cliente ({picked.terms.toLowerCase()}).</p> : null}
             {method === 'zelle' ? <TextInput label="Número de confirmación de Zelle" value={reference} onChange={(e) => setReference(e.target.value)} autoComplete="off" /> : null}
           </fieldset>
+          {mostrador ? (
+            <div className="mt-4">
+              <TextInput label="Nota (opcional)" hint="Si quiere, el nombre de quien compra: queda en la factura." value={nota} onChange={(e) => setNota(e.target.value)} maxLength={200} autoComplete="off" />
+            </div>
+          ) : null}
+          {pide ? (
+            <label className="mt-4 flex items-start gap-3 rounded-2xl border border-warn bg-warn-soft p-3">
+              <input type="checkbox" className="mt-1 h-5 w-5 flex-none" checked={edad} onChange={(e) => setEdad(e.target.checked)} />
+              <span>
+                <span className="font-semibold text-ink">{AVISO_EDAD}</span>
+                <span className="block text-sm text-muted">Pídele un documento con foto. A menores de 21 no se les vende tabaco.</span>
+              </span>
+            </label>
+          ) : null}
           <div className="sticky bottom-[76px] z-20 mt-5 flex flex-wrap items-center justify-end gap-3 lg:bottom-4 lg:justify-start">
-            <Button type="button" variant="primary" big icon={Zap} busy={busy} disabled={actor.readOnly || lines.length === 0} onClick={charge}>
+            <Button type="button" variant="primary" big icon={Zap} busy={busy} disabled={actor.readOnly || lines.length === 0 || (pide && !edad)} onClick={charge}>
               {method === 'cuenta' ? `Anotar a cuenta ${fmtMoney(total)}` : `Cobrar ${fmtMoney(total)}`}
             </Button>
           </div>

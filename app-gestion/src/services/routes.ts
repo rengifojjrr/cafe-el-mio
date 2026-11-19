@@ -3,6 +3,7 @@
 // borrador → en ruta → terminado. El costo de los repartos terminados entra en Rentabilidad,
 // repartido por unidades entregadas (ver domain/routes.ts).
 import { z } from 'zod';
+import { esLocal } from '../domain/clientes';
 import type { Delivery, DeliveryRoute, DeliveryStatus, IsoDate, RouteStatus } from '../data/types';
 import { type CostShare, DEFAULT_COST_PER_KM, allocateRouteCost, estimateRouteKm, routeTotalCost } from '../domain/routes';
 import { round2 } from '../lib/money';
@@ -111,7 +112,7 @@ export async function readyDeliveries(ctx: Ctx): Promise<ReadyDelivery[]> {
   const open = new Set(routes.filter((r) => r.status !== 'terminado').flatMap((r) => r.stops.map((s) => s.deliveryId)));
   const sById = new Map(stores.map((s) => [s.id, s]));
   return deliveries
-    .filter((d) => !open.has(d.id))
+    .filter((d) => !open.has(d.id) && esLocal(sById.get(d.storeId)))
     .map((d) => {
       const s = sById.get(d.storeId);
       return { id: d.id, code: d.code, storeId: d.storeId, storeName: s?.name ?? '—', address: s ? `${s.address}, ${s.city}` : '', units: deliveryUnits(d), preparedAt: d.preparedAt };

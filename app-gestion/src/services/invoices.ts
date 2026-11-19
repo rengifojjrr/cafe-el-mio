@@ -4,7 +4,8 @@
 import { ruleFromContext, sellerCommissionContext } from './commission-scheme';
 import { z } from 'zod';
 import type { Commission, CommissionRule, Invoice, InvoiceLine, InvoiceOrigin, Movement, Payment, PaymentMethod, Product, SalePack, Store } from '../data/types';
-import { ComplianceError, firmSaleCheck, supplyCheck } from '../domain/compliance';
+import { type ClaseCliente, claseDe, esLocal } from '../domain/clientes';
+import { ComplianceError, firmSaleCheck, pideEdad, supplyCheck } from '../domain/compliance';
 import { creditDaysFor, creditText, hasValidResaleCert, invoiceBalance, invoiceCommissions, invoiceDueOn, invoiceStatus, invoiceTotals, isInvoiceOverdue } from '../domain/invoices';
 import { WAREHOUSE, allocate } from '../domain/ledger';
 import { type AgingBucket, agingBucket } from '../domain/money-rules';
@@ -78,6 +79,8 @@ export async function writeFirmInvoice(
     /** Venta rápida: no se toca lo apartado para las entregas ya preparadas. */
     respectReserved?: boolean;
     snap?: InventorySnapshot;
+    /** Tabaco a una persona o en el mostrador: se comprobó su edad (21 o más). */
+    edadComprobada?: boolean;
   },
 ): Promise<Invoice> {
   const { store } = args;
@@ -159,6 +162,7 @@ export async function writeFirmInvoice(
     creditDays,
     withoutResaleCert,
     note: args.note?.trim() ?? '',
+    ...(args.edadComprobada ? { edadComprobada: true } : {}),
     createdBy: ctx.actor.userId,
   };
   await ctx.repo.invoices.put(invoice);
@@ -257,6 +261,8 @@ const quickSaleSchema = z.object({
     reference: z.string().trim().max(60).default(''),
   }),
   note: z.string().trim().max(200).default(''),
+  /** Tabaco a una persona o en el mostrador: se comprobó su identificación (21 o más). */
+  edadComprobada: z.boolean().default(false),
 });
 
 /**
@@ -276,11 +282,14 @@ export async function quickSale(ctx: Ctx, input: z.input<typeof quickSaleSchema>
     if (!store) throw new NotFoundError('el local');
     const check = firmSaleCheck(ctx.line, store, ctx.now());
     if (!check.ok) throw new ComplianceError(check.reason);
+    if (pideEdad(ctx.line, store) && !data.edadComprobada) throw new ComplianceError('Comprueba con su identificación que tiene 21 años o más: no se le vende tabaco a menores de 21.');
+    // Al mostrador no se le fía: no hay a quién cobrarle después.
+    if (store.clase === 'almacen' && method === 'cuenta') throw new ValidationError('En el mostrador se cobra en el momento: no se vende a cuenta.');
     for (const it of data.items) {
       const p = await ctx.repo.products.get(it.productId);
       if (!p || !p.active) throw new ValidationError('Uno de los productos no está activo en el catálogo.');
     }
-    const invoice = await writeFirmInvoice(ctx, { store, items: data.items, origin: 'venta_rapida', sellerId: null, note: data.note, respectReserved: true });
+    const invoice = await writeFirmInvoice(ctx, { store, items: data.items, origin: 'venta_rapida', sellerId: null, note: data.note, respectReserved: true, edadComprobada: data.edadComprobada && pideEdad(ctx.line, store) });
     const payment = method === 'cuenta' ? undefined : await writeInvoicePayment(ctx, invoice, { amount: invoice.total, method, reference: data.payment.reference });
     await audit(ctx, 'venta_rapida.registrar', 'invoice', invoice.id, `Venta rápida ${invoice.code} a ${store.name}: ${invoice.total.toFixed(2)} USD, ${method === 'cuenta' ? 'a cuenta' : PAYMENT_METHOD_LABEL[method].toLowerCase()}`);
     return { invoice, payment };
@@ -317,7 +326,8 @@ export async function quickSaleStores(ctx: Ctx, purpose: 'venta' | 'pedido' = 'v
   for (const i of invoices) bump(i.storeId, i.issuedAt);
   for (const d of deliveries) if (d.status === 'entregada' && d.deliveredAt) bump(d.storeId, d.deliveredAt);
   return stores
-    .filter((s) => s.status !== 'cerrado')
+    // Las personas y el mostrador se eligen aparte (Persona · Almacén).
+    .filter((s) => s.status !== 'cerrado' && esLocal(s))
     .map((s) => {
       // En la venta rápida se vende en firme; un pedido sigue el camino de cómo compra el local.
       const check = purpose === 'venta' ? firmSaleCheck(ctx.line, s, now) : supplyCheck(ctx.line, s, now);
@@ -389,6 +399,8 @@ export interface InvoiceView extends Invoice {
   /** Cada línea con su cantidad en palabras: «1 caja (50 mazos)», «10 mazos». */
   qtyTexts: string[];
   storeName: string;
+  /** A quién: un local, una persona o el almacén (mostrador). */
+  clase: ClaseCliente;
   sellerName: string;
   balance: number;
   overdue: boolean;
@@ -424,6 +436,7 @@ export async function listInvoices(ctx: Ctx, filter?: { storeId?: string; open?:
         return p ? packQtyText(p, l.pack, l.packQty) : String(l.qty);
       }),
       storeName: storesById.get(i.storeId)?.name ?? '—',
+      clase: claseDe(storesById.get(i.storeId)),
       sellerName: i.sellerId ? (usersById.get(i.sellerId)?.name ?? '—') : 'Venta directa',
       balance: invoiceBalance(i),
       overdue: isInvoiceOverdue(i, now),
@@ -443,7 +456,7 @@ export async function getInvoice(ctx: Ctx, invoiceId: string): Promise<InvoiceVi
 
 export interface InvoiceDocument {
   invoice: InvoiceView;
-  store: Pick<Store, 'name' | 'address' | 'city' | 'managerName' | 'phone' | 'email' | 'taxId' | 'resaleCert'>;
+  store: Pick<Store, 'name' | 'address' | 'city' | 'managerName' | 'phone' | 'email' | 'taxId' | 'resaleCert' | 'clase'>;
   companyName: string;
   warehouseName: string;
   lines: { name: string; qtyText: string; unitPrice: number; priceText: string; amount: number }[];
@@ -475,7 +488,7 @@ export async function invoiceDocument(ctx: Ctx, invoiceId: string): Promise<Invo
           : 'Por cobrar (de contado)';
   return {
     invoice,
-    store: { name: store.name, address: store.address, city: store.city, managerName: store.managerName, phone: store.phone, email: store.email, taxId: store.taxId, resaleCert: store.resaleCert },
+    store: { name: store.name, address: store.address, city: store.city, managerName: store.managerName, phone: store.phone, email: store.email, taxId: store.taxId, resaleCert: store.resaleCert, clase: store.clase },
     companyName: settings.companyName,
     warehouseName: settings.warehouseName,
     lines,

@@ -1,6 +1,7 @@
 // Contabilidad de la línea (nunca mezclada con la otra): estado de resultados por mes,
 // inventario valorado, por cobrar y por pagar, y exportación a CSV.
 import { Download, FileSpreadsheet, Info, Landmark, Package, Receipt, TrendingUp } from 'lucide-react';
+import { CLASE_LABEL } from '../../domain/clientes';
 import { useState } from 'react';
 import { fmtMoney, fmtNumber, fmtPercent } from '../../lib/money';
 import { fmtDate, fmtMonth } from '../../lib/time';
@@ -22,6 +23,9 @@ export function AccountingPage() {
 
 const PNL_ROWS: { key: keyof PnlMonth; label: string; strong?: boolean; minus?: boolean; sub?: boolean; muted?: boolean }[] = [
   { key: 'revenueFirm', label: 'Ventas en firme (sin impuesto)', sub: true },
+  { key: 'revenueFirmLocales', label: 'a locales', sub: true, muted: true },
+  { key: 'revenueFirmPersonas', label: 'a personas', sub: true, muted: true },
+  { key: 'revenueFirmAlmacen', label: 'en el almacén (mostrador)', sub: true, muted: true },
   { key: 'revenueConsignment', label: 'Ventas en consignación', sub: true },
   { key: 'revenue', label: 'Ventas totales', strong: true },
   { key: 'cogsFirm', label: 'Costo en firme (por lote)', minus: true, sub: true },
@@ -53,6 +57,9 @@ function Accounting() {
       [
         'Mes',
         'Ventas en firme',
+        'En firme a locales',
+        'En firme a personas',
+        'En firme en el almacén',
         'Ventas en consignación',
         'Ventas totales',
         'Costo en firme',
@@ -69,6 +76,9 @@ function Accounting() {
       ...months.map((m) => [
         m.month,
         m.revenueFirm,
+        m.revenueFirmLocales,
+        m.revenueFirmPersonas,
+        m.revenueFirmAlmacen,
         m.revenueConsignment,
         m.revenue,
         m.cogsFirm,
@@ -97,9 +107,9 @@ function Accounting() {
   const exportReceivables = async () => {
     const [list, invoices] = await Promise.all([listSettlements(ctx, { open: true }), listInvoices(ctx, { open: true })]);
     downloadCsv(csvName(line, 'por-cobrar', now), [
-      ['Tipo', 'Número', 'Local', 'Emitida', 'Vence', 'Monto', 'Pagado', 'Saldo', 'Días', 'Vencida'],
-      ...invoices.map((i) => ['Factura (en firme)', i.code, i.storeName, i.issuedAt.slice(0, 10), i.dueOn, i.total, i.paid, i.balance, i.daysOld, i.overdue ? 'sí' : 'no']),
-      ...list.map((s) => ['Liquidación (consignación)', s.code, s.storeName, s.issuedAt.slice(0, 10), s.dueOn, s.amount, s.paid, s.balance, s.daysOld, s.overdue ? 'sí' : 'no']),
+      ['Tipo', 'Número', 'Cliente', 'Tipo de cliente', 'Emitida', 'Vence', 'Monto', 'Pagado', 'Saldo', 'Días', 'Vencida'],
+      ...invoices.map((i) => ['Factura (en firme)', i.code, i.storeName, CLASE_LABEL[i.clase], i.issuedAt.slice(0, 10), i.dueOn, i.total, i.paid, i.balance, i.daysOld, i.overdue ? 'sí' : 'no']),
+      ...list.map((s) => ['Liquidación (consignación)', s.code, s.storeName, CLASE_LABEL.local, s.issuedAt.slice(0, 10), s.dueOn, s.amount, s.paid, s.balance, s.daysOld, s.overdue ? 'sí' : 'no']),
     ]);
   };
   const exportCommissions = async () => {

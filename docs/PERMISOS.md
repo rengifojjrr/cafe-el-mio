@@ -51,6 +51,8 @@ prohibido y comprueban que falla.
 | Comunicados (`announcement.create`) | ✔ | — | — | — |
 | Usuarios, ajustes y auditoría | ✔ | — | — | — |
 | Equipo: zonas con responsable, por vendedor, zona y ciudad (`user.read`; cambiar responsable: `user.manage`) | ✔ | — | — | — |
+| Clientes: personas y almacén (mostrador), con su historial (`invoice.read`; crear y cambiar una persona: `sale.quick`) | ✔ | — | — | — |
+| Regla de precio por medida (`settings.manage`); aplicarla y deshacerla (`product.write`) | ✔ | — | — | — |
 | Vista de las dos líneas (`direccion.read`) | — | — | — | ✔ (solo lectura) |
 
 ## Notas

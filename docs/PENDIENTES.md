@@ -189,3 +189,21 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
   el vendedor → «Comisión».
 - **Precio por caja y por volumen:** con precio propio, la caja es unidad × unidades por caja; no hay descuento por
   caja ni por volumen encima del precio del vendedor.
+
+## Ronda 6: personas, almacén y precio por medida (19 de noviembre de 2026)
+
+- **Abogado y contadora, antes de vender al público**: vender tabaco a personas en el almacén suele pedir una licencia
+  de venta al por menor además de la de mayorista. Además, a consumidores se les cobra impuesto de venta: en Ajustes
+  está vacío, así que la app no lo cobra. Confirmar la tasa y si aplica.
+- **La edad la comprueba la persona que vende**: la app solo anota que se comprobó.
+- **Precio a personas**: hoy pagan como un local sin lista. Si a las personas se les vende a otro precio (por ejemplo,
+  al PVP), se crea una lista para ellas.
+- **Pedidos a personas no van en Repartos**: no tienen dirección. Si se les lleva a domicilio, hace falta anotar la
+  dirección en la persona.
+- **La regla de precio quedó puesta en sus datos** (Ajustes → «Precio por mazo») con los precios que mandó el mayorista.
+  Los productos ya guardados no se tocaron: para pasarlos a la regla, «Aplicar a los productos de mazo».
+- **Precio por caja**: la regla da el precio por mazo; la caja sigue siendo mazo × mazos por caja, o su precio por caja
+  si lo tiene.
+- **Los nombres y teléfonos de las personas** son datos personales: viven en el servidor privado y los vendedores no los
+  ven.
+

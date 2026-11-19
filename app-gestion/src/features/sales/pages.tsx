@@ -2,3 +2,4 @@
 export { QuickSalePage } from './quick-sale';
 export { PasteOrderPage, PhoneOrderPage } from './orders';
 export { PriceListsPage } from './price-lists';
+export { ClientesPage } from './clientes';

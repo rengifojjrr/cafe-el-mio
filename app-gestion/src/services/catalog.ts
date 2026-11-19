@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import type { CommissionRule, Photo, Product, Store } from '../data/types';
 import { precioDelLocal } from '../domain/precios-local';
+import { type ReglaPrecioMazo, medidaDe, precioPorRegla, reglaDe, sigueRegla } from '../domain/precio-medida';
 import { round2 } from '../lib/money';
 import { commissionPerUnit, storeEarning } from '../domain/money-rules';
 import { capaShade, composeName, familyIdFor, variantLabelFor } from '../domain/products';
@@ -188,7 +189,8 @@ export async function saveProduct(ctx: Ctx, input: ProductInput): Promise<Produc
     throw new ValidationError('No se registra tabaco de origen Cuba (embargo de EE. UU.).');
   }
   return mutate(ctx, async () => {
-    const all = await ctx.repo.products.all();
+    const [all, settings] = await Promise.all([ctx.repo.products.all(), getSettings(ctx)]);
+    const regla = reglaDe(settings);
     if (all.some((p) => p.sku.toLowerCase() === data.sku.toLowerCase() && p.id !== data.id)) {
       throw new ValidationError(`Ya hay un producto con el SKU ${data.sku}.`);
     }
@@ -232,6 +234,8 @@ export async function saveProduct(ctx: Ctx, input: ProductInput): Promise<Produc
       variantLabel,
       barcode: data.barcode === undefined ? prev?.barcode : data.barcode || undefined,
       boxPrice: data.boxPrice === undefined ? prev?.boxPrice : data.boxPrice || undefined,
+      // Tabaco de mazo: si el precio no es el que da la regla de Ajustes, es a mano y manda sobre ella.
+      precioManual: precioAMano(kind, data.priceToStore, attrs, regla),
       photoIds: prev?.photoIds ?? [],
       brandPhoto: prev?.brandPhoto,
       sampleCost: prev ? prev.sampleCost && prev.cost === data.cost : false,
@@ -347,4 +351,10 @@ export async function addProductPhotos(ctx: Ctx, productId: string, slots: Photo
     if (added) await audit(ctx, 'producto.fotos.lote', 'product', p.id, `${added === 1 ? 'Una foto nueva' : `${added} fotos nuevas`} para ${p.name} (fotos en lote)`);
     return order;
   });
+}
+
+/** ¿El precio de este producto es a mano? Solo en tabaco de mazo con regla: si no es el de la regla. */
+function precioAMano(kind: Product['kind'], precio: number, attrs: Product['attrs'], regla: ReglaPrecioMazo | null): true | undefined {
+  if (!regla || !sigueRegla({ kind })) return undefined;
+  return round2(precio) !== precioPorRegla(regla, medidaDe(attrs)) ? true : undefined;
 }

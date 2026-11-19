@@ -68,15 +68,18 @@ export function assertCanConsign(line: LineId, store: Pick<Store, 'status' | 'to
  * ¿Se le puede vender en firme (pedido de un local que compra en firme o venta rápida en el almacén)?
  * - El local tiene que estar aprobado (ni prospecto ni con el contrato por firmar), ni pausado ni cerrado.
  * - En tabaco, con el permiso de venta de tabaco vigente: es venta entre empresas y el local vende solo a mayores de 21.
+ * - Una persona o el mostrador no tienen permiso de local: en tabaco, la venta pide comprobar su edad
+ *   (21 o más) con su identificación (`edadComprobada`, en el servicio).
  */
 export function firmSaleCheck(
   line: LineId,
-  store: Pick<Store, 'status' | 'tobaccoPermit' | 'name'>,
+  store: Pick<Store, 'status' | 'tobaccoPermit' | 'name'> & Partial<Pick<Store, 'clase'>>,
   now: Date,
 ): { ok: true } | { ok: false; reason: string } {
   if (store.status === 'pausado' || store.status === 'cerrado') {
     return { ok: false, reason: `${store.name} está ${store.status}: no se le vende.` };
   }
+  if (store.clase === 'persona' || store.clase === 'almacen') return { ok: true };
   if (store.status === 'prospecto' || store.status === 'contrato_enviado') {
     return { ok: false, reason: `${store.name} todavía no está aprobado para comprar. Apruébalo en su ficha.` };
   }
@@ -98,13 +101,13 @@ export function firmSaleCheck(
 /** Lo que aplica según cómo compra el local: consignación (lo de siempre) o en firme. */
 export function supplyCheck(
   line: LineId,
-  store: Pick<Store, 'status' | 'tobaccoPermit' | 'name' | 'saleMode'>,
+  store: Pick<Store, 'status' | 'tobaccoPermit' | 'name' | 'saleMode'> & Partial<Pick<Store, 'clase'>>,
   now: Date,
 ): { ok: true } | { ok: false; reason: string } {
   return store.saleMode === 'firme' ? firmSaleCheck(line, store, now) : consignmentCheck(line, store, now);
 }
 
-export function assertCanSupply(line: LineId, store: Pick<Store, 'status' | 'tobaccoPermit' | 'name' | 'saleMode'>, now: Date): void {
+export function assertCanSupply(line: LineId, store: Pick<Store, 'status' | 'tobaccoPermit' | 'name' | 'saleMode'> & Partial<Pick<Store, 'clase'>>, now: Date): void {
   const r = supplyCheck(line, store, now);
   if (!r.ok) throw new ComplianceError(r.reason);
 }
@@ -112,4 +115,12 @@ export function assertCanSupply(line: LineId, store: Pick<Store, 'status' | 'tob
 /** En la semilla y en las pruebas: ningún tabaco de origen Cuba (embargo de EE. UU.). */
 export function isCubanOrigin(country: string): boolean {
   return /cuba/i.test(country.normalize('NFD').replace(/[̀-ͯ]/g, ''));
+}
+
+/** En tabaco, a una persona o en el mostrador se vende solo a mayores de 21, comprobado con su identificación. */
+export const AVISO_EDAD = 'Comprobé su identificación: tiene 21 años o más.';
+
+/** ¿Hace falta comprobar la edad? Tabaco, a una persona o en el mostrador. */
+export function pideEdad(line: LineId, store: Partial<Pick<Store, 'clase'>> | undefined): boolean {
+  return line === 'tabaco' && (store?.clase === 'persona' || store?.clase === 'almacen');
 }

@@ -1,5 +1,6 @@
 // Contabilidad por línea (nunca mezclada), rentabilidad, reportes y datos del mapa.
 import type { Invoice, Market, Product, Store } from '../data/types';
+import { CLASE_PLURAL, type ClaseCliente, claseDe, esLocal } from '../domain/clientes';
 import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
 import { WAREHOUSE, storeLoc } from '../domain/ledger';
 import { aging, settlementBalance } from '../domain/money-rules';
@@ -30,6 +31,10 @@ export interface PnlMonth {
   marginConsignment: number;
   /** Venta en firme: facturas (entregas firmadas y ventas rápidas), sin el impuesto. */
   revenueFirm: number;
+  /** Lo mismo, por clase de cliente: a locales, a personas y en el almacén (mostrador). */
+  revenueFirmLocales: number;
+  revenueFirmPersonas: number;
+  revenueFirmAlmacen: number;
   cogsFirm: number;
   commissionsFirm: number;
   marginFirm: number;
@@ -55,8 +60,18 @@ async function loadMoney(ctx: Ctx) {
 /** Estado de resultados por mes: ventas (en consignación y en firme), costo por lote, comisiones y mermas. */
 export async function pnlByMonth(ctx: Ctx, months = 4): Promise<PnlMonth[]> {
   guard(ctx, 'accounting.read');
-  const [{ reports, commissions, returns, invoices }, dist] = await Promise.all([loadMoney(ctx), distributionShares(ctx)]);
-  return computePnl(reports, commissions, returns, ctx.now(), months, invoices, dist.shares.map((s) => ({ at: s.date, amount: s.cost })));
+  const [{ reports, commissions, returns, invoices, stores }, dist] = await Promise.all([loadMoney(ctx), distributionShares(ctx)]);
+  const storesById = new Map(stores.map((s) => [s.id, s]));
+  return computePnl(
+    reports,
+    commissions,
+    returns,
+    ctx.now(),
+    months,
+    invoices,
+    dist.shares.map((s) => ({ at: s.date, amount: s.cost })),
+    (storeId) => claseDe(storesById.get(storeId)),
+  );
 }
 
 export function computePnl(
@@ -68,6 +83,8 @@ export function computePnl(
   invoices: readonly Invoice[] = [],
   /** Costo de distribución por fecha (repartos terminados). */
   distribution: readonly { at: string; amount: number }[] = [],
+  /** La clase de cliente de cada factura (sin dato: local). */
+  claseDeCliente: (storeId: string) => ClaseCliente = () => 'local',
 ): PnlMonth[] {
   const keys: string[] = [];
   for (let i = months - 1; i >= 0; i--) {
@@ -90,6 +107,9 @@ export function computePnl(
     commissionsConsignment: 0,
     marginConsignment: 0,
     revenueFirm: 0,
+    revenueFirmLocales: 0,
+    revenueFirmPersonas: 0,
+    revenueFirmAlmacen: 0,
     cogsFirm: 0,
     commissionsFirm: 0,
     marginFirm: 0,
@@ -108,6 +128,10 @@ export function computePnl(
     const row = rows.get(monthKey(inv.issuedAt));
     if (!row) continue;
     row.revenueFirm += inv.subtotal;
+    const clase = claseDeCliente(inv.storeId);
+    if (clase === 'persona') row.revenueFirmPersonas += inv.subtotal;
+    else if (clase === 'almacen') row.revenueFirmAlmacen += inv.subtotal;
+    else row.revenueFirmLocales += inv.subtotal;
     for (const l of inv.lines) {
       row.cogsFirm += l.cost;
       row.units += l.qty;
@@ -145,6 +169,9 @@ export function computePnl(
       cogsConsignment: round2(r.cogsConsignment),
       commissionsConsignment: round2(r.commissionsConsignment),
       marginConsignment: round2(r.revenueConsignment - r.cogsConsignment - r.commissionsConsignment),
+      revenueFirmLocales: round2(r.revenueFirmLocales),
+      revenueFirmPersonas: round2(r.revenueFirmPersonas),
+      revenueFirmAlmacen: round2(r.revenueFirmAlmacen),
       revenueFirm: round2(r.revenueFirm),
       cogsFirm: round2(r.cogsFirm),
       commissionsFirm: round2(r.commissionsFirm),
@@ -288,6 +315,8 @@ export interface ReportsData {
   byStore: ProfitRow[];
   bySeller: ProfitRow[];
   byZone: ProfitRow[];
+  /** Por clase de cliente: locales (consignación y en firme), personas y almacén (mostrador). */
+  byClase: ProfitRow[];
   nonRotating: { storeId: string; name: string; units: number; daysSinceSale: number | null }[];
   stockouts: { productId: string; name: string; available: number; threshold: number; unmet: number }[];
   unmetDemand: { productId: string; name: string; units: number; stores: number }[];
@@ -357,6 +386,7 @@ export async function reports(ctx: Ctx, periodDays = 90, opts?: { marketId?: str
       bump('store', r.storeId, store?.name ?? r.storeId, l.qty, revenue, l.cost, comm);
       bump('seller', r.sellerId, seller?.name ?? r.sellerId, l.qty, revenue, l.cost, comm);
       bump('zone', zone?.id ?? 'sin-zona', zone?.name ?? 'Sin zona', l.qty, revenue, l.cost, comm);
+      bump('clase', 'local', CLASE_PLURAL.local, l.qty, revenue, l.cost, comm);
     }
   }
   // Costo de distribución: cada parte de un reparto terminado va a su producto, local, vendedor y zona.
@@ -368,6 +398,7 @@ export async function reports(ctx: Ctx, periodDays = 90, opts?: { marketId?: str
     bump('store', x.storeId, store?.name ?? x.storeId, 0, 0, 0, 0, x.cost);
     bump('seller', x.sellerId, seller?.name ?? x.sellerId, 0, 0, 0, 0, x.cost);
     bump('zone', zone?.id ?? 'sin-zona', zone?.name ?? 'Sin zona', 0, 0, 0, 0, x.cost);
+    bump('clase', claseDe(store), CLASE_PLURAL[claseDe(store)], 0, 0, 0, 0, x.cost);
   }
   // La venta en firme también cuenta (sin el impuesto). Sin vendedor: «venta directa».
   for (const inv of money.invoices) {
@@ -385,6 +416,7 @@ export async function reports(ctx: Ctx, periodDays = 90, opts?: { marketId?: str
       bump('store', inv.storeId, store?.name ?? inv.storeId, l.qty, l.amount, l.cost, comm);
       bump('seller', inv.sellerId ?? 'directa', seller?.name ?? 'Venta directa', l.qty, l.amount, l.cost, comm);
       bump('zone', zone?.id ?? 'sin-zona', zone?.name ?? 'Sin zona', l.qty, l.amount, l.cost, comm);
+      bump('clase', claseDe(store), CLASE_PLURAL[claseDe(store)], l.qty, l.amount, l.cost, comm);
     }
   }
   const finish = (dim: string): ProfitRow[] =>
@@ -497,6 +529,7 @@ export async function reports(ctx: Ctx, periodDays = 90, opts?: { marketId?: str
     sellThrough,
     byProduct,
     byStore: finish('store'),
+    byClase: finish('clase'),
     bySeller: finish('seller'),
     byZone: finish('zone'),
     nonRotating,
@@ -531,7 +564,7 @@ export interface MapData {
 
 export async function mapData(ctx: Ctx): Promise<MapData> {
   guard(ctx, 'map.read');
-  const stores = await scopedStores(ctx);
+  const stores = (await scopedStores(ctx)).filter(esLocal);
   const [snap, users, visits, reports, reorders, deliveries, warehouse, settlements, idx, invoices] = await Promise.all([
     loadInventory(ctx),
     ctx.repo.users.all(),

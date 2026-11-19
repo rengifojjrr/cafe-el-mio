@@ -7,6 +7,7 @@ import { useLine } from '../../app/line-context';
 import { ROLE_LABEL } from '../../app/nav';
 import type { AuditEntry, CommissionRule, LineSettings, ProductCommissionRule, Store as StoreRecord, User, Zone } from '../../data/types';
 import { cambiosAlAsignar } from '../../domain/equipo';
+import { ReglaPrecioSettings } from './precio-medida';
 import { CONTRACT_DISCLAIMER, CONTRACT_VARIABLES, annexText, parseContract, renderTemplate, type ContractBlock } from '../../domain/contract';
 import { addDaysToDate, fmtDate, fmtDateTime, toIsoDate } from '../../lib/time';
 import { asignarResponsable, listAudit, listUsers, readSettings, saveSettings, saveUser, saveZone, setUserActive } from '../../services/admin';
@@ -504,7 +505,7 @@ export function SettingsPage() {
 }
 
 function SettingsInner() {
-  const { ctx } = useLine();
+  const { ctx, line } = useLine();
   const settings = useAsync(() => readSettings(ctx), [ctx]);
   const products = useAsync(() => listProducts(ctx), [ctx]);
   if (settings.loading && !settings.data) return <Loading rows={5} />;
@@ -513,6 +514,8 @@ function SettingsInner() {
   return (
     <>
       <SettingsForm settings={settings.data} products={products.data ?? []} />
+      {/* Ronda 6: el precio por mazo según la medida (se guarda sola). */}
+      {line === 'tabaco' ? <ReglaPrecioSettings /> : null}
       {/* Ronda 3: cada sección se guarda sola. */}
       <CommissionSchemeSettings scheme={settings.data.commissionScheme} />
       <MarketsSettings markets={marketsOf(settings.data)} />

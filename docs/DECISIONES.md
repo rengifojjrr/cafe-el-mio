@@ -441,3 +441,30 @@ Pedido: «mete el tabaco también, y que quede como separado, que cuando paguemo
   del local.
 - **El catálogo de Administración** muestra la comisión «según cada producto» y el margen con ella: con la
   diferencia, la empresa se queda con el base menos el costo, y el vendedor con lo que cobre encima.
+
+## Ronda 6: personas, almacén y precio por medida (19 de noviembre de 2026)
+
+- **Las personas y el mostrador se guardan junto a los locales**, marcados con `Store.clase` (`persona` o `almacen`;
+  vacío es un local). Así sus facturas, pagos, entregas, PDF, cuentas y contabilidad son los de siempre y no hubo que
+  tocar el servidor. A cambio, las pantallas propias de locales los dejan afuera (`esLocal` en
+  `src/domain/clientes.ts`): Locales, mapa, Equipo, Recorridos, Repartos, avisos de permisos y certificados, y los
+  locales que cuenta Dirección. Una tabla de clientes aparte habría obligado a cambiar todo lo de dinero.
+- **No se duplica una persona**: el nombre se compara sin tildes, mayúsculas, signos ni espacios de más («ana perez» =
+  «Ana Pérez»). Si ya está, se usa la misma (y se le anota el teléfono si no tenía).
+- **El mostrador tiene un id fijo (`cli_mostrador`)**: dos teléfonos que lo crean a la vez escriben el mismo registro, no
+  dos. No tiene vendedor ni zona, no se cierra, y no se le vende «a cuenta» (no hay a quién cobrarle después).
+- **Edad en tabaco**: a una persona o en el mostrador no hay permiso de local que pedir, pero sí la regla de 21 años.
+  La venta pide marcar que se comprobó la identificación; el pedido lo anota y se vuelve a pedir al entregar. Queda en
+  la factura (`edadComprobada`). La app lo anota, no lo verifica.
+- **Sin vendedor, sin comisión**: las ventas a personas y en el mostrador son venta directa.
+- **Las personas pagan como un local sin lista** (la lista de la línea o el precio base). El impuesto de venta, si se
+  pone en Ajustes, se cobra a quien no tiene certificado de reventa: también a las personas y al mostrador.
+- **La regla de precio por medida vive en Ajustes** (`LineSettings.precioMazo`), no en el código: un precio por mazo para
+  todas y otro para las medidas anotadas aparte. Las medidas se escriben como se quiera («6½ × 64», «6 1/2x64»,
+  «6.5 x 64», «7x70») y se comparan con el largo y el cepo que guarda cada producto.
+- **A mano manda**: al guardar un tabaco de mazo, si su precio no es el de la regla, queda marcado `precioManual` (lo
+  decide el servicio, no la pantalla). «Aplicar a los productos de mazo» nunca lo toca.
+- **Nada cambia solo**: guardar la regla no cambia productos; «Aplicar» muestra qué cambia y se elige. «Deshacer» devuelve
+  el precio de antes a cada producto, salvo al que lo cambiaron después (ese queda como está). Lo de antes se guarda en
+  Ajustes (`ultimoAjustePrecio`), así que también se puede deshacer desde otro teléfono.
+

@@ -18,8 +18,8 @@ export function ReportsPage() {
 }
 
 type Period = '30' | '60' | '90';
-type Dim = 'product' | 'store' | 'seller' | 'zone';
-const DIM_LABEL: Record<Dim, string> = { product: 'Producto', store: 'Local', seller: 'Vendedor', zone: 'Zona' };
+type Dim = 'product' | 'store' | 'seller' | 'zone' | 'clase';
+const DIM_LABEL: Record<Dim, string> = { product: 'Producto', store: 'Cliente', seller: 'Vendedor', zone: 'Zona', clase: 'Tipo de cliente' };
 
 function Reports() {
   const { ctx, config } = useLine();
@@ -29,7 +29,7 @@ function Reports() {
   const data = useAsync(() => reports(ctx, Number(period), { marketId: market || null }), [ctx, period, market]);
   const r = data.data;
 
-  const rowsFor = (d: Dim): ProfitRow[] => (!r ? [] : d === 'product' ? r.byProduct : d === 'store' ? r.byStore : d === 'seller' ? r.bySeller : r.byZone);
+  const rowsFor = (d: Dim): ProfitRow[] => (!r ? [] : d === 'product' ? r.byProduct : d === 'store' ? r.byStore : d === 'seller' ? r.bySeller : d === 'clase' ? r.byClase : r.byZone);
   const totals = (r?.byProduct ?? []).reduce(
     (a, x) => ({ units: a.units + x.units, revenue: a.revenue + x.revenue, margin: a.margin + x.margin, distribution: a.distribution + x.distribution }),
     { units: 0, revenue: 0, margin: 0, distribution: 0 },
@@ -151,7 +151,8 @@ function Reports() {
                 onChange={setDim}
                 options={[
                   { value: 'product', label: 'Por producto' },
-                  { value: 'store', label: 'Por local' },
+                  { value: 'store', label: 'Por cliente' },
+                  { value: 'clase', label: 'Por tipo de cliente' },
                   { value: 'seller', label: 'Por vendedor' },
                   { value: 'zone', label: 'Por zona' },
                 ]}

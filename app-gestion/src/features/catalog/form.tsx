@@ -6,12 +6,14 @@ import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import type { Product, ProductCommissionRule, ProductKind } from '../../data/types';
 import { headShape } from '../../domain/cabeza';
+import { medidaDe, medidaTexto, precioPorRegla } from '../../domain/precio-medida';
 import { capaShade, composeName, sizeText, variantLabelFor } from '../../domain/products';
 import type { FieldDef } from '../../lines/config';
 import { fmtMoney } from '../../lib/money';
 import { useAsync } from '../../app/hooks';
 import { useLine } from '../../app/line-context';
 import { getProduct, hasCost, saveProduct } from '../../services/catalog';
+import { leerReglaPrecio } from '../../services/precio-medida';
 import { CigarSilhouette } from '../../ui/brand';
 import { Button, Card, EmptyState, ErrorBox, LinkButton, Loading, NumberInput, PageHeader, SelectInput, TextArea, TextInput } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
@@ -102,6 +104,10 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
   const [f, setF] = useState<FormState>(() =>
     initialState(initial ?? copyOf, { line, prefix: config.skuPrefix, rule: config.defaultCommission, low: line === 'tabaco' ? 60 : 48, copy: Boolean(copyOf) }),
   );
+  // Tabaco de mazo: el precio sale de la regla de Ajustes según la medida, mientras no lo cambien a
+  // mano. Al editar, el precio guardado se queda como está (no se cambia sin que lo pidan).
+  const reglaData = useAsync(() => (line === 'tabaco' ? leerReglaPrecio(ctx) : Promise.resolve(null)), [ctx, line]);
+  const [precioTocado, setPrecioTocado] = useState(Boolean(initial));
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF((s) => ({ ...s, [k]: v }));
   const setAttr = (k: string, v: string | number) => setF((s) => ({ ...s, attrs: { ...s.attrs, [k]: v } }));
 
@@ -116,8 +122,12 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
   const suggestedSku = `${config.skuPrefix}-${familyName.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 10)}${f.attrs.capa ? `-${String(f.attrs.capa).slice(0, 3).toUpperCase()}` : ''}`;
   const sku = f.skuTouched ? f.sku : familyName ? suggestedSku : f.sku;
   const unitWord = f.unitName === 'mazo' ? 'mazo' : f.unitName === 'tabaco' ? 'tabaco' : 'unidad';
-  const earning = typeof f.priceToStore === 'number' && typeof f.suggestedRetail === 'number' ? f.suggestedRetail - f.priceToStore : null;
-  const boxDefault = typeof f.priceToStore === 'number' && typeof f.packSize === 'number' ? Math.round(f.priceToStore * f.packSize * 100) / 100 : null;
+  const regla = reglaData.data?.regla ?? null;
+  const medida = medidaDe(f.attrs);
+  const reglaPrecio = regla && kind === 'mazo' ? precioPorRegla(regla, medida) : null;
+  const precio: Num = !precioTocado && reglaPrecio !== null ? reglaPrecio : f.priceToStore;
+  const earning = typeof precio === 'number' && typeof f.suggestedRetail === 'number' ? f.suggestedRetail - precio : null;
+  const boxDefault = typeof precio === 'number' && typeof f.packSize === 'number' ? Math.round(precio * f.packSize * 100) / 100 : null;
   const fields = config.productFields.filter((fd) => !fd.kinds || (kind && fd.kinds.includes(kind)));
 
   const submit = () =>
@@ -140,7 +150,7 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
         barcode: f.barcode.trim(),
         active: f.active,
         cost: f.cost === '' ? Number.NaN : f.cost,
-        priceToStore: f.priceToStore === '' ? Number.NaN : f.priceToStore,
+        priceToStore: precio === '' ? Number.NaN : precio,
         boxPrice: f.boxPrice === '' ? 0 : f.boxPrice,
         suggestedRetail: f.suggestedRetail === '' ? Number.NaN : f.suggestedRetail,
         sellerCommission: { type: f.ruleType, value: f.ruleValue === '' ? 0 : f.ruleValue },
@@ -269,11 +279,31 @@ function ProductForm({ initial, copyOf }: { initial?: Product; copyOf?: Product 
             <div className="grid grid-cols-2 gap-3">
               <NumberInput
                 label={`Precio base por ${unitWord}`}
-                hint="Lo mínimo que paga un local. Su vendedor le pone su precio (en la ficha del local); con la comisión por diferencia, gana lo que cobre por encima."
+                hint={
+                  reglaPrecio !== null ? (
+                    precio === reglaPrecio ? (
+                      <span data-testid="precio-regla">
+                        Sale de la regla de Ajustes{medida ? ` (${medidaTexto(medida)})` : ''}: {fmtMoney(reglaPrecio)}.
+                      </span>
+                    ) : (
+                      <span data-testid="precio-regla">
+                        A mano: manda sobre la regla, que diría {fmtMoney(reglaPrecio)}.{' '}
+                        <button type="button" className="font-semibold underline" onClick={() => setPrecioTocado(false)}>
+                          Usar la regla
+                        </button>
+                      </span>
+                    )
+                  ) : (
+                    'Lo mínimo que paga un local. Su vendedor le pone su precio (en la ficha del local); con la comisión por diferencia, gana lo que cobre por encima.'
+                  )
+                }
                 step={0.01}
                 min={0}
-                value={f.priceToStore}
-                onValue={(v) => set('priceToStore', v)}
+                value={precio}
+                onValue={(v) => {
+                  setPrecioTocado(true);
+                  set('priceToStore', v);
+                }}
               />
               <NumberInput label="Precio por caja" step={0.01} min={0} value={f.boxPrice} onValue={(v) => set('boxPrice', v)} hint={boxDefault !== null ? `Vacío: ${fmtMoney(boxDefault)}` : 'Si la caja tiene otro precio'} />
               <NumberInput label={`PVP sugerido por ${unitWord}`} step={0.01} min={0} value={f.suggestedRetail} onValue={(v) => set('suggestedRetail', v)} />

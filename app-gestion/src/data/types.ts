@@ -43,6 +43,8 @@ export interface Product extends Entity {
   sellerCommission: ProductCommissionRule;
   /** Comisión propia: este producto paga siempre su regla, aunque haya comisión progresiva. */
   commissionCustom?: boolean;
+  /** Tabaco de mazo con el precio puesto a mano: manda sobre la regla de precio por medida de Ajustes. */
+  precioManual?: boolean;
   lowStockThreshold: number;
   /** Unidades por caja (presentación). */
   packSize: number;
@@ -249,6 +251,12 @@ export interface Store extends Entity {
    * puso su vendedor. Nunca menos que el precio base del producto. Sin precio: paga el base.
    */
   precios?: Record<string, number>;
+  /**
+   * Qué clase de cliente es: vacío, un local (como siempre); «persona», alguien que compra a su
+   * nombre; «almacen», la venta de mostrador (un solo registro fijo). Las personas y el mostrador no
+   * tienen vendedor, zona ni dirección: no salen en el mapa, en Equipo ni en Recorridos.
+   */
+  clase?: 'persona' | 'almacen';
   status: StoreStatus;
   tobaccoPermit?: TobaccoPermit;
   /** Si falta, consignación. */
@@ -463,6 +471,8 @@ export interface Reorder extends Entity {
   deliveryId?: string;
   /** Cómo llegó: lo pidió el local o el vendedor, por teléfono o pegado de un mensaje. */
   origin?: 'local' | 'vendedor' | 'telefono' | 'pegado';
+  /** Pedido de tabaco a nombre de una persona o del mostrador: se anotó que tiene 21 o más (se comprueba al entregar). */
+  edadComprobada?: boolean;
   history: { status: ReorderStatus; at: IsoDateTime; by: string }[];
 }
 
@@ -685,6 +695,13 @@ export interface LineSettings extends Entity {
   defaultPriceListId?: string;
   /** Repartos: costo estimado por kilómetro (USD). */
   routeCostPerKm?: number;
+  /**
+   * Precio por mazo de los tabacos de mazo según su medida (lo edita Administración): uno para todas
+   * y otro para las medidas anotadas aparte. Vacío: sin regla.
+   */
+  precioMazo?: { precio: number; especiales: { medidas: { largo: number; cepo: number }[]; precio: number }[] };
+  /** El último «Aplicar a los productos de mazo», para poder deshacerlo. */
+  ultimoAjustePrecio?: { at: IsoDateTime; by: string; cambios: { productId: string; antes: number; despues: number }[] };
 }
 
 export interface AuditEntry {
@@ -797,6 +814,8 @@ export interface Invoice extends Entity {
   /** El local no tenía certificado de reventa vigente al facturar. */
   withoutResaleCert: boolean;
   note: string;
+  /** Venta de tabaco a una persona o en el mostrador: se comprobó con su identificación que tiene 21 o más. */
+  edadComprobada?: boolean;
   createdBy: string;
   paidAt?: IsoDateTime;
 }

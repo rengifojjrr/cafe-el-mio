@@ -1,6 +1,7 @@
 // Vista de Dirección: las dos líneas lado a lado, solo lectura. Cada cifra sale de la base
 // de su propia línea; nunca se suman entre sí, salvo la «suma informativa».
 import type { LineId, Market } from '../data/types';
+import { claseDe, esLocal } from '../domain/clientes';
 import { getLineRepo } from '../data';
 import { Balances } from '../domain/ledger';
 import { marketsOf, storeMarketId } from '../domain/markets';
@@ -68,7 +69,7 @@ export async function lineOverview(actor: Actor, line: LineId, now = new Date(),
   const settlements = mine(allSettlements);
   const reorders = mine(allReorders);
   const invoices = mine(allInvoices);
-  const stores = allStores.filter((s) => storeIds.has(s.id));
+  const stores = allStores.filter((s) => storeIds.has(s.id) && esLocal(s));
   // Costo de distribución de los repartos terminados (repartido por unidades entregadas).
   const dById = new Map(deliveries.map((d) => [d.id, d]));
   const distribution = routes
@@ -128,7 +129,7 @@ export async function lineOverview(actor: Actor, line: LineId, now = new Date(),
     totalStores: stores.length,
     consignmentUnits,
     pendingOrders: reorders.filter((r) => r.status === 'enviado' || r.status === 'confirmado' || r.status === 'preparado').length,
-    months: computePnl(reports, commissions, returns, now, 4, invoices, distribution),
+    months: computePnl(reports, commissions, returns, now, 4, invoices, distribution, (id) => claseDe(allStores.find((s) => s.id === id))),
   };
 }
 

@@ -1,6 +1,7 @@
 // Datos fiscales de los locales: Tax ID (EIN), certificado de reventa, quién emite el permiso de
 // tabaco y la foto o PDF de cada documento; avisos de vencimiento y el «Reporte para la contadora».
 import { z } from 'zod';
+import { esLocal } from '../domain/clientes';
 import type { AppNotification, IsoDate, Photo, Store, StoreDocumentKind } from '../data/types';
 import { type AccountantRow, type AccountantTotals, DEFAULT_PERMIT_ISSUER, DOC_LABEL, type DocWarning, buildAccountantRows, docAlertNotice, normalizeEin, storeDocWarnings } from '../domain/fiscal';
 import { marketName } from '../domain/markets';
@@ -117,7 +118,7 @@ export async function documentAlerts(ctx: Ctx): Promise<DocAlert[]> {
   const now = ctx.now();
   const out: DocAlert[] = [];
   for (const s of stores) {
-    if (!WATCHED.includes(s.status)) continue;
+    if (!WATCHED.includes(s.status) || !esLocal(s)) continue;
     for (const w of storeDocWarnings(s, now, { requiresPermit: ctx.config.requiresTobaccoPermit })) {
       if (w.state === 'falta') continue;
       out.push({ ...w, storeId: s.id, storeName: s.name, sellerId: s.sellerId });

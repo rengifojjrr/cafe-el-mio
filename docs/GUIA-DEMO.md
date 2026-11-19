@@ -173,3 +173,14 @@ una línea real y empezar de nuevo.
 | Ponerle a un local su precio (nunca menos que el base) y ver lo que gana el vendedor | Tabaco · Vendedor | Mis locales → Tabaquería El Faro → «Precios de este local» |
 | El local ve su precio y no el base | Tabaco · Local | Catálogo → Biscayne Robusto → «Pagas» |
 | Elegir cómo cobra cada vendedor (la diferencia es la de los nuevos) | Tabaco · Administración | Usuarios → el vendedor → «Comisión» |
+
+## Ronda 6: personas, almacén y precio por medida
+
+| Quiero ver | Cuenta | Dónde |
+|---|---|---|
+| Vender a una persona nueva (sin salir de la venta) | Tabaco · Administración | Venta rápida → «Persona» → escribe un nombre → «Crear» |
+| Un pedido a nombre de una persona que ya compró | Tabaco · Administración | Pedidos → Por teléfono → «Persona» → escribe su nombre |
+| La venta de mostrador | Tabaco · Administración | Venta rápida → «Almacén» |
+| Las personas y el mostrador con lo que compraron | Tabaco · Administración | Más → Clientes |
+| El precio por mazo según la medida | Tabaco · Administración | Ajustes → «Precio por mazo»; después Catálogo → nuevo tabaco de mazo 7 × 70 |
+

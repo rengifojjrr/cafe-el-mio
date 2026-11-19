@@ -241,8 +241,21 @@ export function SelectInput({
   options,
   placeholder,
   ...rest
-}: SelectHTMLAttributes<HTMLSelectElement> & { label: string; hint?: ReactNode; error?: string; options: { value: string; label: string }[]; placeholder?: string }) {
+}: SelectHTMLAttributes<HTMLSelectElement> & {
+  label: string;
+  hint?: ReactNode;
+  error?: string;
+  options: { value: string; label: string; group?: string }[];
+  placeholder?: string;
+}) {
   const id = useId();
+  // Las opciones con `group` van juntas bajo su título (en el orden en que aparece cada grupo).
+  const groups = [...new Set(options.map((o) => o.group ?? ''))];
+  const opt = (o: { value: string; label: string }) => (
+    <option key={o.value} value={o.value}>
+      {o.label}
+    </option>
+  );
   return (
     <Field label={label} hint={hint} error={error} htmlFor={rest.id ?? id}>
       <select id={rest.id ?? id} className="input" aria-invalid={error ? true : undefined} {...rest}>
@@ -251,11 +264,17 @@ export function SelectInput({
             {placeholder}
           </option>
         ) : null}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
+        {groups.length > 1 || groups[0]
+          ? groups.map((g) =>
+              g ? (
+                <optgroup key={g} label={g}>
+                  {options.filter((o) => o.group === g).map(opt)}
+                </optgroup>
+              ) : (
+                options.filter((o) => !o.group).map(opt)
+              ),
+            )
+          : options.map(opt)}
       </select>
     </Field>
   );

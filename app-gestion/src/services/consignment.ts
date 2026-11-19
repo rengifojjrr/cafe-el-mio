@@ -14,7 +14,7 @@ import type {
   UnmetDemand,
   Visit,
 } from '../data/types';
-import { assertCanSupply, supplyCheck } from '../domain/compliance';
+import { assertCanSupply, pideEdad, supplyCheck } from '../domain/compliance';
 import { WAREHOUSE, allocate, storeLoc } from '../domain/ledger';
 import { commissionAmount } from '../domain/money-rules';
 import { capasDelLocal, consumir, precioDelLocal, repartirLotes, type Capa } from '../domain/precios-local';
@@ -253,6 +253,8 @@ const signatureSchema = z.object({
   name: z.string().trim().min(3, 'Escribe el nombre de quien recibe.'),
   image: z.string().startsWith('data:image/png', 'Falta la firma de quien recibe.').min(200, 'La firma está vacía.'),
   geo: z.object({ lat: z.number(), lng: z.number(), accuracy: z.number() }).optional(),
+  /** Tabaco a una persona o al mostrador: se comprobó con su identificación que tiene 21 o más. */
+  edadComprobada: z.boolean().optional(),
 });
 
 /**
@@ -269,6 +271,7 @@ export async function receiveDelivery(ctx: Ctx, deliveryId: string, signature: z
     guard(ctx, 'delivery.receive', { type: 'store', store });
     if (d.status !== 'preparada') throw new ValidationError(`La entrega ${d.code} no está lista para entregar.`);
     assertCanSupply(ctx.line, store, ctx.now());
+    if (pideEdad(ctx.line, store) && !sig.edadComprobada) throw new ValidationError('Comprueba con su identificación que tiene 21 años o más: no se le entrega tabaco a menores de 21.');
     const snap = await loadInventory(ctx);
     const at = nowIso(ctx);
     if (store.saleMode === 'firme') {
@@ -276,7 +279,7 @@ export async function receiveDelivery(ctx: Ctx, deliveryId: string, signature: z
         const p = snap.productsById.get(it.productId);
         return p ? splitIntoPacks(p, it.preparedQty ?? 0).map((part) => ({ productId: it.productId, pack: part.pack, packQty: part.packQty })) : [];
       });
-      const invoice = await writeFirmInvoice(ctx, { store, items, origin: 'entrega', sellerId: store.sellerId || d.sellerId, deliveryId: d.id, reorderId: d.reorderId, snap });
+      const invoice = await writeFirmInvoice(ctx, { store, items, origin: 'entrega', sellerId: store.sellerId || d.sellerId || null, deliveryId: d.id, reorderId: d.reorderId, snap, edadComprobada: Boolean(sig.edadComprobada) && pideEdad(ctx.line, store) });
       d.invoiceId = invoice.id;
     } else {
       for (const it of d.items) {
@@ -659,7 +662,7 @@ export const REORDER_ORIGIN_LABEL: Record<NonNullable<Reorder['origin']>, string
  */
 export async function createPhoneOrder(
   ctx: Ctx,
-  input: { storeId: string; items: { productId: string; qty: number }[]; note?: string },
+  input: { storeId: string; items: { productId: string; qty: number }[]; note?: string; edadComprobada?: boolean },
   origin: 'telefono' | 'pegado' = 'telefono',
 ): Promise<{ reorder: Reorder; delivery: Delivery }> {
   guard(ctx, 'order.phone');
@@ -668,6 +671,8 @@ export async function createPhoneOrder(
     const store = await storeOrThrow(ctx, input.storeId);
     const check = supplyCheck(ctx.line, store, ctx.now());
     if (!check.ok) throw new ValidationError(check.reason);
+    const edad = pideEdad(ctx.line, store);
+    if (edad && !input.edadComprobada) throw new ValidationError('Anota que tiene 21 años o más (se comprueba con su identificación al entregar): no se le vende tabaco a menores de 21.');
     const at = nowIso(ctx);
     const note = input.note?.trim() ?? '';
     const reorder: Reorder = {
@@ -682,6 +687,7 @@ export async function createPhoneOrder(
       createdBy: ctx.actor.userId,
       confirmedAt: at,
       origin,
+      ...(edad ? { edadComprobada: true } : {}),
       history: [
         { status: 'enviado', at, by: ctx.actor.userId },
         { status: 'confirmado', at, by: ctx.actor.userId },
