@@ -1,8 +1,11 @@
 // Un servidor de mentira para las pruebas: responde como el de verdad (Supabase con el esquema
-// `tabaco`: tabaco_1, tabaco_2 y tabaco_3 de supabase/migrations) sin salir a internet. Lo usan
+// `tabaco`: tabaco_1 a tabaco_5 de supabase/migrations; lo de los vendedores, en
+// servidor-falso-vendedor.ts) sin salir a internet. Lo usan
 // las pruebas unitarias (en lugar de `fetch`) y las de punta a punta (con `page.route`).
 // Las reglas que importan son las mismas: quién puede subir y bajar, todo-o-nada, la auditoría
 // que solo se agrega, la bajada por tandas que no parte una transacción y el depósito privado.
+
+import { NoVendedor, costear, paraVendedor, revisarVendedor } from './servidor-falso-vendedor';
 
 export interface CuentaFalsa {
   rol: 'admin' | 'seller' | 'store' | 'direccion';
@@ -29,6 +32,8 @@ interface Fila {
   datos: Record<string, unknown>;
   borrado: boolean;
   tx: number;
+  /** Quién la escribió (id del usuario del servidor). */
+  autor?: string;
 }
 
 interface InvitacionFalsa {
@@ -36,7 +41,7 @@ interface InvitacionFalsa {
   token: string;
   correo: string;
   nombre: string;
-  rol: 'admin' | 'direccion';
+  rol: 'admin' | 'direccion' | 'seller';
   usuario_app: string | null;
   vence: number;
   usada: boolean;
@@ -263,10 +268,30 @@ export class ServidorFalso {
     }
   }
 
+  private buscar = (tabla: string, id: string): Fila | undefined => this.registros.get(`${tabla}/${id}`);
+
+  /** El vendedor de la app de quien llama (o error si su cuenta no está ligada a uno). */
+  private vendedor(yo: UsuarioFalso): string {
+    const v = yo.cuenta?.usuario_app;
+    if (!v) throw new NoSePuede('Tu cuenta de vendedor no está ligada a un vendedor de la app: pídele a Administración una invitación nueva.');
+    return v;
+  }
+
+  private alcance(v: string): { locales: Set<string>; hilos: Set<string> } {
+    const locales = new Set<string>();
+    const hilos = new Set<string>();
+    for (const f of this.registros.values()) {
+      if (f.borrado) continue;
+      if (f.tabla === 'stores' && f.datos.sellerId === v) locales.add(f.id);
+      if (f.tabla === 'threads' && ((f.datos.participantIds as string[] | undefined) ?? []).includes(v)) hilos.add(f.id);
+    }
+    return { locales, hilos };
+  }
+
   private traer(yo: UsuarioFalso | null, desde: number, limite: number) {
     const rol = this.rol(yo);
     if (!rol) throw new NoSePuede('No tienes cuenta en el programa de Tabaco');
-    if (rol !== 'admin' && rol !== 'direccion') throw new NoSePuede('Por ahora el servidor del programa de Tabaco es solo para Administración y Dirección');
+    if (rol !== 'admin' && rol !== 'direccion' && rol !== 'seller') throw new NoSePuede('Por ahora el servidor del programa de Tabaco es para Administración, Dirección y vendedores');
     const hasta = this.tx + 1;
     const filas = [...this.registros.values()].filter((f) => f.tx >= desde && f.tx < hasta).sort((x, y) => x.tx - y.tx || x.tabla.localeCompare(y.tabla) || x.id.localeCompare(y.id));
     let corte = hasta;
@@ -274,17 +299,31 @@ export class ServidorFalso {
       corte = filas[limite]!.tx;
       if (corte === filas[0]!.tx) corte = filas.find((f) => f.tx > corte)?.tx ?? hasta;
     }
+    const tanda = filas.filter((f) => f.tx < corte);
+    if (rol === 'seller') {
+      // Solo lo suyo y sin costos (ver servidor-falso-vendedor.ts).
+      const v = this.vendedor(yo!);
+      const { locales, hilos } = this.alcance(v);
+      return {
+        hasta: corte,
+        mas: corte < hasta,
+        registros: tanda.flatMap((f) => {
+          const x = paraVendedor(f, v, locales, hilos, this.buscar);
+          return x ? [{ tabla: f.tabla, id: f.id, datos: x.datos, borrado: x.borrado }] : [];
+        }),
+      };
+    }
     return {
       hasta: corte,
       mas: corte < hasta,
-      registros: filas.filter((f) => f.tx < corte).map((f) => ({ tabla: f.tabla, id: f.id, datos: f.datos, borrado: f.borrado })),
+      registros: tanda.map((f) => ({ tabla: f.tabla, id: f.id, datos: f.datos, borrado: f.borrado })),
     };
   }
 
   private aplicar(yo: UsuarioFalso | null, cambios: unknown): number {
     const rol = this.rol(yo);
     if (!rol) throw new NoSePuede('No tienes cuenta en el programa de Tabaco');
-    if (rol !== 'admin') throw new NoSePuede('Por ahora solo Administración guarda en el servidor del programa de Tabaco');
+    if (rol !== 'admin' && rol !== 'seller') throw new NoSePuede('Dirección mira: no guarda en el servidor del programa de Tabaco');
     if (!Array.isArray(cambios)) throw new NoSePuede('Se esperaba una lista de cambios', 'P0001');
     if (cambios.length > 2000) throw new NoSePuede('Demasiados cambios juntos (máximo 2000)', 'P0001');
     // Todo o nada: primero se revisa todo.
@@ -300,11 +339,25 @@ export class ServidorFalso {
     }
     const tx = ++this.tx;
     let n = 0;
+    // Todo o nada también con las reglas del vendedor: si un cambio no entra, se vuelve atrás.
+    const antes = rol === 'seller' ? new Map(this.registros) : null;
+    const vendedor = rol === 'seller' ? this.vendedor(yo!) : null;
+    const costear_: string[] = [];
     for (const c of cambios as { tabla: string; id: string; op: string; datos?: Record<string, unknown> }[]) {
       const k = `${c.tabla}/${c.id}`;
+      if (vendedor) {
+        try {
+          revisarVendedor(vendedor, yo!.id, c, this.buscar);
+        } catch (e) {
+          this.registros = antes!;
+          if (e instanceof NoVendedor) throw new NoSePuede(e.message, '22023');
+          throw e;
+        }
+      }
       if (c.op === 'guardar') {
         if (c.tabla === 'audit' && this.registros.has(k)) continue;
-        this.registros.set(k, { tabla: c.tabla, id: c.id, datos: JSON.parse(JSON.stringify(c.datos)) as Record<string, unknown>, borrado: false, tx });
+        this.registros.set(k, { tabla: c.tabla, id: c.id, datos: JSON.parse(JSON.stringify(c.datos)) as Record<string, unknown>, borrado: false, tx, autor: yo!.id });
+        if (vendedor && ['salesReports', 'invoices', 'returns'].includes(c.tabla)) costear_.push(k);
       } else if (c.op === 'borrar') {
         const f = this.registros.get(k);
         if (f && !f.borrado) this.registros.set(k, { ...f, datos: {}, borrado: true, tx });
@@ -312,6 +365,11 @@ export class ServidorFalso {
         for (const [kk, f] of this.registros) if (f.tabla === c.tabla && !f.borrado) this.registros.set(kk, { ...f, datos: {}, borrado: true, tx });
       }
       n += 1;
+    }
+    // Lo que vendió o devolvió un vendedor lleva el costo de cada lote (él no lo ve).
+    for (const k of costear_) {
+      const f = this.registros.get(k)!;
+      this.registros.set(k, { ...f, datos: costear(f.tabla, f.datos, f.id, this.registros.values(), this.buscar) });
     }
     return n;
   }
@@ -323,13 +381,19 @@ export class ServidorFalso {
       .toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) throw new NoSePuede('Ese correo no parece válido.', '22023');
     if (!String(a.p_nombre ?? '').trim()) throw new NoSePuede('Falta el nombre de la persona.', '22023');
+    if (a.p_rol === 'seller') {
+      const u = this.buscar('users', String(a.p_usuario_app ?? ''));
+      if (!u || u.borrado || u.datos.role !== 'seller' || u.datos.active === false) {
+        throw new NoSePuede('Elige el vendedor (tiene que estar dado de alta y activo en Usuarios, y sincronizado).', '22023');
+      }
+    }
     for (const i of this.invitaciones) if (i.correo === correo && !i.usada) i.anulada = true;
     const inv: InvitacionFalsa = {
       id: nuevoId('inv'),
       token: nuevoId('tok').replace(/-/g, '') + Math.random().toString(16).slice(2),
       correo,
       nombre: String(a.p_nombre).trim(),
-      rol: a.p_rol === 'admin' ? 'admin' : 'direccion',
+      rol: a.p_rol === 'admin' ? 'admin' : a.p_rol === 'seller' ? 'seller' : 'direccion',
       usuario_app: (a.p_usuario_app as string | null) ?? null,
       vence: Date.now() + Number(a.p_dias ?? 7) * 86_400_000,
       usada: false,
@@ -390,19 +454,40 @@ export class ServidorFalso {
     };
   }
 
+  /** ¿El vendedor ve ese archivo? Las plantillas y las fotos que le tocan. */
+  private vendedorVe(yo: UsuarioFalso, ruta: string): boolean {
+    if (ruta.startsWith('templates/')) return true;
+    if (!ruta.startsWith('photos/')) return false;
+    const f = this.buscar('photos', ruta.slice('photos/'.length));
+    if (!f || f.borrado || !yo.cuenta?.usuario_app) return false;
+    const { locales, hilos } = this.alcance(yo.cuenta.usuario_app);
+    return paraVendedor(f, yo.cuenta.usuario_app, locales, hilos, this.buscar) !== null;
+  }
+
+  /** Una foto que ya está y la subió otro. */
+  private ajena(yo: UsuarioFalso, id: string): boolean {
+    const f = this.buscar('photos', id);
+    return Boolean(f && !f.borrado && f.autor !== yo.id);
+  }
+
   private deposito(p: PedidoFalso, path: string, yo: UsuarioFalso | null): RespuestaFalsa {
     const rol = this.rol(yo);
     const BUCKET = 'tabaco-archivos';
     if (p.method === 'GET' && path.startsWith(`/storage/v1/object/authenticated/${BUCKET}/`)) {
-      if (rol !== 'admin' && rol !== 'direccion') return json(400, { statusCode: '404', error: 'not_found', message: 'Object not found' });
       const ruta = decodeURIComponent(path.slice(`/storage/v1/object/authenticated/${BUCKET}/`.length));
+      if (rol !== 'admin' && rol !== 'direccion' && !(rol === 'seller' && this.vendedorVe(yo!, ruta))) {
+        return json(400, { statusCode: '404', error: 'not_found', message: 'Object not found' });
+      }
       const f = this.archivos.get(ruta);
       if (!f) return json(400, { statusCode: '404', error: 'not_found', message: 'Object not found' });
       return { status: 200, headers: { ...CORS, 'content-type': f.tipo }, body: f.bytes };
     }
-    if (rol !== 'admin') return json(403, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
-    if (p.method === 'POST' && path.startsWith(`/storage/v1/object/${BUCKET}/`)) {
-      const ruta = decodeURIComponent(path.slice(`/storage/v1/object/${BUCKET}/`.length));
+    const rutaSube = p.method === 'POST' && path.startsWith(`/storage/v1/object/${BUCKET}/`) ? decodeURIComponent(path.slice(`/storage/v1/object/${BUCKET}/`.length)) : null;
+    // Un vendedor sube solo sus fotos (nuevas o que subió él).
+    const vendedorSube = rol === 'seller' && rutaSube !== null && rutaSube.startsWith('photos/') && !this.ajena(yo!, rutaSube.slice('photos/'.length));
+    if (rol !== 'admin' && !vendedorSube) return json(403, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
+    if (rutaSube !== null) {
+      const ruta = rutaSube;
       const tipo = p.headers['content-type'] ?? 'application/octet-stream';
       if (!['image/webp', 'image/jpeg', 'image/png', 'image/svg+xml', 'application/pdf'].includes(tipo)) {
         return json(400, { statusCode: '415', error: 'invalid_mime_type', message: `mime type ${tipo} is not supported` });

@@ -1,6 +1,6 @@
 // Comisiones del vendedor: devengadas, por cobrar y pagadas, por producto, por local y por mes.
 // Administración ve a todos y marca como pagadas las que ya se pueden pagar.
-import { Banknote, Coins, Lock } from 'lucide-react';
+import { AlertTriangle, Banknote, Coins, Lock } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { PaymentMethod } from '../../data/types';
 import { fmtMoney, fmtNumber } from '../../lib/money';
@@ -64,8 +64,10 @@ function CommissionsView({ sellerId, admin }: { sellerId?: string; admin?: boole
   const list = useAsync(() => listCommissions(ctx, { sellerId }), [ctx, sellerId]);
   const payouts = useAsync(() => listPayouts(ctx, sellerId), [ctx, sellerId]);
   const [dim, setDim] = useState<Dim>('producto');
-  const [paying, setPaying] = useState<{ sellerId: string; name: string; amount: number } | null>(null);
+  const [paying, setPaying] = useState<PayTarget | null>(null);
   const summary = useMemo(() => summarizeCommissions(list.data ?? []), [list.data]);
+  const porRevisar = useMemo(() => (list.data ?? []).filter((c) => c.revisar), [list.data]);
+  const target = (id: string, name: string, amount: number): PayTarget => ({ sellerId: id, name, amount, revisar: porRevisar.filter((c) => c.sellerId === id && c.status === 'pagable') });
 
   if (list.error) return <ErrorBox error={list.error} />;
   if (list.loading && !list.data) return <Loading rows={4} />;
@@ -89,6 +91,8 @@ function CommissionsView({ sellerId, admin }: { sellerId?: string; admin?: boole
         <Stat label="Pagada" value={t.pagada} format="money" tone="ok" hint="Ya te la pagaron" />
         <Stat label="Total" value={t.total} format="money" tone="ink" hint={`${fmtNumber(rows.length)} ventas con comisión`} />
       </div>
+
+      {admin && porRevisar.length ? <PorRevisar list={porRevisar} showSeller={!sellerId} /> : null}
 
       <Section title="Por mes">
         <Card className="p-4">
@@ -124,7 +128,7 @@ function CommissionsView({ sellerId, admin }: { sellerId?: string; admin?: boole
                   <p className="text-sm text-muted">por pagar</p>
                 </div>
                 {!actor.readOnly ? (
-                  <Button variant="primary" icon={Banknote} disabled={s.pagable <= 0} onClick={() => setPaying({ sellerId: s.key, name: s.label, amount: s.pagable })} className="w-full sm:w-auto">
+                  <Button variant="primary" icon={Banknote} disabled={s.pagable <= 0} onClick={() => setPaying(target(s.key, s.label, s.pagable))} className="w-full sm:w-auto">
                     Pagar comisiones
                   </Button>
                 ) : null}
@@ -142,7 +146,7 @@ function CommissionsView({ sellerId, admin }: { sellerId?: string; admin?: boole
             disabled={(sellerMap.get(sellerId)?.pagable ?? 0) <= 0}
             onClick={() => {
               const s = sellerMap.get(sellerId);
-              if (s) setPaying({ sellerId, name: s.label, amount: s.pagable });
+              if (s) setPaying(target(sellerId, s.label, s.pagable));
             }}
           >
             Pagar {fmtMoney(sellerMap.get(sellerId)?.pagable ?? 0)} en comisiones
@@ -233,8 +237,10 @@ function CommissionsView({ sellerId, admin }: { sellerId?: string; admin?: boole
                   {admin && !sellerId ? ` · ${c.sellerName}` : ''} · {fmtNumber(c.qty)} u.
                 </span>
               </span>
+              {c.revisar ? <Pill tone="warn">Revisar</Pill> : null}
               <Pill tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Pill>
               <Money value={c.amount} className="w-24 text-right font-bold" />
+              {c.revisar ? <span className="basis-full text-sm text-warn">{c.revisar}</span> : null}
             </li>
           ))}
         </ul>
@@ -267,7 +273,48 @@ function CommissionsView({ sellerId, admin }: { sellerId?: string; admin?: boole
   );
 }
 
-function PayoutSheet({ target, onClose }: { target: { sellerId: string; name: string; amount: number } | null; onClose: () => void }) {
+interface PayTarget {
+  sellerId: string;
+  name: string;
+  amount: number;
+  /** Las pagables de este vendedor que no cuadran con su venta. */
+  revisar: CommissionView[];
+}
+
+/** Las comisiones sin pagar que no cuadran con su venta (Administración). */
+function PorRevisar({ list, showSeller }: { list: CommissionView[]; showSeller: boolean }) {
+  return (
+    <Section title="Comisiones por revisar">
+      <div className="glass border-warn p-4" role="note">
+        <p className="flex items-start gap-2 font-semibold text-warn">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
+          {list.length === 1 ? 'Una comisión no cuadra con su venta. Revísala antes de pagar.' : `${fmtNumber(list.length)} comisiones no cuadran con su venta. Revísalas antes de pagar.`}
+        </p>
+        <p className="mt-1 text-sm text-muted">
+          Cada vendedor sube sus comisiones desde su teléfono y el servidor no recalcula el monto: aquí se comparan con la venta y con las reglas de comisión. Si cambiaste una regla o un precio base después de la venta, también salen aquí.
+        </p>
+        <ul className="mt-3 divide-y divide-line">
+          {list.slice(0, 10).map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">{c.productName}</span>
+                <span className="block truncate text-sm text-muted">
+                  {fmtShortDate(c.accruedAt)} · {c.storeName}
+                  {showSeller ? ` · ${c.sellerName}` : ''}
+                </span>
+              </span>
+              <Money value={c.amount} className="font-bold" />
+              <span className="basis-full text-sm text-warn">{c.revisar}</span>
+            </li>
+          ))}
+        </ul>
+        {list.length > 10 ? <p className="mt-2 text-sm text-muted">Y {fmtNumber(list.length - 10)} más.</p> : null}
+      </div>
+    </Section>
+  );
+}
+
+function PayoutSheet({ target, onClose }: { target: PayTarget | null; onClose: () => void }) {
   const { ctx } = useLine();
   const { run, busy } = useAction();
   const [method, setMethod] = useState<PaymentMethod>('zelle');
@@ -303,6 +350,23 @@ function PayoutSheet({ target, onClose }: { target: { sellerId: string; name: st
               ['Monto', <Money key="m" value={target.amount} className="font-bold" />],
             ]}
           />
+          {target.revisar.length ? (
+            <div className="rounded-2xl border border-warn p-3 text-sm" role="note">
+              <p className="flex items-start gap-2 font-semibold text-warn">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                {target.revisar.length === 1 ? 'Una de estas comisiones no cuadra con su venta:' : `${fmtNumber(target.revisar.length)} de estas comisiones no cuadran con su venta:`}
+              </p>
+              <ul className="mt-2 grid gap-1.5">
+                {target.revisar.slice(0, 5).map((c) => (
+                  <li key={c.id}>
+                    <span className="font-semibold">{c.productName}</span> · {c.storeName} · <Money value={c.amount} />
+                    <span className="block text-muted">{c.revisar}</span>
+                  </li>
+                ))}
+              </ul>
+              {target.revisar.length > 5 ? <p className="mt-1 text-muted">Y {fmtNumber(target.revisar.length - 5)} más.</p> : null}
+            </div>
+          ) : null}
           <SelectInput label="Cómo se pagó" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} options={METHOD_OPTIONS} />
           <TextInput
             label="Referencia"

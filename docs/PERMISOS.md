@@ -12,7 +12,8 @@ prohibido y comprueban que falla.
 3. **Dueño del recurso:** un vendedor solo toca sus locales (`store.sellerId === actor.userId`); un local, solo el
    suyo (`store.id === actor.storeId`).
 4. **Costos:** solo Administración. Para los demás roles el campo `cost` no viaja en el producto, y los costos por lote
-   de ventas y devoluciones se ponen en cero.
+   de ventas y devoluciones se ponen en cero. Con el servidor, a un vendedor ni siquiera le llegan (los quita
+   `tabaco_traer`) y el costo de lo que vende lo pone el servidor.
 
 ## Matriz
 
@@ -44,7 +45,7 @@ prohibido y comprueban que falla.
 | Ver liquidaciones (`settlement.read`) | todas | de sus locales | las suyas | — |
 | Generar liquidación, registrar pago | ✔ | — | — | — |
 | Ver comisiones (`commission.read`) | todas | las suyas | — | — |
-| Pagar comisiones (`commission.pay`) | ✔ | — | — | — |
+| Pagar comisiones (`commission.pay`), con las que no cuadran marcadas («Comisiones por revisar») | ✔ | — | — | — |
 | Contabilidad y reportes | ✔ | — | — | — |
 | Mapa (`map.read`) | todos los locales | su ruta y sus locales | — | — |
 | Mensajes (`message.read/send`) | todos los hilos (escribe donde participa) | sus hilos | sus hilos | — |
@@ -59,5 +60,9 @@ prohibido y comprueban que falla.
 
 - El local escribe a Administración solo si su vendedor no contestó en 24 horas (`escalationStatus`).
 - Dirección puede abrir una línea «como Administración», siempre en solo lectura.
-- **Esta demo no tiene servidor:** los permisos viven en el navegador. Con Supabase se repiten como políticas RLS
-  (ver `SUPABASE.md`), que es lo que los hace seguros de verdad.
+- **Con el servidor, las reglas del vendedor se repiten allí** (`supabase/migrations/tabaco_5_vendedores.sql`): qué le
+  baja (`tabaco.para_vendedor`: solo lo suyo y sin costos) y qué le acepta (`tabaco.revisar_vendedor`). Es lo que los hace
+  seguros de verdad: la app solo esconde. Ver «Vendedores» en `SUPABASE.md`. Dirección mira y no guarda; las cuentas de
+  los locales todavía no entran al servidor.
+- **Comisiones por revisar:** el servidor no recalcula el monto de las comisiones que sube un vendedor; Administración
+  ve las que no cuadran con su venta antes de pagarlas (Comisiones).

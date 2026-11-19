@@ -1,8 +1,9 @@
 // Liquidaciones, cobros y comisiones. Aquí no se mueve dinero: solo se registra el apunte
 // (efectivo, cheque, Zelle o transferencia, con su referencia).
 import { z } from 'zod';
-import type { Commission, CommissionPayout, Invoice, Payment, PaymentMethod, SalesReport, Settlement, Store } from '../data/types';
+import type { Commission, CommissionPayout, Invoice, Payment, PaymentMethod, Product, SalesReport, Settlement, Store, User } from '../data/types';
 import { invoiceBalance, isInvoiceOverdue } from '../domain/invoices';
+import { comisionNoCuadra } from '../domain/revisar-comisiones';
 import {
   type AgingBucket,
   aging,
@@ -265,6 +266,34 @@ export interface CommissionView extends Commission {
   productName: string;
   sellerName: string;
   month: string;
+  /** Administración: por qué no cuadra con su venta (ver domain/revisar-comisiones.ts). Solo en las no pagadas. */
+  revisar?: string;
+}
+
+/**
+ * Las comisiones sin pagar que no cuadran con su venta, con el motivo. Cada vendedor sube las suyas
+ * con su cuenta y el servidor no recalcula el monto: esto lo revisa antes de pagar.
+ */
+async function revisionDeComisiones(ctx: Ctx, list: readonly Commission[], products: readonly Product[], users: readonly User[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const pendientes = list.filter((c) => c.status !== 'pagada');
+  if (pendientes.length === 0) return out;
+  const [reports, invoices, settings] = await Promise.all([ctx.repo.salesReports.all(), ctx.repo.invoices.all(), getSettings(ctx)]);
+  const rep = new Map(reports.map((r) => [r.id, r]));
+  const inv = new Map(invoices.map((i) => [i.id, i]));
+  const prod = new Map(products.map((p) => [p.id, p]));
+  const usr = new Map(users.map((u) => [u.id, u]));
+  for (const c of pendientes) {
+    const motivo = comisionNoCuadra(c, {
+      report: rep.get(c.salesReportId),
+      invoice: c.invoiceId ? inv.get(c.invoiceId) : undefined,
+      product: prod.get(c.productId),
+      seller: usr.get(c.sellerId) ?? null,
+      lineScheme: settings.commissionScheme ?? null,
+    });
+    if (motivo) out.set(c.id, motivo);
+  }
+  return out;
 }
 
 export async function listCommissions(ctx: Ctx, filter?: { sellerId?: string }): Promise<CommissionView[]> {
@@ -283,6 +312,7 @@ export async function listCommissions(ctx: Ctx, filter?: { sellerId?: string }):
   const sName = new Map(stores.map((s) => [s.id, s.name]));
   const pName = new Map(products.map((p) => [p.id, p.name]));
   const uName = new Map(users.map((u) => [u.id, u.name]));
+  const revisar = ctx.actor.role === 'seller' ? new Map<string, string>() : await revisionDeComisiones(ctx, all, products, users);
   return all
     .sort((a, b) => b.accruedAt.localeCompare(a.accruedAt))
     .map((c) => ({
@@ -291,6 +321,7 @@ export async function listCommissions(ctx: Ctx, filter?: { sellerId?: string }):
       productName: pName.get(c.productId) ?? '—',
       sellerName: uName.get(c.sellerId) ?? '—',
       month: monthKey(c.accruedAt),
+      ...(revisar.has(c.id) ? { revisar: revisar.get(c.id) } : {}),
     }));
 }
 

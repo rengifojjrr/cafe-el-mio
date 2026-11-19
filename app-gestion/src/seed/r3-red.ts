@@ -11,6 +11,7 @@ import type {
   Delivery,
   DeliveryRoute,
   Invitation,
+  Invoice,
   IsoDate,
   LineId,
   LineSettings,
@@ -26,6 +27,7 @@ import { monthToDateMetrics, resolveCommissionRule } from '../domain/commission-
 import { docAlertNotice, storeDocWarnings } from '../domain/fiscal';
 import { Balances, WAREHOUSE, reservedByProduct } from '../domain/ledger';
 import { HOUSTON, MIAMI } from '../domain/markets';
+import { commissionOnAmount } from '../domain/invoices';
 import { commissionAmount } from '../domain/money-rules';
 import { orderStep } from '../domain/products';
 import { estimateRouteKm, haversineKm } from '../domain/routes';
@@ -203,18 +205,24 @@ function seedCommissions({ line, t, settings, stores, users, sellerByKey }: Seed
   const pack = (pid: string) => productsById.get(pid)?.packSize ?? 1;
   const bySeller = new Map<string, SalesReport[]>();
   for (const r of reports) bySeller.set(r.sellerId, [...(bySeller.get(r.sellerId) ?? []), r]);
+  // Las facturas en firme cuentan en las cifras del mes y llevan la misma regla (como en la app:
+  // sellerCommissionContext + ruleFromContext; antes la semilla les dejaba la comisión del producto).
+  const invoices = t.invoices as Invoice[];
+  const invBySeller = new Map<string, Invoice[]>();
+  for (const inv of invoices) if (inv.sellerId) invBySeller.set(inv.sellerId, [...(invBySeller.get(inv.sellerId) ?? []), inv]);
+  const metricsOf = (sellerId: string, at: string) =>
+    monthToDateMetrics({ sellerId, at, stores, reports: bySeller.get(sellerId) ?? [], invoices: invBySeller.get(sellerId) ?? [], packSize: pack });
   const metricsByReport = new Map<string, ReturnType<typeof monthToDateMetrics>>();
-  for (const r of reports) {
-    metricsByReport.set(r.id, monthToDateMetrics({ sellerId: r.sellerId, at: r.at, stores, reports: bySeller.get(r.sellerId) ?? [], packSize: pack }));
-  }
+  for (const r of reports) metricsByReport.set(r.id, metricsOf(r.sellerId, r.at));
+  for (const inv of invoices) if (inv.sellerId) metricsByReport.set(inv.id, metricsOf(inv.sellerId, inv.issuedAt));
   for (const c of commissions) {
     const p = productsById.get(c.productId);
-    const metrics = metricsByReport.get(c.salesReportId);
+    const metrics = metricsByReport.get(c.invoiceId ?? c.salesReportId);
     if (!p || !metrics) continue;
     const rule = resolveCommissionRule({ product: p, seller: usersById.get(c.sellerId), lineScheme: TABACO_SCHEME, metrics });
     if (!rule) continue;
     c.rule = rule;
-    c.amount = commissionAmount(rule, c.qty, c.qty > 0 ? c.base / c.qty : 0);
+    c.amount = c.invoiceId ? commissionOnAmount(rule, c.qty, c.base, p.priceToStore) : commissionAmount(rule, c.qty, c.qty > 0 ? c.base / c.qty : 0);
   }
   const commById = new Map(commissions.map((c) => [c.id, c]));
   for (const po of t.payouts as CommissionPayout[]) {

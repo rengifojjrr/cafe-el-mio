@@ -3,7 +3,7 @@
 // comisiones que genera. La mercancía sale del almacén a «vendido» lote por lote, con su costo.
 import { ruleFromContext, sellerCommissionContext } from './commission-scheme';
 import { z } from 'zod';
-import type { Commission, CommissionRule, Invoice, InvoiceLine, InvoiceOrigin, Movement, Payment, PaymentMethod, Product, SalePack, Store } from '../data/types';
+import type { DeliveryItem, Commission, CommissionRule, Invoice, InvoiceLine, InvoiceOrigin, Movement, Payment, PaymentMethod, Product, SalePack, Store } from '../data/types';
 import { type ClaseCliente, claseDe, esLocal } from '../domain/clientes';
 import { ComplianceError, firmSaleCheck, pideEdad, supplyCheck } from '../domain/compliance';
 import { creditDaysFor, creditText, hasValidResaleCert, invoiceBalance, invoiceCommissions, invoiceDueOn, invoiceStatus, invoiceTotals, isInvoiceOverdue } from '../domain/invoices';
@@ -81,6 +81,8 @@ export async function writeFirmInvoice(
     snap?: InventorySnapshot;
     /** Tabaco a una persona o en el mostrador: se comprobó su edad (21 o más). */
     edadComprobada?: boolean;
+    /** Precios fijados al preparar la entrega (por producto): mandan sobre las listas. */
+    preciosFijos?: ReadonlyMap<string, NonNullable<DeliveryItem['precio']>>;
   },
 ): Promise<Invoice> {
   const { store } = args;
@@ -113,12 +115,15 @@ export async function writeFirmInvoice(
     const p = snap.productsById.get(it.productId)!;
     const qty = baseQty(p, it.pack, it.packQty);
     // El precio que le puso su vendedor a este local manda sobre la lista (nunca menos que el base).
-    const quote = priceForStore(p, store, list, { pack: it.pack, qty: it.packQty });
+    // Si la entrega ya traía su precio (fijado al prepararla), se factura a ese.
+    const fijo = args.preciosFijos?.get(p.id);
+    const quote = fijo ? precioFijado(fijo, it.pack, it.packQty) : priceForStore(p, store, list, { pack: it.pack, qty: it.packQty });
     const parts = allocate(snap.balances, snap.lotsById, WAREHOUSE, p.id, qty, p.name);
     let cost = 0;
     const lots: InvoiceLine['lots'] = [];
     for (const part of parts) {
-      const unitCost = snap.lotsById.get(part.lotId)?.unitCost ?? p.cost;
+      // Un vendedor no tiene los costos (el servidor los pone al subir): aquí van en cero, nunca NaN.
+      const unitCost = snap.lotsById.get(part.lotId)?.unitCost ?? p.cost ?? 0;
       cost += part.qty * unitCost;
       lots.push({ lotId: part.lotId, qty: part.qty, unitCost });
       const mv: Movement = {
@@ -495,4 +500,11 @@ export async function invoiceDocument(ctx: Ctx, invoiceId: string): Promise<Invo
     paymentText,
     terms: creditText(store),
   };
+}
+
+/** El precio de una línea con el precio fijado al preparar la entrega (mismas reglas que una lista). */
+function precioFijado(fijo: NonNullable<DeliveryItem['precio']>, pack: SalePack, packQty: number): { unit: number; box: number; price: number } {
+  const porVolumen = pack === 'caja' && fijo.volume && fijo.volume.box > 0 && fijo.volume.minBoxes > 0 && packQty >= fijo.volume.minBoxes;
+  const box = porVolumen ? fijo.volume!.box : fijo.box;
+  return { unit: fijo.unit, box, price: pack === 'caja' ? box : fijo.unit };
 }

@@ -5,6 +5,7 @@ import { getLineRepo } from '../data';
 import { PROGRAM_LINE } from '../lines/programa';
 import { PUBLIC_URL } from '../lib/assets';
 import { type Cuenta, rpc } from '../servidor/cliente';
+import { enCalma, sincronizar } from '../servidor/sincronizar';
 import { saveUser } from './admin';
 
 export interface CuentaConAcceso {
@@ -22,7 +23,7 @@ export interface InvitacionAbierta {
   id: string;
   nombre: string;
   correo: string;
-  rol: 'admin' | 'direccion';
+  rol: 'admin' | 'direccion' | 'seller';
   creada_en: string;
   vence_en: string;
   estado: 'vigente' | 'vencida';
@@ -38,9 +39,14 @@ export function linkDeAcceso(token: string): string {
 
 /**
  * Invita a alguien con su correo. A Administración se le crea (o se le busca) su usuario en la
- * línea, para que lo que haga quede con su nombre.
+ * línea, para que lo que haga quede con su nombre. Un vendedor va ligado a su usuario de la app
+ * (el de Usuarios): entra y ve solo lo suyo. Antes se sube lo pendiente, para que el servidor ya
+ * tenga a ese vendedor.
  */
-export async function invitar(ctx: Ctx, input: { nombre: string; correo: string; rol: 'admin' | 'direccion'; dias: number }): Promise<{ link: string; venceEn: string }> {
+export async function invitar(
+  ctx: Ctx,
+  input: { nombre: string; correo: string; rol: 'admin' | 'direccion' | 'seller'; dias: number; vendedorId?: string },
+): Promise<{ link: string; venceEn: string }> {
   const correo = input.correo.trim().toLowerCase();
   const nombre = input.nombre.trim();
   let usuarioApp: string | null = null;
@@ -48,6 +54,14 @@ export async function invitar(ctx: Ctx, input: { nombre: string; correo: string;
     const ya = (await getLineRepo(PROGRAM_LINE).users.all()).find((u) => u.role === 'admin' && u.email.trim().toLowerCase() === correo);
     usuarioApp = ya?.id ?? (await saveUser(ctx, { role: 'admin', name: nombre, email: correo, phone: '' })).id;
   }
+  if (input.rol === 'seller') {
+    const v = input.vendedorId ? await getLineRepo(PROGRAM_LINE).users.get(input.vendedorId) : undefined;
+    if (!v || v.role !== 'seller' || !v.active) throw new Error('Elige el vendedor (dado de alta y activo en Usuarios).');
+    usuarioApp = v.id;
+  }
+  // Lo que todavía no subió este teléfono (por ejemplo, el vendedor recién dado de alta).
+  await sincronizar();
+  await enCalma();
   const r = await rpc<{ token: string; vence_en: string }>('tabaco_invitar', {
     p_correo: correo,
     p_nombre: nombre,

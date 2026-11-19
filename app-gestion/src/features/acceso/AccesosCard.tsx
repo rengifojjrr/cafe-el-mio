@@ -1,5 +1,5 @@
 // Administración (con el servidor): quién entra con contraseña, las invitaciones abiertas, invitar a
-// alguien (Administración o Dirección) y quitar o devolver el acceso.
+// alguien (Administración, Dirección o un vendedor) y quitar o devolver el acceso.
 import { Ban, Copy, KeyRound, MessageCircle, RotateCcw, UserPlus, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAsync } from '../../app/hooks';
@@ -7,6 +7,7 @@ import { useLine } from '../../app/line-context';
 import { whatsappUrl } from '../../domain/invitation';
 import { fmtDate, fmtDateTime } from '../../lib/time';
 import { type CuentaConAcceso, anularInvitacion, cambiarAcceso, invitar, listarAccesos } from '../../services/acceso-admin';
+import { listUsers } from '../../services/admin';
 import { conServidor } from '../../services/puerta';
 import { Button, ErrorBox, Loading, Pill, Section, SelectInput, Sheet, TextInput } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
@@ -116,7 +117,18 @@ function InvitarSheet({ open, onClose }: { open: boolean; onClose: () => void })
   const { push } = useToast();
   const [nombre, setNombre] = useState('');
   const [correo, setCorreo] = useState('');
-  const [rol, setRol] = useState<'admin' | 'direccion'>('direccion');
+  const [rol, setRol] = useState<'admin' | 'direccion' | 'seller'>('direccion');
+  const [vendedorId, setVendedorId] = useState('');
+  // Los vendedores dados de alta en Usuarios: la invitación queda ligada a uno de ellos.
+  const vendedores = useAsync(() => (open ? listUsers(ctx) : Promise.resolve([])), [ctx, open]);
+  const activos = (vendedores.data ?? []).filter((u) => u.role === 'seller' && u.active);
+  const elegirVendedor = (id: string) => {
+    setVendedorId(id);
+    const v = activos.find((u) => u.id === id);
+    if (!v) return;
+    setNombre((n) => n || v.name);
+    setCorreo((c) => c || v.email);
+  };
   const [dias, setDias] = useState(7);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +145,7 @@ function InvitarSheet({ open, onClose }: { open: boolean; onClose: () => void })
     setError(null);
     setBusy(true);
     try {
-      const r = await invitar(ctx, { nombre, correo, rol, dias });
+      const r = await invitar(ctx, { nombre, correo, rol, dias, vendedorId: rol === 'seller' ? vendedorId : undefined });
       setHecho({ ...r, nombre });
       setNombre('');
       setCorreo('');
@@ -188,17 +200,28 @@ function InvitarSheet({ open, onClose }: { open: boolean; onClose: () => void })
             void crear();
           }}
         >
-          <TextInput label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} autoComplete="off" required />
-          <TextInput label="Correo" type="email" inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} autoComplete="off" required />
           <SelectInput
             label="Entra como"
             value={rol}
-            onChange={(e) => setRol(e.target.value as 'admin' | 'direccion')}
+            onChange={(e) => setRol(e.target.value as 'admin' | 'direccion' | 'seller')}
             options={[
               { value: 'direccion', label: 'Dirección (solo mira las cifras)' },
               { value: 'admin', label: 'Administración (carga y cambia todo)' },
+              { value: 'seller', label: 'Vendedor (ve solo lo suyo, sin costos)' },
             ]}
           />
+          {rol === 'seller' ? (
+            <SelectInput
+              label="¿Qué vendedor?"
+              value={vendedorId}
+              onChange={(e) => elegirVendedor(e.target.value)}
+              placeholder={activos.length ? 'Elige el vendedor' : 'Primero dalo de alta en «Alta de vendedor»'}
+              options={activos.map((u) => ({ value: u.id, label: u.name }))}
+              hint="Ve sus locales (los de sus zonas), sus comisiones y sus mensajes. Nunca los costos ni lo de otros vendedores."
+            />
+          ) : null}
+          <TextInput label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} autoComplete="off" required />
+          <TextInput label="Correo" type="email" inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} autoComplete="off" required />
           <SelectInput
             label="La invitación vale"
             value={String(dias)}
@@ -210,7 +233,7 @@ function InvitarSheet({ open, onClose }: { open: boolean; onClose: () => void })
               {error}
             </p>
           ) : null}
-          <Button type="submit" variant="primary" icon={KeyRound} busy={busy}>
+          <Button type="submit" variant="primary" icon={KeyRound} busy={busy} disabled={rol === 'seller' && !vendedorId}>
             Crear invitación
           </Button>
           <p className="text-sm text-muted">

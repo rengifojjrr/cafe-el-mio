@@ -378,6 +378,12 @@ export interface DeliveryItem {
   qty: number;
   /** Lo que se pudo preparar (puede ser menos que qty si no había). */
   preparedQty?: number;
+  /**
+   * Venta en firme: el precio que le toca al local, fijado al preparar (por unidad, por caja y por
+   * volumen). Al recibir se factura a este precio, también en el teléfono de un vendedor, que no
+   * tiene las listas de precios.
+   */
+  precio?: { unit: number; box: number; volume?: { minBoxes: number; box: number } };
 }
 
 export interface Delivery extends Entity {

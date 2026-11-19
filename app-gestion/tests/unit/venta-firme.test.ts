@@ -65,6 +65,33 @@ beforeAll(async () => {
 });
 
 describe('factura en firme al recibir la entrega', () => {
+  it('el precio queda fijado al preparar: si la lista cambia antes de entregar, se factura el de la preparación', async () => {
+    const primo = store('Bodega El Primo');
+    const p = mazo('Toro', 'maduro');
+    const { listId, prices } = await storePrices(T(admin), primo.id);
+    expect(listId).toBeTruthy();
+    const antes = prices[p.id]!.unit;
+    const original = (await repos.tabaco.priceLists.get(listId!))!.entries[p.id];
+    const { delivery } = await createPhoneOrder(T(admin), { storeId: primo.id, items: [{ productId: p.id, qty: 2 }], note: 'Precio fijado' });
+    const preparada = (await prepareDelivery(T(admin), delivery.id)).delivery;
+    expect(preparada.items[0]!.precio).toMatchObject({ unit: antes });
+    // La lista sube después de preparar (y antes de que llegue).
+    await setPriceEntry(T(admin), listId!, p.id, { mode: 'fixed', unit: antes + 5 });
+    const recibida = await receiveDelivery(T(actorOf(userOf(primo))), delivery.id, { name: primo.managerName, image: SIGNATURE });
+    const factura = (await listInvoices(T(admin), { storeId: primo.id })).find((i) => i.id === recibida.invoiceId)!;
+    expect(factura.lines.find((l) => l.productId === p.id && l.pack === 'unidad')!.unitPrice).toBe(antes);
+    // Lo que se prepare de ahora en adelante va con el precio nuevo.
+    expect((await storePrices(T(admin), primo.id)).prices[p.id]!.unit).toBe(antes + 5);
+    // La lista queda como estaba (las pruebas de abajo la usan).
+    await repos.tabaco.priceLists.put({ ...(await repos.tabaco.priceLists.get(listId!))!, entries: { ...(await repos.tabaco.priceLists.get(listId!))!.entries, ...(original ? { [p.id]: original } : {}) } });
+    if (!original) {
+      const l = (await repos.tabaco.priceLists.get(listId!))!;
+      const { [p.id]: _fuera, ...resto } = l.entries;
+      await repos.tabaco.priceLists.put({ ...l, entries: resto });
+    }
+    expect((await storePrices(T(admin), primo.id)).prices[p.id]!.unit).toBe(antes);
+  });
+
   it('precios de la lista del local, cajas y sueltos, salida por lote, costo, vencimiento y comisiones', async () => {
     const primo = store('Bodega El Primo');
     const toroHab = mazo('Toro', 'habano');

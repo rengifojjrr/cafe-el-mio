@@ -12,7 +12,7 @@ import { errorText } from '../../ui/toast';
 import { DecidirConexion } from './EntrarSheet';
 import { useEstadoSync } from './hooks';
 
-const ROL = { admin: 'Administración', direccion: 'Dirección' } as const;
+const ROL = { admin: 'Administración', direccion: 'Dirección', seller: 'Vendedor' } as const;
 
 export function AccesoPage() {
   const { token = '' } = useParams();

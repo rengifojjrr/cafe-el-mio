@@ -165,8 +165,7 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 
 ## Equipo: vendedores y zonas (16 de noviembre de 2026)
 
-- **Los vendedores todavía no entran con su cuenta** (parte 2): hoy el servidor solo deja entrar a Administración y
-  Dirección. Hasta entonces, «Equipo» muestra lo que se anota desde las cuentas de Administración.
+- ~~Los vendedores todavía no entran con su cuenta (parte 2)~~: ya entran (19 de noviembre, ver «Vendedores con cuenta»).
 - **Las zonas cargadas de Houston no tienen responsable todavía**: sus locales están con el vendedor de relleno que se
   creó para cargarlos. Al dar cada zona a un vendedor de verdad, sus locales pasan a él.
 - **Zona sin responsable:** sus locales se quedan con quien los tenía. Si conviene que pasen a «sin vendedor», hay que
@@ -174,9 +173,8 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 
 ## Comisión por diferencia (18 de noviembre de 2026)
 
-- **Mientras los vendedores no entren al servidor (Equipo, parte 2), los precios de cada local los pone
-  Administración** desde su cuenta, en la ficha de cada local. La hoja ya está hecha para el vendedor: cuando entre
-  con su cuenta, verá y cambiará solo los de sus locales.
+- **Los precios de cada local** los pone Administración o, con su cuenta (desde el 19 de noviembre), el vendedor de ese
+  local: ve y cambia solo los de sus locales, y el servidor no acepta uno menor que el base.
 - **Contadora:** cómo se declara lo que se le paga al vendedor (la diferencia es su comisión) y si algún impuesto del
   tabaco se calcula sobre el precio de venta al local: con la diferencia, ese precio es más alto que el base.
 - **Contrato firmado y precios nuevos:** hoy la app avisa que hay que preparar una nueva versión, pero deja entregar a
@@ -207,3 +205,33 @@ Datos que faltan o que se pusieron de ejemplo. Nada de esto bloquea la demo.
 - **Los nombres y teléfonos de las personas** son datos personales: viven en el servidor privado y los vendedores no los
   ven.
 
+## Vendedores con cuenta (19 de noviembre de 2026)
+
+- **Antes de invitar a un vendedor de verdad, dale sus zonas** (Usuarios → el vendedor → zonas, o Equipo → por zona).
+  Los locales de Houston están con el vendedor de relleno que se creó para cargarlos: un vendedor sin locales entra y
+  no ve ninguno.
+- **El servidor no recalcula el monto de las comisiones**: las calcula el teléfono de quien vende. Administración ve
+  «Comisiones por revisar» (y la lista al pagar) con las que no cuadran con su venta o con las reglas posibles. Si se
+  quiere que el servidor las calcule, hay que llevar el motor de comisiones (escalones del mes y diferencia) a SQL.
+- **Lo que un vendedor reporta (cantidades y precios de lo vendido) sale de su teléfono.** El servidor no deja que lo
+  ponga en un local ajeno ni que cambie lo preparado, pagos o condiciones, pero no rehace las cuentas de la
+  consignación. El control es la liquidación del local (si se le cobra de más, reclama) y que cada registro guarda en
+  el servidor quién lo escribió.
+- **Stock disponible en el teléfono del vendedor:** ve cuánto hay en el almacén, pero no las entregas ya preparadas para
+  locales de otros vendedores, así que puede pedir más de lo que de verdad queda libre. Administración, al preparar, ve
+  lo real y no deja preparar más de lo que hay. Y si dos vendedores reciben sin señal entregas que salen del mismo
+  lote, cada teléfono elige el lote con lo que sabe: ese lote puede quedar en negativo (el total cuadra) hasta que
+  Administración lo ajuste en el almacén. El servidor no revisa saldos.
+- **El vendedor no recibe las llegadas de importación ni las listas de precios** (son de Administración). En venta en
+  firme no le hacen falta: el precio de cada línea queda fijado al preparar la entrega.
+- **Personas y almacén (mostrador) siguen siendo solo de Administración**: un vendedor no vende a una persona ni en el
+  mostrador (el servidor no lo acepta). Si un vendedor tiene que vender a personas, hay que decidir cómo (y quién
+  comprueba la edad).
+- **Un vendedor sabe cuántos locales hay en total** (le llegan como borrados, sin nombre ni datos, para que su teléfono
+  borre uno que deja de ser suyo). Se puede afinar mandándolos solo a quien los tuvo alguna vez.
+- **Locales con su cuenta (fase 3)**: todavía no. La invitación de un local no se muestra.
+- **Un teléfono que ya usó otra cuenta**: al entrar alguien distinto, la app borra los datos de la cuenta anterior
+  del teléfono y baja los suyos. Si quedaban cambios sin subir, no deja entrar hasta que esa persona entre, espere
+  «Al día» y cierre su sesión.
+- **Probarlo con un teléfono de vendedor de verdad**: está probado con un servidor de mentira con las mismas reglas,
+  en el navegador y con 36 comprobaciones SQL en el servidor de verdad, no con dos teléfonos.

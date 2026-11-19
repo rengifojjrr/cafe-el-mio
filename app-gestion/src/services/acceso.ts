@@ -1,19 +1,24 @@
 // Entrar al programa con el servidor: correo y contraseña e invitaciones. Lo de Administración
 // (quién tiene acceso, invitar) está en acceso-admin.ts, que solo se baja en Usuarios.
-// Fase 1: entran Administración y Dirección (vendedores y locales, en la fase 2).
+// Entran Administración, Dirección y los vendedores (cada uno con lo suyo); los locales, después.
 import { getCoreRepo } from '../data';
 import { PROGRAM_LINE } from '../lines/programa';
 import { type Cuenta, anotarCuenta, entrar, rpc, salir, sesionActual } from '../servidor/cliente';
-import { type Conexion, type Diferencias, conectar, conectado, resolver, sincronizar } from '../servidor/sincronizar';
+import { type Conexion, type Diferencias, conectar, conectado, prepararParaCuenta, resolver, sincronizar } from '../servidor/sincronizar';
 import { ensureSeeded, enterAs, findAccount, leave } from './session';
 
 export type { Diferencias };
 
 export type Entrada = { tipo: 'adentro'; destino: string } | { tipo: 'decidir'; diferencias: Diferencias };
 
-/** La cuenta de la app de una cuenta del servidor: Dirección, o la Administración de esa persona. */
+/** La cuenta de la app de una cuenta del servidor: Dirección, el vendedor, o la Administración de esa persona. */
 async function cuentaAppDe(c: Cuenta): Promise<string> {
   if (c.rol === 'direccion') return 'direccion';
+  // Un vendedor entra siempre como él: nunca como Administración.
+  if (c.rol === 'seller') {
+    if (!c.usuario_app) throw new Error('Tu cuenta de vendedor no está ligada a un vendedor: pídele a Administración una invitación nueva.');
+    return `${PROGRAM_LINE}:${c.usuario_app}`;
+  }
   const usuario = c.usuario_app ?? 't-usr_admin';
   const principal = (await getCoreRepo().directory.all()).find((a) => a.line === PROGRAM_LINE && a.userId === usuario);
   if (principal) return principal.id;
@@ -35,12 +40,19 @@ async function despuesDeEntrar(): Promise<Entrada> {
     await salir();
     throw new Error('Ese correo no tiene acceso al programa de Tabaco. Pídele una invitación a Administración.');
   }
-  if (cuenta.rol !== 'admin' && cuenta.rol !== 'direccion') {
+  if (cuenta.rol === 'store') {
     await salir();
-    throw new Error('Tu cuenta es de vendedor o de local: todavía no entra al servidor (llega en la próxima etapa).');
+    throw new Error('Tu cuenta es de un local: todavía no entra al servidor (llega en la próxima etapa).');
   }
   await ensureSeeded();
-  anotarCuenta(cuenta, await cuentaAppDe(cuenta));
+  try {
+    // Si este teléfono era de otra persona, lo suyo se borra antes de seguir (o no se deja entrar).
+    await prepararParaCuenta(sesionActual()!.usuario.id, cuenta.rol);
+    anotarCuenta(cuenta, await cuentaAppDe(cuenta));
+  } catch (e) {
+    await salir();
+    throw e;
+  }
   if (!conectado()) {
     const c: Conexion = await conectar();
     if (c.tipo === 'decidir') return c;
@@ -92,7 +104,7 @@ export async function cerrarSesion(): Promise<void> {
 export interface InvitacionServidor {
   estado: 'vigente' | 'vencida' | 'usada' | 'anulada' | 'no_existe';
   nombre?: string;
-  rol?: 'admin' | 'direccion';
+  rol?: 'admin' | 'direccion' | 'seller';
   correo?: string;
   vence_en?: string;
   /** `nueva`: crea su contraseña; `tabaco`: ya tenía cuenta del programa (pone una nueva); `otra`: ya tenía cuenta en el servidor (entra con la suya). */

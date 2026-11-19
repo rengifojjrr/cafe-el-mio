@@ -44,6 +44,8 @@ type Cambio = { tabla: string; id: string; op: 'guardar'; datos: Record<string, 
 interface Vinculo {
   /** El servidor con el que se conectó (si la app se muda a otro, se vuelve a conectar). */
   servidor: string;
+  /** Quién conectó este teléfono (su usuario del servidor). Otra persona empieza de cero. */
+  usuario?: string;
   /** Hasta dónde bajó (el «hasta» de la última tanda). */
   cursor: number;
   desde: string;
@@ -345,7 +347,12 @@ async function bajarTodo(): Promise<{ servidor: Map<string, RegistroServidor>; c
 /** Las bases de este teléfono que ya se revisaron en esta apertura (ver `bajar`). */
 const revisadas = new WeakSet<Dexie>();
 
-async function bajar(db: Dexie): Promise<void> {
+/**
+ * Baja lo de los demás desde el cursor. Un vendedor (`yo`): si le llega un local que no tenía (se lo
+ * asignaron), baja todo de nuevo, porque lo de antes de ese local (entregas, visitas, ventas) quedó
+ * atrás del cursor cuando todavía no era suyo.
+ */
+async function bajar(db: Dexie, yo: string | null = null): Promise<void> {
   const inicio = vinculo();
   if (!inicio) return;
   // Conectado, pero con nada más que el arranque en blanco: el navegador le borró la base (falta
@@ -368,14 +375,31 @@ async function bajar(db: Dexie): Promise<void> {
   }
   let v: Vinculo = inicio;
   let cambiados = 0;
+  let deNuevo = false;
   for (;;) {
     const t: Tanda = await rpc<Tanda>('tabaco_traer', { p_desde: v.cursor, p_limite: TANDA_BAJAR });
+    if (yo && !deNuevo) deNuevo = await llegaLocalNuevo(db, t.registros, yo);
     if (t.registros.length) cambiados += await aplicar(db, t.registros);
     v = { ...v, cursor: t.hasta };
     guardarVinculo(v);
     if (!t.mas) break;
   }
+  if (deNuevo) {
+    const { servidor, cursor } = await bajarTodo();
+    cambiados += await aplicar(db, [...servidor.values()]);
+    guardarVinculo({ ...v, cursor });
+  }
   if (cambiados) emitChange(PROGRAM_LINE);
+}
+
+/** ¿Llega un local de este vendedor que en el teléfono no estaba (o era de otro)? */
+async function llegaLocalNuevo(db: Dexie, registros: RegistroServidor[], yo: string): Promise<boolean> {
+  for (const r of registros) {
+    if (r.tabla !== 'stores' || r.borrado || r.datos.sellerId !== yo) continue;
+    const local = (await db.table('stores').get(r.id)) as { sellerId?: string } | undefined;
+    if (!local || local.sellerId !== yo) return true;
+  }
+  return false;
 }
 
 // ---------- Subir ----------
@@ -509,8 +533,9 @@ async function ciclo(): Promise<void> {
     const soy = await rpc<Cuenta | null>('tabaco_soy');
     if (!soy) throw new SinAcceso();
     if (s.cuenta && soy.rol !== s.cuenta.rol) throw new SinAcceso('Tu acceso cambió: vuelve a entrar.');
-    if (soy.rol === 'admin') await subir(db);
-    await bajar(db);
+    // Administración sube todo; un vendedor, lo suyo (el servidor revisa qué).
+    if (soy.rol === 'admin' || soy.rol === 'seller') await subir(db);
+    await bajar(db, soy.rol === 'seller' ? soy.usuario_app : null);
     const ultimo = new Date().toISOString();
     const v = vinculo();
     if (v) guardarVinculo({ ...v, ultimo });
@@ -538,8 +563,38 @@ export type Conexion = { tipo: 'lista' } | { tipo: 'decidir'; diferencias: Difer
 let porDecidir: { servidor: Map<string, RegistroServidor>; cursor: number; subir: string[] } | null = null;
 
 function enlazar(cursor: number): void {
-  guardarVinculo({ servidor: SERVIDOR.url, cursor, desde: new Date().toISOString(), ultimo: null });
+  guardarVinculo({ servidor: SERVIDOR.url, usuario: sesionActual()?.usuario.id, cursor, desde: new Date().toISOString(), ultimo: null });
   anotarCambios(true);
+}
+
+/**
+ * Antes de seguir con la cuenta que acaba de entrar: si este teléfono estaba conectado con otra
+ * persona, lo de ella se borra de aquí (un vendedor no puede quedarse con lo de Administración, ni
+ * al revés con lo recortado de un vendedor) y se vuelve a conectar desde cero. Si quedaron cambios
+ * de la otra persona sin subir, no se borra nada: primero tiene que entrar ella y sincronizar.
+ */
+export async function prepararParaCuenta(usuario: string, rol: Cuenta['rol']): Promise<void> {
+  const v = vinculo();
+  if (!v || v.usuario === usuario) return;
+  // Un teléfono conectado antes de que se anotara quién (versiones anteriores): era de
+  // Administración o de Dirección. Si entra una de ellas, sigue como estaba.
+  if (!v.usuario && (rol === 'admin' || rol === 'direccion')) {
+    guardarVinculo({ ...v, usuario });
+    return;
+  }
+  const db = base();
+  const pendientes = await contarPendientes(db);
+  if (pendientes > 0) {
+    throw new Error(
+      `Este teléfono tiene ${pendientes === 1 ? '1 cambio' : `${pendientes} cambios`} de otra cuenta sin subir. Que esa persona entre, espere a «Al día» y cierre su sesión; después entras tú.`,
+    );
+  }
+  await db.transaction('rw', db.tables, async () => {
+    for (const tabla of LINE_TABLES) await db.table(tabla).clear();
+    await db.table(PENDIENTES).clear();
+  });
+  olvidarVinculo();
+  emitAll();
 }
 
 /**
@@ -552,6 +607,13 @@ export async function conectar(): Promise<Conexion> {
   poner({ fase: 'trabajando', progreso: 'Mirando lo que hay en el servidor…', mensaje: null });
   try {
     const { servidor, cursor } = await bajarTodo();
+    // Un vendedor no sube lo que tuviera el teléfono: queda igual al servidor (solo lo suyo).
+    if (rol === 'seller') {
+      await adoptar(db, servidor);
+      enlazar(cursor);
+      poner({ fase: 'al-dia', progreso: null, ultimo: new Date().toISOString(), pendientes: 0 });
+      return { tipo: 'lista' };
+    }
     const local = await leerLocal(db);
     if (servidor.size === 0) {
       // El servidor está vacío: este teléfono lo llena (si es de Administración).

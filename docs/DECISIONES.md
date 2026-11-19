@@ -468,3 +468,36 @@ Pedido: «mete el tabaco también, y que quede como separado, que cuando paguemo
   el precio de antes a cada producto, salvo al que lo cambiaron después (ese queda como está). Lo de antes se guarda en
   Ajustes (`ultimoAjustePrecio`), así que también se puede deshacer desde otro teléfono.
 
+## Vendedores con su cuenta en el servidor (19 de noviembre de 2026)
+
+- **El servidor decide qué ve cada vendedor** (`tabaco.para_vendedor`, en `tabaco_traer`), no la app: lo que no le toca
+  nunca llega a su teléfono. La app ya escondía lo ajeno en pantalla, pero eso no protege nada si el dato está en el
+  teléfono. La prueba de punta a punta mira la base del teléfono, no la pantalla.
+- **Un local que no es suyo le llega como borrado** (sin datos). Es la forma de que su teléfono borre un local que le
+  quitan sin que el servidor tenga que recordar qué tuvo cada uno. El costo: sabe cuántos locales hay.
+- **Los costos no viajan y los pone el servidor.** El vendedor manda lo que vende con costo 0 y `tabaco.costear` le pone
+  el de cada lote al guardar; de vuelta a él, en 0. Así la rentabilidad de Administración no depende de un dato que el
+  vendedor no tiene.
+- **Del almacén, lo que va a otros locales llega sin decir a cuál** (sin local, sin precio, sin quién): sin esos
+  movimientos, su stock del almacén no cuadraría.
+- **Un «no» del servidor a un vendedor es un error de datos (22023), no de permiso (42501)**: la app lo anota y sigue
+  con lo demás. Con 42501 la app cerraría la sesión, y un solo registro mal hecho dejaría al vendedor sin sincronizar.
+- **El precio en firme se fija al preparar la entrega** (`DeliveryItem.precio`): el vendedor no recibe las listas de
+  precios, así que al recibir la entrega factura con los precios que dejó Administración, no con los que calcularía
+  su teléfono.
+- **Las comisiones no se recalculan en el servidor**, se revisan en el teléfono de Administración
+  (`src/domain/revisar-comisiones.ts`): se compara cada comisión sin pagar con su venta y con las reglas que el motor le
+  puede dar a ese vendedor con ese producto (todas las de los escalones, sin importar las cifras del mes, para no marcar
+  de más). Solo marca: si una regla o un precio base cambió después de la venta, la comisión bien hecha también sale, y
+  la decisión es de quien paga. Recalcular en el servidor obligaba a copiar el motor a SQL y a rechazar comisiones
+  legítimas de un teléfono sin señal.
+- **La semilla de ejemplo arma las comisiones de las facturas con el mismo motor que la app** (antes les dejaba la del
+  producto aunque rigiera la progresiva). Así la revisión no marca nada en la demo y la demo cuenta como la app.
+- **Otra cuenta en el mismo teléfono borra lo de la anterior** antes de bajar lo suyo (`prepararParaCuenta`); con
+  cambios sin subir, no deja entrar. Un teléfono conectado antes de esta versión no sabía de quién era: se supone que
+  de Administración o Dirección (los únicos que entraban), y si entra una de ellas sigue como estaba.
+- **Invitar a un vendedor exige elegir cuál** (de Usuarios, activo): la cuenta del servidor queda ligada a ese usuario
+  de la app, que es lo que define sus locales. La app sincroniza antes de invitar, para que el servidor ya lo conozca.
+- **Personas y mostrador siguen siendo de Administración** también en el servidor: un vendedor no guarda un cliente que
+  no sea local (`clase`).
+

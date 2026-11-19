@@ -23,8 +23,9 @@ solo con el servidor nuevo.
    Las llaves secretas y las contraseñas nunca van al repositorio.
 
 2. **Armarlo.** Aplicar en orden las migraciones de `app-gestion/supabase/migrations/`
-   (`tabaco_1…`, `tabaco_2…`, `tabaco_3…`, `tabaco_4…`). Quedan el esquema, las funciones, el depósito y
-   sus reglas, y la tarea diaria de copias, iguales a los de hoy. Las copias del proyecto viejo
+   (`tabaco_1…`, `tabaco_2…`, `tabaco_3…`, `tabaco_4…`, `tabaco_5…`). Quedan el esquema, las funciones, el depósito y
+   sus reglas (también las de los vendedores), y la tarea diaria de copias, iguales a los de hoy. Para comprobar las de
+   los vendedores, correr `supabase/pruebas/tabaco_5_vendedores_pruebas.sql` (todo se deshace al final). Las copias del proyecto viejo
    (`tabaco.copias`) no se mudan: el nuevo empieza las suyas, y el plan Pro tiene además las de Supabase.
 
 3. **Las cuentas y los datos.** Con `psql` y las dos conexiones de base (`VIEJO_DB`, `NUEVO_DB`, de

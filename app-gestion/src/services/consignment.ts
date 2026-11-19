@@ -20,6 +20,7 @@ import { commissionAmount } from '../domain/money-rules';
 import { capasDelLocal, consumir, precioDelLocal, repartirLotes, type Capa } from '../domain/precios-local';
 import { splitIntoPacks } from '../domain/pricing';
 import type { NewPhoto } from '../lib/image';
+import { computeStorePrices, storeList } from './prices';
 import { round2 } from '../lib/money';
 import { ruleFromContext, sellerCommissionContext } from './commission-scheme';
 import { attachCases, detachCases } from './cases';
@@ -205,6 +206,14 @@ export async function prepareDelivery(
       it.preparedQty = take;
     }
     if (shortages.length) await ctx.repo.unmetDemand.bulkPut(shortages);
+    // En firme, el precio queda fijado ahora: es el de este momento y el que se factura al recibir.
+    if (store.saleMode === 'firme') {
+      const precios = computeStorePrices(store, snap.products, await storeList(ctx, store));
+      for (const it of d.items) {
+        const row = precios.prices[it.productId];
+        if (row) it.precio = { unit: row.unit, box: row.box, ...(row.volume ? { volume: row.volume } : {}) };
+      }
+    }
     if (prepared === 0) {
       // No hay nada: queda como demanda no atendida y la entrega sigue pendiente.
       for (const it of d.items) delete it.preparedQty;
@@ -279,7 +288,18 @@ export async function receiveDelivery(ctx: Ctx, deliveryId: string, signature: z
         const p = snap.productsById.get(it.productId);
         return p ? splitIntoPacks(p, it.preparedQty ?? 0).map((part) => ({ productId: it.productId, pack: part.pack, packQty: part.packQty })) : [];
       });
-      const invoice = await writeFirmInvoice(ctx, { store, items, origin: 'entrega', sellerId: store.sellerId || d.sellerId || null, deliveryId: d.id, reorderId: d.reorderId, snap, edadComprobada: Boolean(sig.edadComprobada) && pideEdad(ctx.line, store) });
+      const fijos = new Map(d.items.flatMap((it) => (it.precio ? [[it.productId, it.precio] as const] : [])));
+      const invoice = await writeFirmInvoice(ctx, {
+        store,
+        items,
+        origin: 'entrega',
+        sellerId: store.sellerId || d.sellerId || null,
+        deliveryId: d.id,
+        reorderId: d.reorderId,
+        snap,
+        edadComprobada: Boolean(sig.edadComprobada) && pideEdad(ctx.line, store),
+        preciosFijos: fijos,
+      });
       d.invoiceId = invoice.id;
     } else {
       for (const it of d.items) {
@@ -353,7 +373,8 @@ async function createSalesReport(
     const parts = allocate(snap.balances, snap.lotsById, storeLoc(store.id), it.productId, it.qty, p.name);
     const lots: SaleLine['lots'] = [];
     for (const part of parts) {
-      const unitCost = snap.lotsById.get(part.lotId)?.unitCost ?? p.cost;
+      // Un vendedor no tiene los costos (el servidor los pone al subir): aquí van en cero, nunca NaN.
+      const unitCost = snap.lotsById.get(part.lotId)?.unitCost ?? p.cost ?? 0;
       lots.push({ lotId: part.lotId, qty: part.qty, unitCost });
       const mv: Movement = {
         id: ctx.newId('mov'),

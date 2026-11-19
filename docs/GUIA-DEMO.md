@@ -32,9 +32,15 @@ Lo que se carga queda **en el servidor del programa y en cada teléfono donde se
 guarda en el teléfono y sube cuando vuelve la señal. Arriba, en cada pantalla, el aviso del servidor dice cómo va:
 «Al día», «3 por subir», «Sin señal» o «Vuelve a entrar». Al tocarlo: «Sincronizar ahora» y «Cerrar sesión».
 
-1. **Invitar a alguien:** Usuarios → «Acceso con contraseña» → «Invitar» (nombre, correo, Dirección o
+1. **Invitar a alguien:** Usuarios → «Acceso con contraseña» → «Invitar» (nombre, correo, y Vendedor, Dirección o
    Administración). Sale un link para mandar por WhatsApp: sirve una sola vez y vence en los días elegidos. Quien lo
    abre pone su contraseña y entra. Si alguien olvida su contraseña, se le invita otra vez.
+   - **Un vendedor:** elige «Vendedor» y, en «¿Qué vendedor?», cuál de Usuarios es (el nombre y el correo se llenan
+     solos). Antes, dale sus zonas (o sus locales): un vendedor sin locales entra y no ve ninguno. Con su cuenta ve solo sus locales y lo de
+     ellos, el catálogo sin costos, sus comisiones y sus mensajes; registra prospectos, visitas, conteos, pedidos y
+     ventas, recibe entregas ya preparadas y pone los precios de sus locales (nunca menos que el base). No aprueba
+     locales, no prepara entregas, no anota pagos y no ve a los otros vendedores: eso lo hace y lo ve Administración.
+   - **Antes de pagar comisiones**, mira «Comisiones por revisar» (en Comisiones): las que no cuadran con su venta.
 2. **Quitar el acceso:** en la misma lista, «Quitar acceso». Ese teléfono deja de sincronizar y pide volver a entrar.
 3. **La primera vez en cada teléfono:** si el teléfono ya tenía datos cargados (de antes del servidor) y el servidor
    también, la app pregunta qué hacer: «Subir lo de este teléfono» (en el teléfono donde se cargó todo) o «Usar lo
